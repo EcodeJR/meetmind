@@ -40,7 +40,10 @@ export default function HomeScreen() {
   useEffect(() => {
     return () => {
       if (recording) {
-        recording.stopAndUnloadAsync();
+        // Use a self-invoking async function or just ignore catch
+        recording.stopAndUnloadAsync().catch(() => {
+          // Ignore errors during cleanup unloads
+        });
       }
     };
   }, [recording]);

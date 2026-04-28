@@ -95,6 +95,13 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
     // 2. Transcribe
     console.log(`[DEBUGGER] PHASE 1: Transcribing audio with Whisper...`);
     const transcript = await transcribeAudio(filePath);
+    
+    if (!transcript || transcript.trim().length === 0) {
+      console.log(`[DEBUGGER] ERROR: Whisper returned an empty transcript.`);
+      sendError(res, 'EMPTY_TRANSCRIPT', 'No speech detected in the recording. Please try again with clearer audio.');
+      return;
+    }
+    
     console.log(`[DEBUGGER] Transcription SUCCESS. Length: ${transcript.length} characters.`);
 
     // 3. Summarize
@@ -204,7 +211,7 @@ export const updateMeeting = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const { id } = req.params;
     const clerkId = req.clerkId;
-    const { title, tags, summaryTranscript } = req.body;
+    const { title, tags, summary } = req.body;
 
     const user = await User.findOne({ clerkId });
     if (!user) {
@@ -214,7 +221,7 @@ export const updateMeeting = async (req: AuthRequest, res: Response): Promise<vo
 
     const meeting = await Meeting.findOneAndUpdate(
       { _id: id, userId: user._id },
-      { title, tags, summaryTranscript },
+      { title, tags, summary },
       { new: true }
     );
 
