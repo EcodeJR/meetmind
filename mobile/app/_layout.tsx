@@ -1,10 +1,24 @@
-import React, { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import React, { useEffect, useRef } from 'react';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
-import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
+import { ClerkProvider, useAuth, useUser } from '@clerk/clerk-expo';
 import * as SecureStore from 'expo-secure-store';
 import { ActivityIndicator, View } from 'react-native';
 import { setTokenGetter } from '@/services/api';
+import apiClient from '@/services/api';
+import { 
+  useFonts, 
+  Manrope_700Bold, 
+  Manrope_600SemiBold 
+} from '@expo-google-fonts/manrope';
+import { Inter_400Regular } from '@expo-google-fonts/inter';
+import { 
+  SpaceGrotesk_400Regular, 
+  SpaceGrotesk_600SemiBold 
+} from '@expo-google-fonts/space-grotesk';
+import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
@@ -12,60 +26,95 @@ const tokenCache = {
   async getToken(key: string) {
     try {
       return SecureStore.getItemAsync(key);
-    } catch (err) {
+    } catch {
       return null;
     }
   },
   async saveToken(key: string, value: string) {
     try {
       return SecureStore.setItemAsync(key, value);
-    } catch (err) {
+    } catch {
       return;
     }
   },
 };
 
 function RootLayoutNav() {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded: isAuthLoaded, isSignedIn, getToken } = useAuth();
+  const { user } = useUser();
+  const segments = useSegments();
+  const router = useRouter();
+  const hasSynced = useRef(false);
 
+  const [fontsLoaded, fontError] = useFonts({
+    'Manrope-Bold': Manrope_700Bold,
+    'Manrope-SemiBold': Manrope_600SemiBold,
+    'Inter-Regular': Inter_400Regular,
+    'SpaceGrotesk-Regular': SpaceGrotesk_400Regular,
+    'SpaceGrotesk-SemiBold': SpaceGrotesk_600SemiBold,
+  });
+
+  // Wire up API auth token
   useEffect(() => {
     setTokenGetter(getToken);
   }, [getToken]);
 
-  if (!isLoaded) {
+  // Auto-redirect based on auth state
+  useEffect(() => {
+    if (!isAuthLoaded || !fontsLoaded) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (isSignedIn && inAuthGroup) {
+      router.replace('/(tabs)');
+    } else if (!isSignedIn && !inAuthGroup) {
+      router.replace('/(auth)/sign-in');
+    }
+  }, [isSignedIn, isAuthLoaded, fontsLoaded, segments]);
+
+  // Sync user to our DB once per session after sign-in
+  useEffect(() => {
+    if (!isSignedIn || !user || hasSynced.current) return;
+
+    const email = user.primaryEmailAddress?.emailAddress;
+    if (!email) return;
+
+    hasSynced.current = true;
+
+    apiClient.post('/users/sync', { email }).catch((err: unknown) => {
+      console.warn('User sync failed (non-fatal):', err);
+    });
+  }, [isSignedIn, user]);
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError]);
+
+  if ((!isAuthLoaded || !fontsLoaded) && !fontError) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fbf8fc' }}>
+        <ActivityIndicator size="large" color="#000317" />
       </View>
     );
   }
 
   return (
-    <Stack>
-      {isSignedIn ? (
-        <>
-          <Stack.Screen
-            name="(tabs)"
-            options={{
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="meeting/[id]"
-            options={{
-              headerShown: true,
-              title: 'Meeting Details',
-            }}
-          />
-        </>
-      ) : (
-        <Stack.Screen
-          name="(auth)"
-          options={{
-            headerShown: false,
-          }}
-        />
-      )}
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+      <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+      <Stack.Screen
+        name="meeting/[id]"
+        options={{ 
+          headerShown: true, 
+          title: 'Meeting Details',
+          headerTitleStyle: { fontFamily: 'Manrope-Bold', fontSize: 18, color: '#111' },
+          headerStyle: { backgroundColor: '#fbf8fc' },
+          headerShadowVisible: false,
+          headerBackTitleVisible: false,
+        }}
+      />
     </Stack>
   );
 }

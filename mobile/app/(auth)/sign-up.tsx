@@ -8,12 +8,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { Text } from 'react-native';
 import { useSignUp, useOAuth } from '@clerk/clerk-expo';
 import { useRouter, Link } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import { theme } from '@/constants/theme';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -62,11 +63,11 @@ export default function SignUpScreen() {
         await setActive({ session: signUpAttempt.createdSessionId });
         router.replace('/(tabs)');
       } else {
-        setErrors({ general: 'Sign up failed. Please try again.' });
+        setErrors({ general: 'Verification required. Please contact support.' });
       }
     } catch (err: any) {
       console.error('Sign up error:', err);
-      const errorMessage = err?.errors?.[0]?.message || err?.message || 'An error occurred';
+      const errorMessage = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err?.message || 'Account creation failed';
       setErrors({ general: errorMessage });
     } finally {
       setLoading(false);
@@ -77,18 +78,23 @@ export default function SignUpScreen() {
     try {
       setOAuthLoading(true);
       setErrors({});
-      const { createdSessionId, setActive: setOAuthActive } = await startOAuthFlow();
-      
-      if (createdSessionId) {
-        await setOAuthActive?.({ session: createdSessionId });
+
+      const redirectUrl = AuthSession.makeRedirectUri({
+        scheme: 'meetmind',
+        path: '/(tabs)',
+      });
+
+      const { createdSessionId, setActive: setOAuthActive } = await startOAuthFlow({
+        redirectUrl,
+      });
+
+      if (createdSessionId && setOAuthActive) {
+        await setOAuthActive({ session: createdSessionId });
         router.replace('/(tabs)');
-      } else {
-        setErrors({ general: 'Google sign up was cancelled.' });
       }
     } catch (err: any) {
       console.error('Google OAuth error:', err);
-      const errorMessage = err?.errors?.[0]?.message || err?.message || 'Google sign up failed';
-      setErrors({ general: errorMessage });
+      setErrors({ general: 'Google registration failed. Please try again.' });
     } finally {
       setOAuthLoading(false);
     }
@@ -99,10 +105,10 @@ export default function SignUpScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join MeetMind to get started</Text>
+          <Text style={styles.title}>Join MeetMind</Text>
+          <Text style={styles.subtitle}>Unlock intelligent transcriptions and summaries.</Text>
         </View>
 
         {errors.general && (
@@ -112,30 +118,12 @@ export default function SignUpScreen() {
         )}
 
         <View style={styles.form}>
-          <TouchableOpacity
-            style={[styles.googleButton, oauthLoading && styles.buttonDisabled]}
-            onPress={onGoogleSignUp}
-            disabled={oauthLoading || loading}
-          >
-            {oauthLoading ? (
-              <ActivityIndicator color="#1f2937" />
-            ) : (
-              <Text style={styles.googleButtonText}>🔐 Sign up with Google</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or create with email</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>First Name (Optional)</Text>
+            <Text style={styles.label}>FIRST NAME</Text>
             <TextInput
               style={styles.input}
-              placeholder="Your first name"
-              placeholderTextColor="#999"
+              placeholder="Your name"
+              placeholderTextColor={theme.colors.outline}
               value={firstName}
               onChangeText={setFirstName}
               editable={!loading && !oauthLoading}
@@ -144,11 +132,11 @@ export default function SignUpScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>EMAIL ADDRESS</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter your email"
-              placeholderTextColor="#999"
+              placeholder="name@company.com"
+              placeholderTextColor={theme.colors.outline}
               value={email}
               onChangeText={setEmail}
               editable={!loading && !oauthLoading}
@@ -158,11 +146,11 @@ export default function SignUpScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>PASSWORD</Text>
             <TextInput
               style={styles.input}
-              placeholder="Create a password (min 8 chars)"
-              placeholderTextColor="#999"
+              placeholder="••••••••"
+              placeholderTextColor={theme.colors.outline}
               value={password}
               onChangeText={setPassword}
               editable={!loading && !oauthLoading}
@@ -171,11 +159,11 @@ export default function SignUpScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Confirm Password</Text>
+            <Text style={styles.label}>CONFIRM PASSWORD</Text>
             <TextInput
               style={styles.input}
-              placeholder="Confirm your password"
-              placeholderTextColor="#999"
+              placeholder="••••••••"
+              placeholderTextColor={theme.colors.outline}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               editable={!loading && !oauthLoading}
@@ -189,9 +177,27 @@ export default function SignUpScreen() {
             disabled={loading || oauthLoading}
           >
             {loading ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color={theme.colors.onPrimary} />
             ) : (
-              <Text style={styles.buttonText}>Create Account with Email</Text>
+              <Text style={styles.buttonText}>Initialize Account</Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR SIGN UP WITH</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.googleButton, oauthLoading && styles.buttonDisabled]}
+            onPress={onGoogleSignUp}
+            disabled={oauthLoading || loading}
+          >
+            {oauthLoading ? (
+              <ActivityIndicator color={theme.colors.onSurface} />
+            ) : (
+              <Text style={styles.googleButtonText}>Sign up with Google</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -200,7 +206,7 @@ export default function SignUpScreen() {
           <Text style={styles.footerText}>Already have an account? </Text>
           <Link href="/sign-in" asChild>
             <TouchableOpacity disabled={loading || oauthLoading}>
-              <Text style={styles.linkText}>Sign In</Text>
+              <Text style={styles.linkText}>Log in</Text>
             </TouchableOpacity>
           </Link>
         </View>
@@ -212,119 +218,138 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: theme.colors.background,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.xl,
     justifyContent: 'center',
   },
   header: {
-    marginBottom: 30,
-    alignItems: 'center',
+    marginBottom: theme.spacing.xl,
+    alignItems: 'flex-start',
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 8,
+    fontFamily: 'Manrope-Bold',
+    fontSize: 40,
+    color: theme.colors.primary,
+    letterSpacing: -0.8,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#666',
+    fontFamily: 'Inter-Regular',
+    fontSize: 16,
+    color: theme.colors.onSurfaceVariant,
+    marginTop: theme.spacing.xs,
   },
   errorBox: {
-    backgroundColor: '#fee',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: '#f44',
+    backgroundColor: theme.colors.errorContainer,
+    borderRadius: theme.borderRadius.base,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.error,
   },
   errorText: {
-    color: '#c33',
+    fontFamily: 'Inter-Regular',
+    color: theme.colors.onErrorContainer,
     fontSize: 14,
   },
   form: {
-    marginBottom: 24,
+    marginBottom: theme.spacing.lg,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: theme.spacing.lg,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 6,
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 12,
+    color: theme.colors.onSurfaceVariant,
+    letterSpacing: 0.5,
+    marginBottom: theme.spacing.xs,
   },
   input: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    backgroundColor: theme.colors.surfaceContainerLowest,
+    borderRadius: theme.borderRadius.base,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
     fontSize: 16,
+    fontFamily: 'Inter-Regular',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: theme.colors.outlineVariant,
+    color: theme.colors.onSurface,
   },
   button: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    paddingVertical: 14,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.base,
+    paddingVertical: theme.spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
+    marginTop: theme.spacing.sm,
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.7,
   },
   buttonText: {
-    color: 'white',
+    color: theme.colors.onPrimary,
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: 'Manrope-SemiBold',
+  },
+  googleButton: {
+    backgroundColor: theme.colors.surfaceContainerLowest,
+    borderRadius: theme.borderRadius.base,
+    paddingVertical: theme.spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+  },
+  googleButtonText: {
+    color: theme.colors.onSurface,
+    fontSize: 16,
+    fontFamily: 'Manrope-SemiBold',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: theme.spacing.lg,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: theme.colors.outlineVariant,
+  },
+  dividerText: {
+    marginHorizontal: theme.spacing.md,
+    color: theme.colors.outline,
+    fontSize: 12,
+    fontFamily: 'SpaceGrotesk-Regular',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: theme.spacing.md,
   },
   footerText: {
-    color: '#666',
+    color: theme.colors.onSurfaceVariant,
     fontSize: 14,
+    fontFamily: 'Inter-Regular',
   },
   linkText: {
-    color: '#007AFF',
+    color: theme.colors.secondary,
     fontSize: 14,
-    fontWeight: '600',
-  },
-  googleButton: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginBottom: 16,
-  },
-  googleButtonText: {
-    color: '#1f2937',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#ddd',
-  },
-  dividerText: {
-    marginHorizontal: 12,
-    color: '#999',
-    fontSize: 14,
+    fontFamily: 'Manrope-SemiBold',
   },
 });

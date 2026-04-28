@@ -1,49 +1,86 @@
-export const Colors = {
-  primary: '#007AFF',
-  secondary: '#5AC8FA',
-  background: '#F8F9FA',
-  text: '#000000',
-  textLight: '#666666',
-  border: '#E0E0E0',
-  success: '#34C759',
-  error: '#FF3B30',
-  warning: '#FF9500',
-};
-
-export const Spacing = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-};
-
-export const BorderRadius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-};
-
-export const Typography = {
-  titleLarge: {
-    fontSize: 32,
-    fontWeight: '700' as const,
+export const theme = {
+  colors: {
+    surface: '#fbf8fc',
+    surfaceDim: '#dbd9dd',
+    surfaceBright: '#fbf8fc',
+    surfaceContainerLowest: '#ffffff',
+    surfaceContainerLow: '#f5f3f6',
+    surfaceContainer: '#f0edf1',
+    surfaceContainerHigh: '#eae7eb',
+    surfaceContainerHighest: '#e4e2e5',
+    onSurface: '#1b1b1e',
+    onSurfaceVariant: '#45464e',
+    inverseSurface: '#303033',
+    inverseOnSurface: '#f2f0f3',
+    outline: '#76767f',
+    outlineVariant: '#c6c6cf',
+    surfaceTint: '#515d84',
+    primary: '#000317',
+    onPrimary: '#ffffff',
+    primaryContainer: '#0f1c3f',
+    onPrimaryContainer: '#7984ad',
+    inversePrimary: '#b9c5f1',
+    secondary: '#384cd3',
+    onSecondary: '#ffffff',
+    secondaryContainer: '#5366ed',
+    onSecondaryContainer: '#fffbff',
+    tertiary: '#0b0300',
+    onTertiary: '#ffffff',
+    tertiaryContainer: '#331600',
+    onTertiaryContainer: '#ab7b59',
+    error: '#ba1a1a',
+    onError: '#ffffff',
+    errorContainer: '#ffdad6',
+    onErrorContainer: '#93000a',
+    background: '#fbf8fc',
+    onBackground: '#1b1b1e',
+    accent: '#5B6EF5', // Electric Blue for accents
+    deepNavy: '#0F1C3F', // Brand primary
+    pulseRed: '#ff3b30', // Warm pulsing red for recording
   },
-  titleMedium: {
-    fontSize: 24,
-    fontWeight: '600' as const,
+  fonts: {
+    manrope: {
+      bold: 'Manrope-Bold',
+      semiBold: 'Manrope-SemiBold',
+    },
+    inter: {
+      regular: 'Inter-Regular',
+    },
+    spaceGrotesk: {
+      regular: 'SpaceGrotesk-Regular',
+      semiBold: 'SpaceGrotesk-SemiBold',
+    },
   },
-  bodyLarge: {
-    fontSize: 18,
-    fontWeight: '500' as const,
+  spacing: {
+    unit: 4,
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 40,
   },
-  bodyMedium: {
-    fontSize: 16,
-    fontWeight: '400' as const,
+  borderRadius: {
+    sm: 4,
+    base: 8,
+    md: 12,
+    lg: 16,
+    xl: 24,
+    full: 9999,
   },
-  bodySmall: {
-    fontSize: 14,
-    fontWeight: '400' as const,
-  },
+  elevation: {
+    level1: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    level2: {
+      shadowColor: '#0F1C3F',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.1,
+      shadowRadius: 30,
+      elevation: 5,
+    },
+  }
 };

@@ -33,7 +33,7 @@ const meetingSchema = new Schema<IMeeting>(
     },
     rawTranscript: {
       type: String,
-      required: true,
+      default: '',
     },
     summary: {
       type: String,
@@ -57,11 +57,11 @@ const meetingSchema = new Schema<IMeeting>(
     },
     durationSeconds: {
       type: Number,
-      required: true,
+      default: 0,
     },
     audioUrl: {
       type: String,
-      required: true,
+      default: '',
     },
     language: {
       type: String,

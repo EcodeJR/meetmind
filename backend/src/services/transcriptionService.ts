@@ -6,14 +6,17 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export const transcribeAudio = async (audioUrl: string): Promise<string> => {
+export const transcribeAudio = async (filePath: string): Promise<string> => {
   try {
-    logger.info({ audioUrl }, 'Starting transcription with Whisper');
+    console.log(`[DEBUGGER] Whisper Transcription: Starting with file: ${filePath}`);
+    logger.info({ filePath }, 'Starting transcription with Whisper');
 
     const response = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(audioUrl) as any,
+      file: fs.createReadStream(filePath) as any,
       model: 'whisper-1',
     });
+
+    console.log(`[DEBUGGER] Whisper Transcription: SUCCESS. Received ${response.text.split(' ').length} words.`);
 
     logger.info({ duration: response.text.length }, 'Transcription completed');
 

@@ -4,6 +4,10 @@ import { sendSuccess, sendError } from '../utils/responses';
 import { Meeting } from '../models/Meeting';
 import { User } from '../models/User';
 import { logger } from '../utils/logger';
+import { transcribeAudio } from '../services/transcriptionService';
+import { summarizeTranscript } from '../services/summarizationService';
+import { uploadAudioToCloudinary } from '../services/cloudinaryService';
+import fs from 'fs';
 
 // Create a new meeting
 export const createMeeting = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -19,10 +23,17 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
     // Find or create user
     let user = await User.findOne({ clerkId });
     if (!user) {
+      // email can be passed from client on first meeting creation, or we use a placeholder
+      // that gets updated when the Clerk webhook fires
+      const email = req.body.email;
+      if (!email) {
+        sendError(res, 'MISSING_EMAIL', 'Email is required when creating account for the first time');
+        return;
+      }
       user = new User({
         clerkId,
-        email: req.body.email || '',
-        plan: 'FREE',
+        email,
+        plan: 'free',
         meetingCount: 0,
       });
       await user.save();
@@ -33,10 +44,12 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
       userId: user._id,
       title,
       rawTranscript: rawTranscript || '',
-      summaryTranscript: '',
-      keywords: [],
-      tags: [],
-      duration: duration || 0,
+      summary: req.body.summary || '',
+      actionItems: req.body.actionItems || [],
+      keyDecisions: req.body.keyDecisions || [],
+      durationSeconds: duration || 0,
+      audioUrl: req.body.audioUrl || '',
+      tags: req.body.tags || [],
     });
 
     await meeting.save();
@@ -45,7 +58,8 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
     user.meetingCount = (user.meetingCount || 0) + 1;
     await user.save();
 
-    logger.info({ clerkId, meetingId: meeting._id }, 'Meeting created');
+    logger.info({ clerkId, meetingId: meeting._id }, 'Meeting created via direct POST');
+    console.log(`[DEBUGGER] Meeting created directly: ${meeting._id}`);
     sendSuccess(res, { meeting }, 201);
   } catch (error) {
     logger.error({ error }, 'Error creating meeting');
@@ -53,23 +67,84 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-// Placeholder - will be expanded with audio processing
+// Full audio processing endpoint
 export const processMeeting = async (req: AuthRequest, res: Response): Promise<void> => {
+  const filePath = req.file?.path;
+  const clerkId = req.clerkId;
+  
   try {
-    const clerkId = req.clerkId;
-    const { audioUrl, durationSeconds } = req.body;
+    const { title, durationSeconds } = req.body;
 
-    if (!audioUrl || !durationSeconds) {
-      sendError(res, 'MISSING_DATA', 'audioUrl and durationSeconds are required');
+    console.log(`[DEBUGGER] Starting processMeeting for user: ${clerkId}`);
+    console.log(`[DEBUGGER] File received: ${req.file?.originalname} (${req.file?.size} bytes)`);
+
+    if (!filePath) {
+      console.log(`[DEBUGGER] ERROR: No audio file provided`);
+      sendError(res, 'MISSING_FILE', 'Audio file is required');
       return;
     }
 
-    logger.info({ clerkId, durationSeconds }, 'Processing meeting');
+    // 1. Find user
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      console.log(`[DEBUGGER] ERROR: User not found in database: ${clerkId}`);
+      sendError(res, 'USER_NOT_FOUND', 'User record not found. Please sync user first.');
+      return;
+    }
 
-    sendSuccess(res, { message: 'Meeting processing placeholder' }, 202);
-  } catch (error) {
-    logger.error({ error }, 'Error processing meeting');
-    sendError(res, 'PROCESSING_ERROR', 'Failed to process meeting', 500);
+    // 2. Transcribe
+    console.log(`[DEBUGGER] PHASE 1: Transcribing audio with Whisper...`);
+    const transcript = await transcribeAudio(filePath);
+    console.log(`[DEBUGGER] Transcription SUCCESS. Length: ${transcript.length} characters.`);
+
+    // 3. Summarize
+    console.log(`[DEBUGGER] PHASE 2: Generating summary with AI (Claude/Gemini)...`);
+    const aiAnalysis = await summarizeTranscript(transcript);
+    console.log(`[DEBUGGER] AI Summary SUCCESS. Items: ${aiAnalysis.actionItems.length} action items, ${aiAnalysis.keyDecisions.length} decisions.`);
+
+    // 4. Upload to Cloudinary
+    console.log(`[DEBUGGER] PHASE 3: Uploading audio to Cloudinary...`);
+    const audioUrl = await uploadAudioToCloudinary(filePath);
+    console.log(`[DEBUGGER] Cloudinary SUCCESS. URL: ${audioUrl}`);
+
+    // 5. Save to Database
+    const meeting = new Meeting({
+      userId: user._id,
+      title: title || 'New Recording',
+      rawTranscript: transcript,
+      summary: aiAnalysis.summary,
+      actionItems: aiAnalysis.actionItems,
+      keyDecisions: aiAnalysis.keyDecisions,
+      durationSeconds: Number(durationSeconds) || 0,
+      audioUrl: audioUrl,
+    });
+
+    await meeting.save();
+    console.log(`[DEBUGGER] Database SUCCESS. Meeting ID: ${meeting._id}`);
+
+    // Update user meeting count
+    user.meetingCount = (user.meetingCount || 0) + 1;
+    await user.save();
+
+    // 6. Cleanup local file
+    try {
+      fs.unlinkSync(filePath);
+      console.log(`[DEBUGGER] Local file cleanup SUCCESS.`);
+    } catch (err) {
+      console.error(`[DEBUGGER] WARNING: Failed to delete temp file: ${filePath}`, err);
+    }
+
+    sendSuccess(res, { meeting }, 201);
+  } catch (error: any) {
+    console.error(`[DEBUGGER] FATAL ERROR in processMeeting:`, error);
+    logger.error({ error, clerkId }, 'Error processing meeting');
+    
+    // Cleanup on error
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    
+    sendError(res, 'PROCESSING_ERROR', error.message || 'Failed to process meeting', 500);
   }
 };
 
