@@ -12,22 +12,25 @@ export const authMiddleware = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return sendError(res, 'MISSING_AUTH', 'Missing or invalid authorization header', 401);
+      sendError(res, 'MISSING_AUTH', 'Missing or invalid authorization header', 401);
+      return;
     }
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
     const decoded = await verifyToken(token, {
       secretKey: process.env.CLERK_SECRET_KEY,
+      issuer: null,
     });
 
     if (!decoded) {
-      return sendError(res, 'INVALID_TOKEN', 'Invalid or expired token', 401);
+      sendError(res, 'INVALID_TOKEN', 'Invalid or expired token', 401);
+      return;
     }
 
     req.userId = decoded.sub;
@@ -36,6 +39,7 @@ export const authMiddleware = async (
     next();
   } catch (error) {
     logger.error({ error }, 'Auth middleware error');
-    return sendError(res, 'AUTH_ERROR', 'Authentication failed', 401);
+    sendError(res, 'AUTH_ERROR', 'Authentication failed', 401);
+    return;
   }
 };

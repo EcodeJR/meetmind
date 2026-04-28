@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { apiRateLimiter, uploadRateLimiter } from '../middleware/rateLimiter';
 import {
+  createMeeting,
   processMeeting,
   getMeetings,
   getMeetingById,
@@ -16,6 +17,7 @@ const router = Router();
 router.use(authMiddleware);
 router.use(apiRateLimiter);
 
+router.post('/', createMeeting);
 router.post('/process', uploadRateLimiter, processMeeting);
 router.get('/', getMeetings);
 router.get('/search', searchMeetings);

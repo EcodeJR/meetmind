@@ -16,9 +16,9 @@ export class ErrorHandler extends Error {
 
 export const errorHandling = (
   err: Error | ErrorHandler,
-  req: Request,
+  _req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ) => {
   logger.error({ error: err }, 'Unhandled error');
 

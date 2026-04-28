@@ -5,7 +5,7 @@ import helmet from 'helmet';
 import { logger } from './utils/logger';
 import { connectDB } from './utils/database';
 import { errorHandling } from './middleware/errorHandler';
-import { globalRateLimiter, apiRateLimiter } from './middleware/rateLimiter';
+import { globalRateLimiter } from './middleware/rateLimiter';
 import healthRoutes from './routes/healthRoutes';
 import userRoutes from './routes/userRoutes';
 import meetingRoutes from './routes/meetingRoutes';

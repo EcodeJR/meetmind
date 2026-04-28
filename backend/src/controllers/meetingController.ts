@@ -4,126 +4,208 @@ import { sendSuccess, sendError } from '../utils/responses';
 import { Meeting } from '../models/Meeting';
 import { User } from '../models/User';
 import { logger } from '../utils/logger';
-import { z } from 'zod';
+
+// Create a new meeting
+export const createMeeting = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const clerkId = req.clerkId;
+    const { title, rawTranscript, duration } = req.body;
+
+    if (!title) {
+      sendError(res, 'MISSING_DATA', 'Title is required');
+      return;
+    }
+
+    // Find or create user
+    let user = await User.findOne({ clerkId });
+    if (!user) {
+      user = new User({
+        clerkId,
+        email: req.body.email || '',
+        plan: 'FREE',
+        meetingCount: 0,
+      });
+      await user.save();
+    }
+
+    // Create meeting
+    const meeting = new Meeting({
+      userId: user._id,
+      title,
+      rawTranscript: rawTranscript || '',
+      summaryTranscript: '',
+      keywords: [],
+      tags: [],
+      duration: duration || 0,
+    });
+
+    await meeting.save();
+
+    // Increment meeting count
+    user.meetingCount = (user.meetingCount || 0) + 1;
+    await user.save();
+
+    logger.info({ clerkId, meetingId: meeting._id }, 'Meeting created');
+    sendSuccess(res, { meeting }, 201);
+  } catch (error) {
+    logger.error({ error }, 'Error creating meeting');
+    sendError(res, 'CREATE_ERROR', 'Failed to create meeting', 500);
+  }
+};
 
 // Placeholder - will be expanded with audio processing
-export const processMeeting = async (req: AuthRequest, res: Response) => {
+export const processMeeting = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const clerkId = req.clerkId;
     const { audioUrl, durationSeconds } = req.body;
 
     if (!audioUrl || !durationSeconds) {
-      return sendError(res, 'MISSING_DATA', 'audioUrl and durationSeconds are required');
+      sendError(res, 'MISSING_DATA', 'audioUrl and durationSeconds are required');
+      return;
     }
 
     logger.info({ clerkId, durationSeconds }, 'Processing meeting');
 
-    return sendSuccess(res, { message: 'Meeting processing placeholder' }, 202);
+    sendSuccess(res, { message: 'Meeting processing placeholder' }, 202);
   } catch (error) {
     logger.error({ error }, 'Error processing meeting');
-    return sendError(res, 'PROCESSING_ERROR', 'Failed to process meeting', 500);
+    sendError(res, 'PROCESSING_ERROR', 'Failed to process meeting', 500);
   }
 };
 
-export const getMeetings = async (req: AuthRequest, res: Response) => {
+export const getMeetings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const clerkId = req.clerkId;
     const { page = 1, limit = 10 } = req.query;
 
     const skip = ((Number(page) - 1) * Number(limit));
 
-    const meetings = await Meeting.find({ userId: clerkId })
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+      return;
+    }
+
+    const meetings = await Meeting.find({ userId: user._id })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
 
-    const total = await Meeting.countDocuments({ userId: clerkId });
+    const total = await Meeting.countDocuments({ userId: user._id });
 
-    return sendSuccess(res, { meetings, total, page, limit });
+    sendSuccess(res, { meetings, total, page, limit });
   } catch (error) {
     logger.error({ error }, 'Error fetching meetings');
-    return sendError(res, 'FETCH_ERROR', 'Failed to fetch meetings', 500);
+    sendError(res, 'FETCH_ERROR', 'Failed to fetch meetings', 500);
   }
 };
 
-export const getMeetingById = async (req: AuthRequest, res: Response) => {
+export const getMeetingById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const clerkId = req.clerkId;
 
-    const meeting = await Meeting.findOne({ _id: id, userId: clerkId });
-
-    if (!meeting) {
-      return sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+      return;
     }
 
-    return sendSuccess(res, { meeting });
+    const meeting = await Meeting.findOne({ _id: id, userId: user._id });
+
+    if (!meeting) {
+      sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
+      return;
+    }
+
+    sendSuccess(res, { meeting });
   } catch (error) {
     logger.error({ error }, 'Error fetching meeting');
-    return sendError(res, 'FETCH_ERROR', 'Failed to fetch meeting', 500);
+    sendError(res, 'FETCH_ERROR', 'Failed to fetch meeting', 500);
   }
 };
 
-export const updateMeeting = async (req: AuthRequest, res: Response) => {
+export const updateMeeting = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const clerkId = req.clerkId;
-    const { title, tags } = req.body;
+    const { title, tags, summaryTranscript } = req.body;
+
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+      return;
+    }
 
     const meeting = await Meeting.findOneAndUpdate(
-      { _id: id, userId: clerkId },
-      { title, tags },
+      { _id: id, userId: user._id },
+      { title, tags, summaryTranscript },
       { new: true }
     );
 
     if (!meeting) {
-      return sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
+      sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
+      return;
     }
 
-    return sendSuccess(res, { meeting });
+    sendSuccess(res, { meeting });
   } catch (error) {
     logger.error({ error }, 'Error updating meeting');
-    return sendError(res, 'UPDATE_ERROR', 'Failed to update meeting', 500);
+    sendError(res, 'UPDATE_ERROR', 'Failed to update meeting', 500);
   }
 };
 
-export const deleteMeeting = async (req: AuthRequest, res: Response) => {
+export const deleteMeeting = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const clerkId = req.clerkId;
 
-    const meeting = await Meeting.findOneAndDelete({ _id: id, userId: clerkId });
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+      return;
+    }
+
+    const meeting = await Meeting.findOneAndDelete({ _id: id, userId: user._id });
 
     if (!meeting) {
-      return sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
+      sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
+      return;
     }
 
     // TODO: Delete audio from Cloudinary
 
-    return sendSuccess(res, { message: 'Meeting deleted' });
+    sendSuccess(res, { message: 'Meeting deleted' });
   } catch (error) {
     logger.error({ error }, 'Error deleting meeting');
-    return sendError(res, 'DELETE_ERROR', 'Failed to delete meeting', 500);
+    sendError(res, 'DELETE_ERROR', 'Failed to delete meeting', 500);
   }
 };
 
-export const searchMeetings = async (req: AuthRequest, res: Response) => {
+export const searchMeetings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const clerkId = req.clerkId;
     const { q } = req.query;
 
     if (!q || typeof q !== 'string') {
-      return sendError(res, 'MISSING_QUERY', 'Search query is required');
+      sendError(res, 'MISSING_QUERY', 'Search query is required');
+      return;
+    }
+
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+      return;
     }
 
     const meetings = await Meeting.find(
-      { userId: clerkId, $text: { $search: q } },
+      { userId: user._id, $text: { $search: q } },
       { score: { $meta: 'textScore' } }
     ).sort({ score: { $meta: 'textScore' } });
 
-    return sendSuccess(res, { meetings });
+    sendSuccess(res, { meetings });
   } catch (error) {
     logger.error({ error }, 'Error searching meetings');
-    return sendError(res, 'SEARCH_ERROR', 'Failed to search meetings', 500);
+    sendError(res, 'SEARCH_ERROR', 'Failed to search meetings', 500);
   }
 };

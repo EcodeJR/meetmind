@@ -1,5 +1,4 @@
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -10,13 +9,22 @@ export const apiClient = axios.create({
   },
 });
 
+// Store token getter function that will be set by the app
+let getTokenFn: (() => Promise<string | null>) | null = null;
+
+export function setTokenGetter(fn: () => Promise<string | null>) {
+  getTokenFn = fn;
+}
+
 // Add auth token interceptor
 apiClient.interceptors.request.use(
   async (config) => {
     try {
-      const token = await SecureStore.getItemAsync('clerk_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+      if (getTokenFn) {
+        const token = await getTokenFn();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
       }
     } catch (error) {
       console.error('Error retrieving token:', error);
