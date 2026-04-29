@@ -5,6 +5,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'react-native';
 
 type UserData = {
   plan: string;
@@ -38,6 +40,32 @@ export default function SettingsScreen() {
 
   const handleSignOut = async () => {
     await signOut();
+  };
+
+  const handleUpdateAvatar = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        setLoading(true);
+        const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        await user?.setProfileImage({
+          file: base64,
+        });
+        Alert.alert('Success', 'Profile photo updated.');
+      }
+    } catch (error) {
+      console.error('Error updating avatar:', error);
+      Alert.alert('Error', 'Failed to update profile photo.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeleteAccount = () => {
@@ -77,14 +105,26 @@ export default function SettingsScreen() {
           <Text style={styles.sectionLabel}>ACCREDITED IDENTITY</Text>
           <View style={styles.card}>
             <View style={styles.userRow}>
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>
-                  {user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress.charAt(0).toUpperCase()}
-                </Text>
-              </View>
+              <TouchableOpacity onPress={handleUpdateAvatar} style={styles.avatarContainer}>
+                {user?.imageUrl ? (
+                  <Image source={{ uri: user.imageUrl }} style={styles.avatar} />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Text style={styles.avatarText}>
+                      {user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.editBadge}>
+                  <Ionicons name="camera" size={12} color={theme.colors.onPrimary} />
+                </View>
+              </TouchableOpacity>
               <View style={styles.userInfo}>
                 <Text style={styles.userName}>{user?.fullName || 'Professional User'}</Text>
                 <Text style={styles.userEmail}>{user?.primaryEmailAddress?.emailAddress || ''}</Text>
+                <TouchableOpacity onPress={handleUpdateAvatar}>
+                  <Text style={styles.changePhotoText}>Change photo</Text>
+                </TouchableOpacity>
               </View>
               <View style={[styles.planBadge, userData?.plan === 'free' && styles.freeBadge]}>
                 <Text style={styles.planBadgeText}>{(userData?.plan || 'pro').toUpperCase()}</Text>
@@ -241,10 +281,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
   },
+  avatarContainer: {
+    position: 'relative',
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: theme.colors.surfaceContainer,
+  },
   avatarPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -252,7 +301,26 @@ const styles = StyleSheet.create({
   avatarText: {
     color: theme.colors.onPrimary,
     fontFamily: 'SpaceGrotesk-SemiBold',
-    fontSize: 20,
+    fontSize: 24,
+  },
+  editBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: theme.colors.primary,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.colors.surfaceContainerLowest,
+  },
+  changePhotoText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: theme.colors.primary,
+    marginTop: 2,
   },
   userInfo: {
     flex: 1,

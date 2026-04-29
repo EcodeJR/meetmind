@@ -81,9 +81,16 @@ function RootLayoutNav() {
 
     hasSynced.current = true;
 
-    apiClient.post('/users/sync', { email }).catch((err: unknown) => {
-      console.warn('User sync failed (non-fatal):', err);
-    });
+    apiClient.post('/users/sync', { email })
+      .then((response: any) => {
+        const userData = response.data.data?.user || response.data.user;
+        if (userData && !userData.onboardingCompleted) {
+          router.replace('/onboarding');
+        }
+      })
+      .catch((err: unknown) => {
+        console.warn('User sync failed (non-fatal):', err);
+      });
   }, [isSignedIn, user]);
 
   useEffect(() => {

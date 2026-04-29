@@ -6,6 +6,8 @@ export interface IUser extends Document {
   plan: 'free' | 'pro';
   meetingCount: number;
   storageUsedMB: number;
+  onboardingCompleted: boolean;
+  profileImage?: string;
   preferences: {
     notificationsEnabled: boolean;
     language: string;
@@ -38,6 +40,13 @@ const userSchema = new Schema<IUser>(
     storageUsedMB: {
       type: Number,
       default: 0,
+    },
+    onboardingCompleted: {
+      type: Boolean,
+      default: false,
+    },
+    profileImage: {
+      type: String,
     },
     preferences: {
       notificationsEnabled: {

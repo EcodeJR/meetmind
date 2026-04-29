@@ -212,19 +212,30 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View style={styles.brandContainer}>
-              <Image 
-                source={require('../../assets/logo.jpeg')} 
-                style={styles.logo} 
-                resizeMode="contain"
-              />
+          <View style={styles.header}>
+            <View style={styles.headerTop}>
+              <View style={styles.brandContainer}>
+                <Image 
+                  source={require('../../assets/logo.jpeg')} 
+                  style={styles.logo} 
+                  resizeMode="contain"
+                />
+              </View>
+              <TouchableOpacity onPress={() => router.push('/settings')} style={styles.profileButton}>
+                {user?.imageUrl ? (
+                  <Image source={{ uri: user.imageUrl }} style={styles.headerAvatar} />
+                ) : (
+                  <View style={styles.headerAvatarPlaceholder}>
+                    <Text style={styles.headerAvatarText}>
+                      {user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
             </View>
+            <Text style={styles.pageTitle}>New Record</Text>
+            <Text style={styles.pageSubtitle}>Clear thoughts. Precise summaries.</Text>
           </View>
-          <Text style={styles.pageTitle}>New Record</Text>
-          <Text style={styles.pageSubtitle}>Clear thoughts. Precise summaries.</Text>
-        </View>
 
         <View style={styles.mainArea}>
           {!isRecording ? (
@@ -313,10 +324,37 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
   },
   headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: theme.spacing.sm,
   },
   brandContainer: {
     padding: 4,
+    marginLeft: -4,
+  },
+  profileButton: {
+    padding: 2,
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+  },
+  headerAvatarPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerAvatarText: {
+    color: theme.colors.onPrimary,
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 14,
   },
   logo: {
     width: 32,

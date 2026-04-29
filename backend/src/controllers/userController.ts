@@ -118,3 +118,25 @@ export const deleteAccount = async (req: AuthRequest, res: Response) => {
     return sendError(res, 'DELETE_ERROR', `Failed to delete account: ${error.message}`, 500);
   }
 };
+export const updateProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const clerkId = req.clerkId;
+    const updates = req.body;
+
+    const user = await User.findOneAndUpdate(
+      { clerkId },
+      { $set: updates },
+      { new: true }
+    );
+
+    if (!user) {
+      return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+    }
+
+    logger.info({ clerkId }, 'User profile updated');
+    return sendSuccess(res, { user });
+  } catch (error) {
+    logger.error({ error }, 'Error updating profile');
+    return sendError(res, 'UPDATE_ERROR', 'Failed to update profile', 500);
+  }
+};
