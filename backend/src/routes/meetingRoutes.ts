@@ -11,6 +11,7 @@ import {
   updateMeeting,
   deleteMeeting,
   searchMeetings,
+  deleteAllMeetings,
 } from '../controllers/meetingController';
 
 const router = Router();
@@ -39,5 +40,6 @@ router.get('/search', searchMeetings);
 router.get('/:id', getMeetingById);
 router.patch('/:id', updateMeeting);
 router.delete('/:id', deleteMeeting);
+router.delete('/', deleteAllMeetings);
 
 export default router;

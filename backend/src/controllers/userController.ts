@@ -2,6 +2,8 @@ import { AuthRequest } from '../middleware/auth';
 import { Response } from 'express';
 import { sendSuccess, sendError } from '../utils/responses';
 import { User } from '../models/User';
+import { Meeting } from '../models/Meeting';
+import { deleteAudioFromCloudinary } from '../services/cloudinaryService';
 import { logger } from '../utils/logger';
 
 export const syncClerkUser = async (req: AuthRequest, res: Response) => {
@@ -46,5 +48,73 @@ export const getUser = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     logger.error({ error }, 'Error fetching user');
     return sendError(res, 'FETCH_ERROR', 'Failed to fetch user', 500);
+  }
+};
+export const updateUserPreferences = async (req: AuthRequest, res: Response) => {
+  try {
+    const clerkId = req.clerkId;
+    const { preferences } = req.body;
+
+    if (!preferences) {
+      return sendError(res, 'MISSING_DATA', 'Preferences object is required');
+    }
+
+    const user = await User.findOneAndUpdate(
+      { clerkId },
+      { $set: { preferences } },
+      { new: true }
+    );
+
+    if (!user) {
+      return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+    }
+
+    logger.info({ clerkId }, 'User preferences updated');
+    return sendSuccess(res, { user });
+  } catch (error) {
+    logger.error({ error }, 'Error updating preferences');
+    return sendError(res, 'UPDATE_ERROR', 'Failed to update preferences', 500);
+  }
+};
+export const deleteAccount = async (req: AuthRequest, res: Response) => {
+  try {
+    const clerkId = req.clerkId;
+
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+    }
+
+    // 1. Identify all associated meetings
+    const meetings = await Meeting.find({ userId: user._id });
+    const publicIds = meetings.map(m => m.audioPublicId).filter(Boolean) as string[];
+    
+    // 2. Resilient Asset Cleanup (Cloudinary)
+    // We swallow errors here so that a single missing file doesn't block account deletion
+    if (publicIds.length > 0) {
+      console.log(`[DEBUGGER] Account Deletion: Purging ${publicIds.length} assets from Cloudinary...`);
+      await Promise.allSettled(publicIds.map(async (id) => {
+        try {
+          await deleteAudioFromCloudinary(id);
+        } catch (err: any) {
+          console.log(`[DEBUGGER] WARNING: Failed to delete asset ${id}: ${err.message}`);
+        }
+      }));
+    }
+
+    // 3. Purge Database Records
+    await Meeting.deleteMany({ userId: user._id });
+    console.log(`[DEBUGGER] Account Deletion: All meetings purged for user ${clerkId}`);
+
+    // 4. Dissolve User Identity
+    await User.deleteOne({ _id: user._id });
+    console.log(`[DEBUGGER] Account Deletion: User identity dissolved`);
+
+    logger.info({ clerkId }, 'User account and all data deleted successfully');
+    return sendSuccess(res, { message: 'Account and all associated memory purged' });
+  } catch (error: any) {
+    console.error(`[DEBUGGER] FATAL ERROR in deleteAccount:`, error.message);
+    logger.error({ error }, 'Error deleting account');
+    return sendError(res, 'DELETE_ERROR', `Failed to delete account: ${error.message}`, 500);
   }
 };

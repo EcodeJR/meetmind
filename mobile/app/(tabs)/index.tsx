@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   SafeAreaView,
+  Image,
 } from 'react-native';
 import { useUser } from '@clerk/clerk-expo';
 import apiClient from '@/services/api';
@@ -81,6 +82,8 @@ export default function HomeScreen() {
     };
   });
 
+  const [volumes, setVolumes] = useState<number[]>(new Array(12).fill(0));
+
   const handleStartRecording = async () => {
     try {
       if (!meetingTitle.trim()) {
@@ -103,7 +106,37 @@ export default function HomeScreen() {
 
       setDebugStatus('Initializing high-fidelity recorder...');
       const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
+        {
+          ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+          android: {
+            ...Audio.RecordingOptionsPresets.HIGH_QUALITY.android,
+            extension: '.m4a',
+            outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+            audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          },
+          ios: {
+            ...Audio.RecordingOptionsPresets.HIGH_QUALITY.ios,
+            extension: '.m4a',
+            outputFormat: Audio.IOSOutputFormat.MPEG4,
+            audioQuality: Audio.IOSAudioQuality.HIGH,
+            sampleRate: 44100,
+            numberOfChannels: 1,
+            bitRate: 128000,
+          },
+        },
+        (status) => {
+          if (status.metering !== undefined) {
+             // Convert dB to 0-1 scale (roughly -60 to 0)
+             const normalized = Math.max(0, (status.metering + 60) / 60);
+             setVolumes(prev => {
+               const next = [...prev];
+               next.shift();
+               next.push(normalized);
+               return next;
+             });
+          }
+        },
+        100 // update every 100ms
       );
       
       setRecording(newRecording);
@@ -180,6 +213,15 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View style={styles.brandContainer}>
+              <Image 
+                source={require('../../assets/logo.jpeg')} 
+                style={styles.logo} 
+                resizeMode="contain"
+              />
+            </View>
+          </View>
           <Text style={styles.pageTitle}>New Record</Text>
           <Text style={styles.pageSubtitle}>Clear thoughts. Precise summaries.</Text>
         </View>
@@ -236,14 +278,14 @@ export default function HomeScreen() {
 
         <View style={styles.footer}>
           <View style={styles.waveformContainer}>
-             {[...Array(12)].map((_, i) => (
+             {volumes.map((v, i) => (
                <View 
                 key={i} 
                 style={[
                   styles.waveBar, 
                   { 
-                    height: isRecording ? Math.random() * 20 + 4 : 4,
-                    opacity: isRecording ? 1 : 0.3
+                    height: isRecording ? (v * 30) + 4 : 4,
+                    opacity: isRecording ? 0.3 + (v * 0.7) : 0.3
                   }
                 ]} 
                />
@@ -269,6 +311,17 @@ const styles = StyleSheet.create({
   },
   header: {
     marginTop: theme.spacing.md,
+  },
+  headerTop: {
+    marginBottom: theme.spacing.sm,
+  },
+  brandContainer: {
+    padding: 4,
+  },
+  logo: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
   },
   pageTitle: {
     fontFamily: 'Manrope-Bold',

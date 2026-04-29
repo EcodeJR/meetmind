@@ -13,6 +13,8 @@ export interface IMeeting extends Document {
   }>;
   durationSeconds: number;
   audioUrl: string;
+  audioPublicId?: string;
+  audioSizeMB?: number;
   language: string;
   tags: string[];
   createdAt: Date;
@@ -62,6 +64,13 @@ const meetingSchema = new Schema<IMeeting>(
     audioUrl: {
       type: String,
       default: '',
+    },
+    audioPublicId: {
+      type: String,
+    },
+    audioSizeMB: {
+      type: Number,
+      default: 0,
     },
     language: {
       type: String,

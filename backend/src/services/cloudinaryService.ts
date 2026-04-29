@@ -7,7 +7,12 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export const uploadAudioToCloudinary = async (filePath: string): Promise<string> => {
+export interface CloudinaryUploadResult {
+  url: string;
+  publicId: string;
+}
+
+export const uploadAudioToCloudinary = async (filePath: string): Promise<CloudinaryUploadResult> => {
   try {
     const result = await cloudinary.uploader.upload(filePath, {
       resource_type: 'auto',
@@ -16,7 +21,10 @@ export const uploadAudioToCloudinary = async (filePath: string): Promise<string>
 
     logger.info({ publicId: result.public_id }, 'Audio uploaded to Cloudinary');
 
-    return result.secure_url;
+    return {
+      url: result.secure_url,
+      publicId: result.public_id,
+    };
   } catch (error) {
     logger.error({ error }, 'Failed to upload audio to Cloudinary');
     throw error;

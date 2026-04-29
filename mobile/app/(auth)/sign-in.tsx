@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
 } from 'react-native';
 import { Text } from 'react-native';
 import { useSignIn, useOAuth } from '@clerk/clerk-expo';
@@ -88,6 +89,11 @@ export default function SignInScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
+          <Image 
+            source={require('../../assets/logo.jpeg')} 
+            style={styles.logo} 
+            resizeMode="contain"
+          />
           <Text style={styles.title}>MeetMind</Text>
           <Text style={styles.subtitle}>Institutional trust. Professional depth.</Text>
         </View>
@@ -188,6 +194,12 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: theme.spacing.xl,
     alignItems: 'flex-start',
+  },
+  logo: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
+    marginBottom: theme.spacing.md,
   },
   title: {
     fontFamily: 'Manrope-Bold',

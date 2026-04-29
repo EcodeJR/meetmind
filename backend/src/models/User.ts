@@ -6,6 +6,11 @@ export interface IUser extends Document {
   plan: 'free' | 'pro';
   meetingCount: number;
   storageUsedMB: number;
+  preferences: {
+    notificationsEnabled: boolean;
+    language: string;
+    autoDeleteDays: number;
+  };
   createdAt: Date;
 }
 
@@ -33,6 +38,20 @@ const userSchema = new Schema<IUser>(
     storageUsedMB: {
       type: Number,
       default: 0,
+    },
+    preferences: {
+      notificationsEnabled: {
+        type: Boolean,
+        default: true,
+      },
+      language: {
+        type: String,
+        default: 'en',
+      },
+      autoDeleteDays: {
+        type: Number,
+        default: 0, // 0 means disabled
+      },
     },
   },
   {

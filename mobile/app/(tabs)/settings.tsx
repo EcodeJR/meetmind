@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ScrollView, ActivityIndicator } from 'react-native';
 import { useAuth, useUser } from '@clerk/clerk-expo';
+import { useRouter, useFocusEffect } from 'expo-router';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,10 +15,11 @@ type UserData = {
 export default function SettingsScreen() {
   const { signOut } = useAuth();
   const { user } = useUser();
+  const router = useRouter();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserData = async () => {
+  const fetchUserData = useCallback(async () => {
     try {
       const response = await apiClient.get('/users/me');
       setUserData(response.data.data?.user || response.data.user || null);
@@ -26,14 +28,41 @@ export default function SettingsScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchUserData();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserData();
+    }, [fetchUserData])
+  );
 
   const handleSignOut = async () => {
     await signOut();
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Account Destruction',
+      'This will permanently delete your identity, all intelligence reports, and voice signatures. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete Everything', 
+          style: 'destructive', 
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await apiClient.delete('/users/me');
+              await signOut();
+            } catch (error) {
+              Alert.alert('Purge Failed', 'Error while destroying account data.');
+            } finally {
+              setLoading(false);
+            }
+          } 
+        }
+      ]
+    );
   };
 
   return (
@@ -79,17 +108,36 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>PREFERENCES</Text>
           <View style={styles.menuCard}>
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={() => router.push('/settings/notifications')}
+            >
               <View style={styles.menuIconContainer}>
-                <Ionicons name="notifications-outline" size={20} color={theme.colors.onSurface} />
+                <Ionicons name="mail-outline" size={20} color={theme.colors.onSurface} />
               </View>
               <Text style={styles.menuItemText}>Notification Intelligence</Text>
+              <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
+            </TouchableOpacity>
+
+            <View style={styles.menuSeparator} />
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/settings/alerts')}
+            >
+              <View style={styles.menuIconContainer}>
+                <Ionicons name="flash-outline" size={20} color={theme.colors.onSurface} />
+              </View>
+              <Text style={styles.menuItemText}>Strategic Alerts</Text>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
             </TouchableOpacity>
             
             <View style={styles.menuSeparator} />
             
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/settings/linguistics')}
+            >
               <View style={styles.menuIconContainer}>
                 <Ionicons name="globe-outline" size={20} color={theme.colors.onSurface} />
               </View>
@@ -99,7 +147,10 @@ export default function SettingsScreen() {
 
             <View style={styles.menuSeparator} />
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/settings/storage')}
+            >
               <View style={styles.menuIconContainer}>
                 <Ionicons name="cloud-outline" size={20} color={theme.colors.onSurface} />
               </View>
@@ -109,17 +160,26 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.signOutButton}
-          onPress={() => {
-            Alert.alert('Dissolve Session', 'Are you sure you want to sign out?', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Sign out', style: 'destructive', onPress: handleSignOut },
-            ]);
-          }}
-        >
-          <Text style={styles.signOutText}>Sign out from Network</Text>
-        </TouchableOpacity>
+        <View style={styles.footerButtons}>
+          <TouchableOpacity
+            style={styles.signOutButton}
+            onPress={() => {
+              Alert.alert('Dissolve Session', 'Are you sure you want to sign out?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Sign out', style: 'destructive', onPress: handleSignOut },
+              ]);
+            }}
+          >
+            <Text style={styles.signOutText}>Sign out from Network</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.deleteAccountButton}
+            onPress={handleDeleteAccount}
+          >
+            <Text style={styles.deleteAccountText}>Dissolve Account</Text>
+          </TouchableOpacity>
+        </View>
         
         <View style={styles.footer}>
           <Text style={styles.footerText}>MeetMind v1.0.0 — Established 2026</Text>
@@ -271,20 +331,33 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceContainer,
     marginHorizontal: theme.spacing.md,
   },
+  footerButtons: {
+    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
   signOutButton: {
-    marginHorizontal: theme.spacing.lg,
     backgroundColor: theme.colors.surfaceContainerLowest,
     borderRadius: theme.borderRadius.base,
     paddingVertical: theme.spacing.md,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: theme.colors.outlineVariant,
-    marginTop: theme.spacing.sm,
   },
   signOutText: {
     fontFamily: 'Manrope-SemiBold',
-    color: theme.colors.error,
+    color: theme.colors.onSurface,
     fontSize: 16,
+  },
+  deleteAccountButton: {
+    paddingVertical: theme.spacing.md,
+    alignItems: 'center',
+  },
+  deleteAccountText: {
+    fontFamily: 'Manrope-SemiBold',
+    color: theme.colors.error,
+    fontSize: 13,
+    textDecorationLine: 'underline',
   },
   footer: {
     alignItems: 'center',

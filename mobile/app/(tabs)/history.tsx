@@ -10,8 +10,9 @@ import {
   View,
   Platform,
   TextInput,
+  Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,9 +46,14 @@ export default function HistoryScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadMeetings();
-  }, [loadMeetings]);
+  useFocusEffect(
+    useCallback(() => {
+      // Re-fetch when tab is focused
+      if (!searchQuery) {
+        loadMeetings();
+      }
+    }, [loadMeetings, searchQuery])
+  );
 
   // Handle live search
   useEffect(() => {
@@ -55,9 +61,6 @@ export default function HistoryScreen() {
       if (searchQuery) {
         setIsSearching(true);
         loadMeetings(searchQuery);
-      } else {
-        setIsSearching(false);
-        loadMeetings();
       }
     }, 500);
 
@@ -88,6 +91,13 @@ export default function HistoryScreen() {
           <View>
             <Text style={styles.title}>History</Text>
             <Text style={styles.subtitle}>Institutional memory.</Text>
+          </View>
+          <View style={styles.brandContainer}>
+            <Image 
+              source={require('../../assets/logo.jpeg')} 
+              style={styles.logo} 
+              resizeMode="contain"
+            />
           </View>
         </View>
 
@@ -190,8 +200,16 @@ const styles = StyleSheet.create({
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: theme.spacing.lg,
+  },
+  brandContainer: {
+    padding: 4,
+  },
+  logo: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
   },
   title: {
     fontFamily: 'Manrope-Bold',

@@ -6,7 +6,7 @@ import { User } from '../models/User';
 import { logger } from '../utils/logger';
 import { transcribeAudio } from '../services/transcriptionService';
 import { summarizeTranscript } from '../services/summarizationService';
-import { uploadAudioToCloudinary } from '../services/cloudinaryService';
+import { uploadAudioToCloudinary, deleteAudioFromCloudinary } from '../services/cloudinaryService';
 import fs from 'fs';
 
 // Create a new meeting
@@ -111,26 +111,33 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
 
     // 4. Upload to Cloudinary
     console.log(`[DEBUGGER] PHASE 3: Uploading audio to Cloudinary...`);
-    const audioUrl = await uploadAudioToCloudinary(filePath);
-    console.log(`[DEBUGGER] Cloudinary SUCCESS. URL: ${audioUrl}`);
+    const uploadResult = await uploadAudioToCloudinary(filePath);
+    console.log(`[DEBUGGER] Cloudinary SUCCESS. URL: ${uploadResult.url}`);
+
+    // Get file size in MB
+    const stats = fs.statSync(filePath);
+    const fileSizeMB = stats.size / (1024 * 1024);
 
     // 5. Save to Database
     const meeting = new Meeting({
       userId: user._id,
-      title: title || 'New Recording',
+      title: title || aiAnalysis.title || 'New Recording',
       rawTranscript: transcript,
       summary: aiAnalysis.summary,
       actionItems: aiAnalysis.actionItems,
       keyDecisions: aiAnalysis.keyDecisions,
       durationSeconds: Number(durationSeconds) || 0,
-      audioUrl: audioUrl,
+      audioUrl: uploadResult.url,
+      audioPublicId: uploadResult.publicId,
+      audioSizeMB: fileSizeMB,
     });
 
     await meeting.save();
     console.log(`[DEBUGGER] Database SUCCESS. Meeting ID: ${meeting._id}`);
 
-    // Update user meeting count
+    // Update user meeting count and storage
     user.meetingCount = (user.meetingCount || 0) + 1;
+    user.storageUsedMB = (user.storageUsedMB || 0) + fileSizeMB;
     await user.save();
 
     // 6. Cleanup local file
@@ -255,9 +262,18 @@ export const deleteMeeting = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // TODO: Delete audio from Cloudinary
+    // 1. Delete audio from Cloudinary if publicId exists
+    if (meeting.audioPublicId) {
+      await deleteAudioFromCloudinary(meeting.audioPublicId);
+    }
 
-    sendSuccess(res, { message: 'Meeting deleted' });
+    // 2. Decrement meeting count and storage
+    user.meetingCount = Math.max(0, (user.meetingCount || 1) - 1);
+    const sizeToSubtract = meeting.audioSizeMB || 0;
+    user.storageUsedMB = Math.max(0, (user.storageUsedMB || sizeToSubtract) - sizeToSubtract);
+    await user.save();
+
+    sendSuccess(res, { message: 'Meeting purged and storage recovered' });
   } catch (error) {
     logger.error({ error }, 'Error deleting meeting');
     sendError(res, 'DELETE_ERROR', 'Failed to delete meeting', 500);
@@ -289,5 +305,39 @@ export const searchMeetings = async (req: AuthRequest, res: Response): Promise<v
   } catch (error) {
     logger.error({ error }, 'Error searching meetings');
     sendError(res, 'SEARCH_ERROR', 'Failed to search meetings', 500);
+  }
+};
+export const deleteAllMeetings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const clerkId = req.clerkId;
+
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+      return;
+    }
+
+    // 1. Find all meetings to get publicIds
+    const meetings = await Meeting.find({ userId: user._id });
+    
+    // 2. Filter publicIds and delete from Cloudinary
+    const publicIds = meetings.map(m => m.audioPublicId).filter(Boolean) as string[];
+    
+    // Cloudinary's destroy is one by one in the free tier usually, so we loop or use bulk
+    // For safety with rate limits, we'll do it in parallel but limited or just Promise.all
+    await Promise.all(publicIds.map(id => deleteAudioFromCloudinary(id)));
+
+    // 3. Delete from DB
+    await Meeting.deleteMany({ userId: user._id });
+
+    // 4. Reset user stats
+    user.meetingCount = 0;
+    user.storageUsedMB = 0;
+    await user.save();
+
+    sendSuccess(res, { message: 'All institutional memory has been purged' });
+  } catch (error) {
+    logger.error({ error }, 'Error deleting all meetings');
+    sendError(res, 'DELETE_ALL_ERROR', 'Failed to purge data', 500);
   }
 };
