@@ -34,6 +34,7 @@ app.set('trust proxy', 1);
 
 // Standard Health Check - Mounted before any limiters or parsers
 app.get('/', (_req, res) => res.json({ status: 'Memovoice API Operational' }));
+app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
 // Middleware
 app.use(helmet());
@@ -62,8 +63,8 @@ const start = async () => {
   try {
     logger.info('Initializing Memovoice Services...');
     await connectDB();
-    app.listen(Number(PORT), '0.0.0.0', () => {
-      logger.info(`Server fully initialized and listening on 0.0.0.0:${PORT}`);
+    app.listen(PORT, () => {
+      logger.info(`Server fully initialized and listening on port ${PORT}`);
     });
   } catch (error) {
     logger.error({ error }, 'Failed to start server');
