@@ -42,7 +42,9 @@ app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:3000',
   credentials: true,
 }));
-app.use(globalRateLimiter);
+
+// Apply rate limiter to API routes only
+app.use('/api', globalRateLimiter);
 
 // Stripe Webhook needs raw body - mounting before generic parsers
 app.use('/api/payments', paymentRoutes);
@@ -63,8 +65,9 @@ const start = async () => {
   try {
     logger.info('Initializing Memovoice Services...');
     await connectDB();
-    app.listen(PORT, () => {
-      logger.info(`Server fully initialized and listening on port ${PORT}`);
+    const port = Number(PORT);
+    app.listen(port, () => {
+      logger.info(`Server fully initialized and listening on port ${port}`);
     });
   } catch (error) {
     logger.error({ error }, 'Failed to start server');
