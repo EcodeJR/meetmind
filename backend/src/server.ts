@@ -46,7 +46,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
-app.get('/', (req, res) => res.json({ status: 'Memovoice API Operational' }));
+app.get('/', (_req, res) => res.json({ status: 'Memovoice API Operational' }));
 app.use('/api', healthRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/meetings', meetingRoutes);
