@@ -31,6 +31,10 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.set('trust proxy', 1);
+
+// Standard Health Check - Mounted before any limiters or parsers
+app.get('/', (_req, res) => res.json({ status: 'Memovoice API Operational' }));
+
 // Middleware
 app.use(helmet());
 app.use(cors({
@@ -46,7 +50,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
-app.get('/', (_req, res) => res.json({ status: 'Memovoice API Operational' }));
 app.use('/api', healthRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/meetings', meetingRoutes);

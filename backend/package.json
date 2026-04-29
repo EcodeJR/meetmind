@@ -5,8 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
-    "start": "npm run build && node dist/server.js",
-    "railway:start": "npm run build && npm start",
+    "start": "node dist/server.js",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "test": "echo \"Error: no test specified\" && exit 1"
