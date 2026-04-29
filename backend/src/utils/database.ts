@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 
 export const connectDB = async () => {
   try {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/meetmind';
+    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/memovoice';
 
     await mongoose.connect(mongoUri);
 

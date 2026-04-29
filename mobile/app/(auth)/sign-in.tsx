@@ -62,7 +62,7 @@ export default function SignInScreen() {
       setErrors({});
 
       const redirectUrl = AuthSession.makeRedirectUri({
-        scheme: 'meetmind',
+        scheme: 'memovoice',
         path: '/(tabs)',
       });
 
@@ -89,12 +89,12 @@ export default function SignInScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Image 
-            source={require('../../assets/logo.jpeg')} 
-            style={styles.logo} 
+          <Image
+            source={require('../../assets/logo.jpeg')}
+            style={styles.logo}
             resizeMode="contain"
           />
-          <Text style={styles.title}>MeetMind</Text>
+          <Text style={styles.title}>Memovoice</Text>
           <Text style={styles.subtitle}>Institutional trust. Professional depth.</Text>
         </View>
 
@@ -168,7 +168,7 @@ export default function SignInScreen() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>New to MeetMind? </Text>
+          <Text style={styles.footerText}>New to Memovoice? </Text>
           <Link href="/sign-up" asChild>
             <TouchableOpacity disabled={loading || oauthLoading}>
               <Text style={styles.linkText}>Create an account</Text>

@@ -9,6 +9,7 @@ import { globalRateLimiter } from './middleware/rateLimiter';
 import healthRoutes from './routes/healthRoutes';
 import userRoutes from './routes/userRoutes';
 import meetingRoutes from './routes/meetingRoutes';
+import paymentRoutes from './routes/paymentRoutes';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,6 +21,10 @@ app.use(cors({
   credentials: true,
 }));
 app.use(globalRateLimiter);
+
+// Stripe Webhook needs raw body - mounting before generic parsers
+app.use('/api/payments', paymentRoutes);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

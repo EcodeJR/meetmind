@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "MeetMind",
-    "slug": "meetmind",
-    "scheme": "meetmind",
+    "name": "Memovoice",
+    "slug": "memovoice",
+    "scheme": "memovoice",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/logo.jpeg",
@@ -17,24 +17,27 @@
     ],
     "ios": {
       "supportsTabletMode": true,
-      "bundleIdentifier": "com.meetmind.app"
+      "bundleIdentifier": "com.memovoice.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.jpeg",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.meetmind.app",
+      "package": "com.memovoice.app",
       "intentFilters": [
         {
           "action": "VIEW",
           "autoVerify": true,
           "data": [
             {
-              "scheme": "meetmind"
+              "scheme": "memovoice"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },

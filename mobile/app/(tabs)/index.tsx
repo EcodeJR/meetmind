@@ -14,10 +14,10 @@ import { useUser } from '@clerk/clerk-expo';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Audio } from 'expo-av';
-import Animated, { 
-  useAnimatedStyle, 
-  withRepeat, 
-  withTiming, 
+import Animated, {
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
   withSequence,
   useSharedValue,
   interpolate,
@@ -34,7 +34,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [debugStatus, setDebugStatus] = useState('');
-  
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulse = useSharedValue(1);
 
@@ -54,7 +54,7 @@ export default function HomeScreen() {
       intervalRef.current = setInterval(() => {
         setDuration(d => d + 1);
       }, 1000);
-      
+
       pulse.value = withRepeat(
         withSequence(
           withTiming(1.2, { duration: 1000 }),
@@ -126,19 +126,19 @@ export default function HomeScreen() {
         },
         (status) => {
           if (status.metering !== undefined) {
-             // Convert dB to 0-1 scale (roughly -60 to 0)
-             const normalized = Math.max(0, (status.metering + 60) / 60);
-             setVolumes(prev => {
-               const next = [...prev];
-               next.shift();
-               next.push(normalized);
-               return next;
-             });
+            // Convert dB to 0-1 scale (roughly -60 to 0)
+            const normalized = Math.max(0, (status.metering + 60) / 60);
+            setVolumes(prev => {
+              const next = [...prev];
+              next.shift();
+              next.push(normalized);
+              return next;
+            });
           }
         },
         100 // update every 100ms
       );
-      
+
       setRecording(newRecording);
       setDuration(0);
       setIsRecording(true);
@@ -166,7 +166,7 @@ export default function HomeScreen() {
       }
 
       setDebugStatus('Preparing for AI analysis...');
-      
+
       // Use FormData to upload the file
       const formData = new FormData();
       // @ts-ignore
@@ -179,7 +179,7 @@ export default function HomeScreen() {
       formData.append('durationSeconds', duration.toString());
 
       setDebugStatus('UPLOADING TO INTELLIGENCE ENGINE...');
-      
+
       const response = await apiClient.post('/meetings/process', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -188,7 +188,7 @@ export default function HomeScreen() {
 
       console.log('[DEBUG] Server response:', response.data);
       setDebugStatus('ANALYSIS COMPLETE');
-      
+
       Alert.alert('Success', 'Your meeting has been transcribed and summarized.');
       setMeetingTitle('');
       setDuration(0);
@@ -212,30 +212,30 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-          <View style={styles.header}>
-            <View style={styles.headerTop}>
-              <View style={styles.brandContainer}>
-                <Image 
-                  source={require('../../assets/logo.jpeg')} 
-                  style={styles.logo} 
-                  resizeMode="contain"
-                />
-              </View>
-              <TouchableOpacity onPress={() => router.push('/settings')} style={styles.profileButton}>
-                {user?.imageUrl ? (
-                  <Image source={{ uri: user.imageUrl }} style={styles.headerAvatar} />
-                ) : (
-                  <View style={styles.headerAvatarPlaceholder}>
-                    <Text style={styles.headerAvatarText}>
-                      {user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View style={styles.brandContainer}>
+              <Image
+                source={require('../../assets/logo.jpeg')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
             </View>
-            <Text style={styles.pageTitle}>New Record</Text>
-            <Text style={styles.pageSubtitle}>Clear thoughts. Precise summaries.</Text>
+            <TouchableOpacity onPress={() => router.push('/settings')} style={styles.profileButton}>
+              {user?.imageUrl ? (
+                <Image source={{ uri: user.imageUrl }} style={styles.headerAvatar} />
+              ) : (
+                <View style={styles.headerAvatarPlaceholder}>
+                  <Text style={styles.headerAvatarText}>
+                    {user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
+          <Text style={styles.pageTitle}>New Record</Text>
+          <Text style={styles.pageSubtitle}>Clear thoughts. Precise summaries.</Text>
+        </View>
 
         <View style={styles.mainArea}>
           {!isRecording ? (
@@ -275,7 +275,7 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.statusContainer}>
             {loading ? (
               <Text style={styles.debugText}>{debugStatus}</Text>
@@ -289,18 +289,18 @@ export default function HomeScreen() {
 
         <View style={styles.footer}>
           <View style={styles.waveformContainer}>
-             {volumes.map((v, i) => (
-               <View 
-                key={i} 
+            {volumes.map((v, i) => (
+              <View
+                key={i}
                 style={[
-                  styles.waveBar, 
-                  { 
+                  styles.waveBar,
+                  {
                     height: isRecording ? (v * 30) + 4 : 4,
                     opacity: isRecording ? 0.3 + (v * 0.7) : 0.3
                   }
-                ]} 
-               />
-             ))}
+                ]}
+              />
+            ))}
           </View>
           <Text style={styles.footerHint}>POWERED BY ANTHROPIC & WHISPER</Text>
         </View>

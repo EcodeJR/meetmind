@@ -74,9 +74,9 @@ export default function SettingsScreen() {
       'This will permanently delete your identity, all intelligence reports, and voice signatures. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete Everything', 
-          style: 'destructive', 
+        {
+          text: 'Delete Everything',
+          style: 'destructive',
           onPress: async () => {
             try {
               setLoading(true);
@@ -87,7 +87,7 @@ export default function SettingsScreen() {
             } finally {
               setLoading(false);
             }
-          } 
+          }
         }
       ]
     );
@@ -122,12 +122,24 @@ export default function SettingsScreen() {
               <View style={styles.userInfo}>
                 <Text style={styles.userName}>{user?.fullName || 'Professional User'}</Text>
                 <Text style={styles.userEmail}>{user?.primaryEmailAddress?.emailAddress || ''}</Text>
-                <TouchableOpacity onPress={handleUpdateAvatar}>
+
+                <View style={styles.badgesRow}>
+                  <View style={[styles.planBadge, userData?.plan === 'free' && styles.freeBadge]}>
+                    <Text style={styles.planBadgeText}>{(userData?.plan || 'pro').toUpperCase()}</Text>
+                  </View>
+                  {userData?.plan === 'free' && (
+                    <TouchableOpacity
+                      style={styles.upgradeButton}
+                      onPress={() => router.push('/settings/upgrade')}
+                    >
+                      <Text style={styles.upgradeButtonText}>Upgrade</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <TouchableOpacity onPress={handleUpdateAvatar} style={styles.changePhotoBtn}>
                   <Text style={styles.changePhotoText}>Change photo</Text>
                 </TouchableOpacity>
-              </View>
-              <View style={[styles.planBadge, userData?.plan === 'free' && styles.freeBadge]}>
-                <Text style={styles.planBadgeText}>{(userData?.plan || 'pro').toUpperCase()}</Text>
               </View>
             </View>
 
@@ -148,8 +160,8 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>PREFERENCES</Text>
           <View style={styles.menuCard}>
-            <TouchableOpacity 
-              style={styles.menuItem} 
+            <TouchableOpacity
+              style={styles.menuItem}
               onPress={() => router.push('/settings/notifications')}
             >
               <View style={styles.menuIconContainer}>
@@ -161,7 +173,7 @@ export default function SettingsScreen() {
 
             <View style={styles.menuSeparator} />
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.menuItem}
               onPress={() => router.push('/settings/alerts')}
             >
@@ -171,10 +183,10 @@ export default function SettingsScreen() {
               <Text style={styles.menuItemText}>Strategic Alerts</Text>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
             </TouchableOpacity>
-            
+
             <View style={styles.menuSeparator} />
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.menuItem}
               onPress={() => router.push('/settings/linguistics')}
             >
@@ -187,7 +199,7 @@ export default function SettingsScreen() {
 
             <View style={styles.menuSeparator} />
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.menuItem}
               onPress={() => router.push('/settings/storage')}
             >
@@ -220,9 +232,9 @@ export default function SettingsScreen() {
             <Text style={styles.deleteAccountText}>Dissolve Account</Text>
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.footer}>
-          <Text style={styles.footerText}>MeetMind v1.0.0 — Established 2026</Text>
+          <Text style={styles.footerText}>Memovoice v1.0.0 — Established 2026</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -279,21 +291,21 @@ const styles = StyleSheet.create({
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.md,
+    gap: theme.spacing.lg,
   },
   avatarContainer: {
     position: 'relative',
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: theme.colors.surfaceContainer,
   },
   avatarPlaceholder: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -301,39 +313,41 @@ const styles = StyleSheet.create({
   avatarText: {
     color: theme.colors.onPrimary,
     fontFamily: 'SpaceGrotesk-SemiBold',
-    fontSize: 24,
+    fontSize: 32,
   },
   editBadge: {
     position: 'absolute',
     bottom: 0,
     right: 0,
     backgroundColor: theme.colors.primary,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: theme.colors.surfaceContainerLowest,
   },
-  changePhotoText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 12,
-    color: theme.colors.primary,
-    marginTop: 2,
-  },
   userInfo: {
     flex: 1,
+    gap: 2,
   },
   userName: {
     fontFamily: 'Manrope-Bold',
-    fontSize: 18,
+    fontSize: 20,
     color: theme.colors.primary,
   },
   userEmail: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
     color: theme.colors.onSurfaceVariant,
+    marginBottom: 4,
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    marginBottom: 6,
   },
   planBadge: {
     backgroundColor: theme.colors.accent,
@@ -348,6 +362,25 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceGrotesk-SemiBold',
     fontSize: 10,
     color: theme.colors.onSecondary,
+  },
+  upgradeButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  upgradeButtonText: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 10,
+    color: theme.colors.onPrimary,
+  },
+  changePhotoBtn: {
+    marginTop: 2,
+  },
+  changePhotoText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: theme.colors.primary,
   },
   statsRow: {
     flexDirection: 'row',

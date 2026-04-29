@@ -93,9 +93,9 @@ export default function HistoryScreen() {
             <Text style={styles.subtitle}>Institutional memory.</Text>
           </View>
           <View style={styles.brandContainer}>
-            <Image 
-              source={require('../../assets/logo.jpeg')} 
-              style={styles.logo} 
+            <Image
+              source={require('../../assets/logo.jpeg')}
+              style={styles.logo}
               resizeMode="contain"
             />
           </View>
@@ -131,10 +131,10 @@ export default function HistoryScreen() {
           contentContainerStyle={meetings.length === 0 ? styles.emptyContainer : styles.list}
           ListEmptyComponent={
             <View style={styles.emptyContent}>
-              <Ionicons 
-                name={searchQuery ? "search-outline" : "document-text-outline"} 
-                size={48} 
-                color={theme.colors.outlineVariant} 
+              <Ionicons
+                name={searchQuery ? "search-outline" : "document-text-outline"}
+                size={48}
+                color={theme.colors.outlineVariant}
               />
               <Text style={styles.emptyText}>
                 {searchQuery ? `No results for "${searchQuery}"` : "No sessions recorded yet."}
@@ -142,7 +142,7 @@ export default function HistoryScreen() {
             </View>
           }
           renderItem={({ item }) => (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.card}
               onPress={() => router.push(`/meeting/${item._id}`)}
               activeOpacity={0.7}
@@ -153,9 +153,9 @@ export default function HistoryScreen() {
                   <Text style={styles.durationText}>{formatDuration(item.durationSeconds)}</Text>
                 </View>
               </View>
-              
+
               <Text style={styles.cardTitle} numberOfLines={2}>{item.title || 'Untitled Meeting'}</Text>
-              
+
               {item.summary ? (
                 <Text style={styles.cardSummary} numberOfLines={2}>
                   {item.summary}
@@ -165,17 +165,17 @@ export default function HistoryScreen() {
                   Analysis in progress...
                 </Text>
               )}
-              
+
               <View style={styles.cardFooter}>
                 <View style={styles.tagsContainer}>
-                   <View style={styles.tag}>
-                     <Text style={styles.tagText}>INTELLIGENCE</Text>
-                   </View>
+                  <View style={styles.tag}>
+                    <Text style={styles.tagText}>INTELLIGENCE</Text>
+                  </View>
                 </View>
                 {isSearching && (
-                   <View style={styles.matchingBadge}>
-                     <Text style={styles.matchingText}>MATCH FOUND</Text>
-                   </View>
+                  <View style={styles.matchingBadge}>
+                    <Text style={styles.matchingText}>MATCH FOUND</Text>
+                  </View>
                 )}
                 <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
               </View>
