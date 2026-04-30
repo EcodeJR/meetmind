@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mic, Download, ArrowRight, Play } from 'lucide-react';
+import { Download } from 'lucide-react';
 
 const Hero = () => {
   const [email, setEmail] = useState('');
@@ -69,7 +69,7 @@ const Hero = () => {
                       animate={{ opacity: 1, y: 0 }}
                       className="absolute -bottom-8 left-0 text-sm font-medium text-green-600"
                     >
-                      You're on the list! 🎉
+                      You&apos;re on the list! 🎉
                     </motion.div>
                   )}
                 </div>

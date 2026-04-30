@@ -3,7 +3,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { 
-  Zap, 
   Target, 
   MessageSquare, 
   ShieldCheck, 
@@ -11,7 +10,6 @@ import {
   Sparkles,
   AlertCircle,
   FileText,
-  Users,
   Mic
 } from 'lucide-react';
 
@@ -36,7 +34,7 @@ export const Problem = () => (
   <section className="py-24 bg-gray-50/50">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="text-center mb-16">
-        <h2 className="text-3xl lg:text-4xl font-bold text-primary mb-4 tracking-tight">Manual notes don't cut it anymore</h2>
+        <h2 className="text-3xl lg:text-4xl font-bold text-primary mb-4 tracking-tight">Manual notes don&apos;t cut it anymore</h2>
         <p className="text-gray-500 max-w-2xl mx-auto">Focus on the conversation, not the transcription. Memovoice bridges the memory gap in professional settings.</p>
       </div>
 

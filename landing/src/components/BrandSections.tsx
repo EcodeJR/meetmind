@@ -9,7 +9,6 @@ import {
   Check, 
   Plus, 
   Minus, 
-  ChevronDown,
   Mail,
   Linkedin,
   Twitter,
@@ -159,7 +158,7 @@ export const Testimonials = () => (
           {
             name: "Elena Rodriguez",
             role: "Creative Director",
-            quote: "Action item extraction is a lifesaver. My team knows exactly what to do the moment the meeting ends. It's seamless."
+            quote: "Action item extraction is a lifesaver. My team knows exactly what to do the moment the meeting ends. It&apos;s seamless."
           }
         ].map((t, i) => (
           <div key={i} className="p-8 rounded-3xl bg-white border border-gray-100 shadow-sm">
@@ -170,7 +169,7 @@ export const Testimonials = () => (
                 <p className="text-xs text-gray-500">{t.role}</p>
               </div>
             </div>
-            <p className="text-gray-600 italic leading-relaxed">"{t.quote}"</p>
+            <p className="text-gray-600 italic leading-relaxed">&quot;{t.quote}&quot;</p>
           </div>
         ))}
       </div>

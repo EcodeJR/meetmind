@@ -3,7 +3,6 @@
 import React from 'react';
 import Link from 'next/link';
 import { Mic } from 'lucide-react';
-import { motion } from 'framer-motion';
 
 const Navbar = () => {
   return (

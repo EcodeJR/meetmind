@@ -19,7 +19,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-bold text-primary mb-4">1. Commitment to Privacy</h2>
             <p>
-              At Memovoice, we understand that professional meetings contain highly sensitive institutional knowledge. Our architecture is designed with a "Privacy-First" philosophy, ensuring that your audio data remains under your control at all times.
+              At Memovoice, we understand that professional meetings contain highly sensitive institutional knowledge. Our architecture is designed with a &quot;Privacy-First&quot; philosophy, ensuring that your audio data remains under your control at all times.
             </p>
           </section>
 
@@ -39,7 +39,7 @@ export default function PrivacyPage() {
             <p>Your data is stored using industry-standard encrypted cloud infrastructure:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>Database:</strong> Transactional data and summaries are stored in MongoDB Atlas with TLS 1.3 encryption.</li>
-              <li><strong>Audio/Images:</strong> Media assets are stored in Cloudinary's secure object storage with restricted access controls.</li>
+              <li><strong>Audio/Images:</strong> Media assets are stored in Cloudinary&apos;s secure object storage with restricted access controls.</li>
             </ul>
           </section>
 
@@ -60,7 +60,7 @@ export default function PrivacyPage() {
             <p>You maintain full sovereignty over your data:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>Access:</strong> You may request a copy of all data associated with your identity.</li>
-              <li><strong>Deletion:</strong> You can purge your account and all associated recordings at any time via the "Dissolve Account" feature in app settings.</li>
+              <li><strong>Deletion:</strong> You can purge your account and all associated recordings at any time via the &quot;Dissolve Account&quot; feature in app settings.</li>
               <li><strong>Portability:</strong> You can export your transcripts and summaries to external formats (PDF, Email) at any time.</li>
             </ul>
           </section>
