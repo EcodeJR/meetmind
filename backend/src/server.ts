@@ -30,6 +30,12 @@ REQUIRED_ENV.forEach(variable => {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Root Request Logger - Debug only
+app.use((req, _res, next) => {
+  logger.info({ method: req.method, url: req.url, ip: req.ip }, 'Incoming Request');
+  next();
+});
+
 app.set('trust proxy', 1);
 
 // Standard Health Check - Mounted before any limiters or parsers
@@ -64,13 +70,21 @@ app.use(errorHandling);
 const start = async () => {
   try {
     logger.info('Initializing Memovoice Services...');
-    await connectDB();
+    
+    // Bind to port immediately to satisfy platform health checks
     const port = Number(PORT);
-    app.listen(port, () => {
-      logger.info(`Server fully initialized and listening on port ${port}`);
+    app.listen(port, '0.0.0.0', async () => {
+      logger.info(`Server listening on 0.0.0.0:${port}`);
+      
+      try {
+        await connectDB();
+        logger.info('Institutional Database Connected');
+      } catch (dbErr) {
+        logger.error({ error: dbErr }, 'Database Connection Deferred Failure');
+      }
     });
   } catch (error) {
-    logger.error({ error }, 'Failed to start server');
+    logger.error({ error }, 'Critical Startup Failure');
     process.exit(1);
   }
 };
