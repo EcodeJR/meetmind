@@ -289,10 +289,11 @@ export const Footer = () => (
         <div>
           <h4 className="font-bold text-primary mb-6">Product</h4>
           <ul className="space-y-4 text-gray-500 text-sm">
-            <li><Link href="#features" className="hover:text-accent transition-colors">Features</Link></li>
-            <li><Link href="#pricing" className="hover:text-accent transition-colors">Pricing</Link></li>
+            <li><Link href="/#features" className="hover:text-accent transition-colors">Features</Link></li>
+            <li><Link href="/pricing" className="hover:text-accent transition-colors">Pricing</Link></li>
             <li><Link href="/privacy" className="hover:text-accent transition-colors">Privacy Policy</Link></li>
             <li><Link href="/terms" className="hover:text-accent transition-colors">Terms of Service</Link></li>
+            <li><Link href="/refunds" className="hover:text-accent transition-colors">Refund Policy</Link></li>
           </ul>
         </div>
 

@@ -15,10 +15,10 @@ const Navbar = () => {
           </Link>
           
           <div className="hidden md:flex items-center gap-8">
-            <Link href="#features" className="text-sm font-medium text-gray-600 hover:text-accent transition-colors">Features</Link>
-            <Link href="#how-it-works" className="text-sm font-medium text-gray-600 hover:text-accent transition-colors">How it Works</Link>
-            <Link href="#pricing" className="text-sm font-medium text-gray-600 hover:text-accent transition-colors">Pricing</Link>
-            <Link href="#download" className="text-sm font-medium text-gray-600 hover:text-accent transition-colors">Download</Link>
+            <Link href="/#features" className="text-sm font-medium text-gray-600 hover:text-accent transition-colors">Features</Link>
+            <Link href="/#how-it-works" className="text-sm font-medium text-gray-600 hover:text-accent transition-colors">How it Works</Link>
+            <Link href="/pricing" className="text-sm font-medium text-gray-600 hover:text-accent transition-colors">Pricing</Link>
+            <Link href="/#download" className="text-sm font-medium text-gray-600 hover:text-accent transition-colors">Download</Link>
           </div>
 
           <div className="flex items-center gap-4">
