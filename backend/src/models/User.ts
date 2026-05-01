@@ -3,7 +3,18 @@ import { Schema, model, Document } from 'mongoose';
 export interface IUser extends Document {
   clerkId: string;
   email: string;
-  plan: 'free' | 'pro';
+  country?: string;
+  subscription: {
+    plan: 'free' | 'pro';
+    status: 'active' | 'inactive' | 'cancelled' | 'past_due';
+    provider: 'flutterwave' | 'paddle' | null;
+    flutterwaveCustomerId: string | null;
+    flutterwaveSubscriptionId: string | null;
+    paddleCustomerId: string | null;
+    paddleSubscriptionId: string | null;
+    currentPeriodEnd: Date | null;
+    cancelAtPeriodEnd: boolean;
+  };
   meetingCount: number;
   storageUsedMB: number;
   onboardingCompleted: boolean;
@@ -34,10 +45,32 @@ const userSchema = new Schema<IUser>(
       type: String,
       required: true,
     },
-    plan: {
+    country: {
       type: String,
-      enum: ['free', 'pro'],
-      default: 'free',
+      default: null,
+    },
+    subscription: {
+      plan: { 
+        type: String, 
+        enum: ['free', 'pro'], 
+        default: 'free' 
+      },
+      status: { 
+        type: String, 
+        enum: ['active', 'inactive', 'cancelled', 'past_due'], 
+        default: 'inactive' 
+      },
+      provider: { 
+        type: String, 
+        enum: ['flutterwave', 'paddle', null], 
+        default: null 
+      },
+      flutterwaveCustomerId: { type: String, default: null },
+      flutterwaveSubscriptionId: { type: String, default: null },
+      paddleCustomerId: { type: String, default: null },
+      paddleSubscriptionId: { type: String, default: null },
+      currentPeriodEnd: { type: Date, default: null },
+      cancelAtPeriodEnd: { type: Boolean, default: false }
     },
     meetingCount: {
       type: Number,

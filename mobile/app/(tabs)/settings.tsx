@@ -10,7 +10,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'react-native';
 
 type UserData = {
-  plan: string;
+  subscription: {
+    plan: string;
+    status: string;
+  };
   meetingCount: number;
   storageUsedMB: number;
 };
@@ -125,10 +128,10 @@ export default function SettingsScreen() {
                 <Text style={styles.userEmail}>{user?.primaryEmailAddress?.emailAddress || ''}</Text>
 
                 <View style={styles.badgesRow}>
-                  <View style={[styles.planBadge, userData?.plan === 'free' && styles.freeBadge]}>
-                    <Text style={styles.planBadgeText}>{(userData?.plan || 'pro').toUpperCase()}</Text>
+                  <View style={[styles.planBadge, userData?.subscription?.plan === 'free' && styles.freeBadge]}>
+                    <Text style={styles.planBadgeText}>{(userData?.subscription?.plan || 'pro').toUpperCase()}</Text>
                   </View>
-                  {userData?.plan === 'free' && (
+                  {userData?.subscription?.plan === 'free' && (
                     <TouchableOpacity
                       style={styles.upgradeButton}
                       onPress={() => router.push('/settings/upgrade')}

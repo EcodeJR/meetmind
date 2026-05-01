@@ -5,6 +5,7 @@ import { User } from '../models/User';
 import { Meeting } from '../models/Meeting';
 import { deleteAudioFromCloudinary } from '../services/cloudinaryService';
 import { logger } from '../utils/logger';
+import axios from 'axios';
 
 export const syncClerkUser = async (req: AuthRequest, res: Response) => {
   try {
@@ -18,10 +19,28 @@ export const syncClerkUser = async (req: AuthRequest, res: Response) => {
     let user = await User.findOne({ clerkId });
 
     if (!user) {
+      let country = null;
+      try {
+        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        if (ip && ip !== '::1' && ip !== '127.0.0.1') {
+          const ipStr = Array.isArray(ip) ? ip[0] : ip;
+          const geoRes = await axios.get(`http://ip-api.com/json/${ipStr.split(',')[0]}`);
+          if (geoRes.data && geoRes.data.countryCode) {
+            country = geoRes.data.countryCode;
+          }
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Failed to detect country via IP');
+      }
+
       user = new User({
         clerkId,
         email,
-        plan: 'free',
+        country,
+        subscription: {
+          plan: 'free',
+          status: 'inactive'
+        }
       });
       await user.save();
       logger.info({ clerkId }, 'New user created');

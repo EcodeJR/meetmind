@@ -33,7 +33,10 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
       user = new User({
         clerkId,
         email,
-        plan: 'free',
+        subscription: {
+          plan: 'free',
+          status: 'inactive'
+        },
         meetingCount: 0,
       });
       await user.save();

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useStripe } from '@stripe/stripe-react-native';
+import * as WebBrowser from 'expo-web-browser';
+import { paymentService } from '@/services/paymentService';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,53 +24,82 @@ const FEATURES = [
   'Custom Linguistic Lexicons',
 ];
 
-export default function UpgradeScreen() {
+export default function SubscriptionScreen() {
   const [loading, setLoading] = useState(false);
+  const [fetchingStatus, setFetchingStatus] = useState(true);
+  const [subscription, setSubscription] = useState<any>(null);
+  const [country, setCountry] = useState<string | null>(null);
   const router = useRouter();
-  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+
+  useEffect(() => {
+    loadUserStatus();
+  }, []);
+
+  const loadUserStatus = async () => {
+    try {
+      const response = await apiClient.get('/users/me');
+      const user = response.data.data?.user || response.data.user;
+      setSubscription(user.subscription);
+      setCountry(user.country);
+    } catch (error) {
+      console.error('Failed to load user status', error);
+    } finally {
+      setFetchingStatus(false);
+    }
+  };
 
   const handleUpgrade = async () => {
     try {
       setLoading(true);
+      const { paymentUrl } = await paymentService.initializePayment();
       
-      // 1. Create Payment Intent on backend
-      const response = await apiClient.post('/payments/create-intent');
-      const { clientSecret } = response.data.data;
-
-      // 2. Initialize Payment Sheet
-      const { error: initError } = await initPaymentSheet({
-        paymentIntentClientSecret: clientSecret,
-        merchantDisplayName: 'Memovoice AI',
-        appearance: {
-          colors: {
-            primary: theme.colors.primary,
-          },
-        },
-      });
-
-      if (initError) {
-        Alert.alert('Initialization failed', initError.message);
-        return;
-      }
-
-      // 3. Present Payment Sheet
-      const { error: presentError } = await presentPaymentSheet();
-
-      if (presentError) {
-        if (presentError.code !== 'Canceled') {
-          Alert.alert('Payment failed', presentError.message);
-        }
-      } else {
-        Alert.alert('Success', 'Welcome to Memovoice Pro!');
-        router.replace('/(tabs)/settings');
+      if (paymentUrl) {
+        await WebBrowser.openBrowserAsync(paymentUrl);
+        // User closed browser. Re-fetch status to see if they upgraded successfully.
+        await loadUserStatus();
       }
     } catch (error: any) {
       console.error('Upgrade error:', error);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to initialize upgrade flow.');
+      Alert.alert('Error', error.response?.data?.message || 'Failed to initialize checkout.');
     } finally {
       setLoading(false);
     }
   };
+
+  const handleCancel = () => {
+    Alert.alert('Cancel Subscription', 'Are you sure you want to cancel your Pro plan? You will retain access until the end of your billing period.', [
+      { text: 'Keep Plan', style: 'cancel' },
+      {
+        text: 'Yes, Cancel',
+        style: 'destructive',
+        onPress: async () => {
+          setLoading(true);
+          try {
+            await paymentService.cancelSubscription();
+            Alert.alert('Cancelled', 'Your subscription has been cancelled and will not auto-renew.');
+            await loadUserStatus();
+          } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.message || 'Failed to cancel subscription.');
+          } finally {
+            setLoading(false);
+          }
+        }
+      }
+    ]);
+  };
+
+  const isPro = subscription?.plan === 'pro' && subscription?.status === 'active';
+  const isNigerian = country === 'NG';
+  const currencySymbol = isNigerian ? '₦' : '$';
+  const priceAmount = isNigerian ? '9,000' : '12';
+
+  if (fetchingStatus) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -78,16 +108,18 @@ export default function UpgradeScreen() {
           <Ionicons name="chevron-back" size={24} color={theme.colors.primary} />
           <Text style={styles.backText}>Settings</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Unlock Pro</Text>
-        <Text style={styles.subtitle}>Scale your institutional intelligence.</Text>
+        <Text style={styles.title}>{isPro ? 'Pro Subscription' : 'Unlock Pro'}</Text>
+        <Text style={styles.subtitle}>
+          {isPro ? 'You are currently on the Pro plan.' : 'Scale your institutional intelligence.'}
+        </Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.pricingCard}>
           <Text style={styles.planName}>Monthly Subscription</Text>
           <View style={styles.priceRow}>
-            <Text style={styles.currency}>$</Text>
-            <Text style={styles.price}>12</Text>
+            <Text style={styles.currency}>{currencySymbol}</Text>
+            <Text style={styles.price}>{priceAmount}</Text>
             <Text style={styles.billing}>/ month</Text>
           </View>
           
@@ -100,21 +132,37 @@ export default function UpgradeScreen() {
             ))}
           </View>
 
-          <TouchableOpacity 
-            style={[styles.button, loading && styles.disabledButton]} 
-            onPress={handleUpgrade}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={theme.colors.onPrimary} />
-            ) : (
-              <Text style={styles.buttonText}>Activate Premium</Text>
-            )}
-          </TouchableOpacity>
+          {isPro ? (
+            <TouchableOpacity 
+              style={[styles.button, styles.cancelButton, loading && styles.disabledButton]} 
+              onPress={handleCancel}
+              disabled={loading || subscription?.cancelAtPeriodEnd}
+            >
+              {loading ? (
+                <ActivityIndicator color={theme.colors.error} />
+              ) : (
+                <Text style={styles.cancelButtonText}>
+                  {subscription?.cancelAtPeriodEnd ? 'Cancels at period end' : 'Cancel Subscription'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={[styles.button, loading && styles.disabledButton]} 
+              onPress={handleUpgrade}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={theme.colors.onPrimary} />
+              ) : (
+                <Text style={styles.buttonText}>Activate Premium</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.secureText}>
-          <Ionicons name="lock-closed-outline" size={12} /> Secure transaction via Stripe
+          <Ionicons name="lock-closed-outline" size={12} /> Secure transaction via {isNigerian ? 'Flutterwave' : 'Paddle'}
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -219,6 +267,16 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: theme.colors.error,
+  },
+  cancelButtonText: {
+    fontFamily: 'Manrope-Bold',
+    fontSize: 16,
+    color: theme.colors.error,
   },
   disabledButton: {
     opacity: 0.7,

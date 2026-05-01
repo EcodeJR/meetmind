@@ -10,6 +10,8 @@ import healthRoutes from './routes/healthRoutes';
 import userRoutes from './routes/userRoutes';
 import meetingRoutes from './routes/meetingRoutes';
 import paymentRoutes from './routes/paymentRoutes';
+import { flutterwaveWebhookHandler } from './webhooks/flutterwaveWebhook';
+import { paddleWebhookHandler } from './webhooks/paddleWebhook';
 
 const REQUIRED_ENV = [
   'MONGODB_URI',
@@ -52,8 +54,17 @@ app.use(cors({
 // Apply rate limiter to API routes only
 app.use('/api', globalRateLimiter);
 
-// Stripe Webhook needs raw body - mounting before generic parsers
-app.use('/api/payments', paymentRoutes);
+// Webhooks need raw body - mounting before generic parsers
+app.post(
+  '/webhooks/flutterwave',
+  express.raw({ type: 'application/json' }),
+  flutterwaveWebhookHandler
+);
+app.post(
+  '/webhooks/paddle',
+  express.raw({ type: 'application/json' }),
+  paddleWebhookHandler
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -62,6 +73,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', healthRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/meetings', meetingRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Error handling
 app.use(errorHandling);
