@@ -5,18 +5,24 @@ import {
   Text,
   TouchableOpacity,
   Switch,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function StrategicAlertsScreen() {
-  const [loading, setLoading] = useState(false);
+  const [preferences, setPreferences] = useState({
+    decisions: true,
+    actions: true,
+    risks: true,
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const router = useRouter();
 
   const ALERT_TYPES = [
@@ -24,6 +30,48 @@ export default function StrategicAlertsScreen() {
     { id: 'actions', label: 'Action Requirements', description: 'Notifications for items assigned to you during sessions.' },
     { id: 'risks', label: 'Risk Intelligence', description: 'AI detection of potential project blockers or risks.' },
   ];
+
+  useEffect(() => {
+    fetchPreferences();
+  }, []);
+
+  const fetchPreferences = async () => {
+    try {
+      const response = await apiClient.get('/users/me');
+      const user = response.data.data?.user || response.data.user;
+      if (user.preferences?.strategicAlerts) {
+        setPreferences(user.preferences.strategicAlerts);
+      }
+    } catch (error) {
+      console.error('Error fetching preferences:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleSwitch = async (key: string, value: boolean) => {
+    const newPrefs = { ...preferences, [key]: value };
+    setPreferences(newPrefs);
+    setSaving(true);
+    try {
+      await apiClient.patch('/users/preferences', {
+        preferences: { strategicAlerts: newPrefs }
+      });
+    } catch (error) {
+      Alert.alert('Update Failed', 'Could not sync settings.');
+      setPreferences(preferences); // revert
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -48,7 +96,9 @@ export default function StrategicAlertsScreen() {
                 <Switch
                   trackColor={{ false: theme.colors.outlineVariant, true: theme.colors.accent }}
                   thumbColor={theme.colors.onPrimary}
-                  value={true}
+                  value={preferences[alert.id as keyof typeof preferences]}
+                  onValueChange={(value) => toggleSwitch(alert.id, value)}
+                  disabled={saving}
                 />
               </View>
               {index < ALERT_TYPES.length - 1 && <View style={styles.separator} />}
@@ -70,6 +120,12 @@ export default function StrategicAlertsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: theme.colors.background,
   },
   header: {

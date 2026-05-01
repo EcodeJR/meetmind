@@ -59,9 +59,21 @@ export const updateUserPreferences = async (req: AuthRequest, res: Response) => 
       return sendError(res, 'MISSING_DATA', 'Preferences object is required');
     }
 
+    // Convert nested preferences object into dot notation for MongoDB $set
+    const updateQuery: any = {};
+    for (const key in preferences) {
+      if (typeof preferences[key] === 'object' && preferences[key] !== null) {
+        for (const nestedKey in preferences[key]) {
+          updateQuery[`preferences.${key}.${nestedKey}`] = preferences[key][nestedKey];
+        }
+      } else {
+        updateQuery[`preferences.${key}`] = preferences[key];
+      }
+    }
+
     const user = await User.findOneAndUpdate(
       { clerkId },
-      { $set: { preferences } },
+      { $set: updateQuery },
       { new: true }
     );
 

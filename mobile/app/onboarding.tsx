@@ -4,10 +4,10 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  SafeAreaView,
   Image,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';

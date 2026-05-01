@@ -4,11 +4,11 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useStripe } from '@stripe/stripe-react-native';
 import apiClient from '@/services/api';
@@ -84,11 +84,11 @@ export default function UpgradeScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.pricingCard}>
-          <Text style={styles.planName}>Lifetime Access</Text>
+          <Text style={styles.planName}>Monthly Subscription</Text>
           <View style={styles.priceRow}>
             <Text style={styles.currency}>$</Text>
-            <Text style={styles.price}>49</Text>
-            <Text style={styles.billing}>/ one-time</Text>
+            <Text style={styles.price}>12</Text>
+            <Text style={styles.billing}>/ month</Text>
           </View>
           
           <View style={styles.featuresList}>

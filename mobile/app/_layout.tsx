@@ -17,6 +17,8 @@ import {
   SpaceGrotesk_600SemiBold 
 } from '@expo-google-fonts/space-grotesk';
 import * as SplashScreen from 'expo-splash-screen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -133,7 +135,10 @@ export default function RootLayout() {
       tokenCache={tokenCache}
     >
       <QueryClientProvider client={queryClient}>
-        <RootLayoutNav />
+        <SafeAreaProvider>
+          <StatusBar style="dark" />
+          <RootLayoutNav />
+        </SafeAreaProvider>
       </QueryClientProvider>
     </ClerkProvider>
   );

@@ -13,8 +13,8 @@ export default function TabsLayout() {
           backgroundColor: theme.colors.surfaceContainerLowest,
           borderTopColor: theme.colors.outlineVariant,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          height: 70,
+          paddingBottom: 16,
           paddingTop: 8,
         },
         tabBarLabelStyle: {

@@ -7,9 +7,9 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  SafeAreaView,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUser } from '@clerk/clerk-expo';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.xl,
+    paddingBottom: theme.spacing.xl,
     justifyContent: 'space-between',
   },
   header: {

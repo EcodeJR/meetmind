@@ -5,10 +5,11 @@ import {
   Text,
   TouchableOpacity,
   Switch,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
@@ -16,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function NotificationSettingsScreen() {
   const [enabled, setEnabled] = useState(true);
+  const [pushEnabled, setPushEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const router = useRouter();
@@ -29,6 +31,7 @@ export default function NotificationSettingsScreen() {
       const response = await apiClient.get('/users/me');
       const user = response.data.data?.user || response.data.user;
       setEnabled(user.preferences?.notificationsEnabled ?? true);
+      setPushEnabled(user.preferences?.pushNotificationsEnabled ?? true);
     } catch (error) {
       console.error('Error fetching preferences:', error);
     } finally {
@@ -36,16 +39,19 @@ export default function NotificationSettingsScreen() {
     }
   };
 
-  const toggleSwitch = async (value: boolean) => {
-    setEnabled(value);
+  const toggleSwitch = async (key: 'notificationsEnabled' | 'pushNotificationsEnabled', value: boolean) => {
+    if (key === 'notificationsEnabled') setEnabled(value);
+    if (key === 'pushNotificationsEnabled') setPushEnabled(value);
+    
     setSaving(true);
     try {
       await apiClient.patch('/users/preferences', {
-        preferences: { notificationsEnabled: value }
+        preferences: { [key]: value }
       });
     } catch (error) {
       Alert.alert('Update Failed', 'Could not sync settings.');
-      setEnabled(!value);
+      if (key === 'notificationsEnabled') setEnabled(!value);
+      if (key === 'pushNotificationsEnabled') setPushEnabled(!value);
     } finally {
       setSaving(false);
     }
@@ -79,7 +85,7 @@ export default function NotificationSettingsScreen() {
             <Switch
               trackColor={{ false: theme.colors.outlineVariant, true: theme.colors.accent }}
               thumbColor={theme.colors.onPrimary}
-              onValueChange={toggleSwitch}
+              onValueChange={(value) => toggleSwitch('notificationsEnabled', value)}
               value={enabled}
               disabled={saving}
             />
@@ -87,13 +93,19 @@ export default function NotificationSettingsScreen() {
           
           <View style={styles.separator} />
 
-          <TouchableOpacity style={styles.row}>
+          <View style={styles.row}>
             <View style={styles.info}>
-              <Text style={styles.label}>Strategic Alerts</Text>
-              <Text style={styles.description}>Get notified when high-priority action items are identified by the engine.</Text>
+              <Text style={styles.label}>Push Notifications</Text>
+              <Text style={styles.description}>Receive instant mobile alerts when your session summaries are ready.</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
-          </TouchableOpacity>
+            <Switch
+              trackColor={{ false: theme.colors.outlineVariant, true: theme.colors.accent }}
+              thumbColor={theme.colors.onPrimary}
+              onValueChange={(value) => toggleSwitch('pushNotificationsEnabled', value)}
+              value={pushEnabled}
+              disabled={saving}
+            />
+          </View>
         </View>
 
         <View style={styles.hintContainer}>

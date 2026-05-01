@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ScrollView, ActivityIndicator } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View, ScrollView, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useRouter, useFocusEffect } from 'expo-router';
 import apiClient from '@/services/api';

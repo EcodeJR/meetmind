@@ -16,7 +16,7 @@ export const uploadAudioToCloudinary = async (filePath: string): Promise<Cloudin
   try {
     const result = await cloudinary.uploader.upload(filePath, {
       resource_type: 'auto',
-      folder: 'meetmind/audio',
+      folder: 'memovoice/audio',
     });
 
     logger.info({ publicId: result.public_id }, 'Audio uploaded to Cloudinary');

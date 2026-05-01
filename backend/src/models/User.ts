@@ -10,8 +10,14 @@ export interface IUser extends Document {
   profileImage?: string;
   preferences: {
     notificationsEnabled: boolean;
+    pushNotificationsEnabled: boolean;
     language: string;
     autoDeleteDays: number;
+    strategicAlerts: {
+      decisions: boolean;
+      actions: boolean;
+      risks: boolean;
+    };
   };
   createdAt: Date;
 }
@@ -53,6 +59,10 @@ const userSchema = new Schema<IUser>(
         type: Boolean,
         default: true,
       },
+      pushNotificationsEnabled: {
+        type: Boolean,
+        default: true,
+      },
       language: {
         type: String,
         default: 'en',
@@ -60,6 +70,11 @@ const userSchema = new Schema<IUser>(
       autoDeleteDays: {
         type: Number,
         default: 0, // 0 means disabled
+      },
+      strategicAlerts: {
+        decisions: { type: Boolean, default: true },
+        actions: { type: Boolean, default: true },
+        risks: { type: Boolean, default: true },
       },
     },
   },
