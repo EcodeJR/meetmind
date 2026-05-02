@@ -5,10 +5,10 @@
     "scheme": "memovoice",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.jpeg",
+    "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/logo.jpeg",
+      "image": "./assets/logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -16,12 +16,11 @@
       "**/*"
     ],
     "ios": {
-      "supportsTabletMode": true,
       "bundleIdentifier": "com.memovoice.app"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.jpeg",
+        "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.memovoice.app",
@@ -44,7 +43,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/logo.jpeg"
+      "favicon": "./assets/logo.png"
     },
     "plugins": [
       "expo-router",
@@ -53,7 +52,9 @@
         {
           "microphonePermission": "Allow Memovoice to access your microphone for AI session recording."
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-font"
     ],
     "extra": {
       "eas": {

@@ -102,124 +102,124 @@ export default function SignUpScreen() {
     }
   };
 
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <Image
-              source={require('../../assets/logo.jpeg')}
-              style={styles.logo}
-              resizeMode="contain"
+  <SafeAreaView style={styles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.title}>Memovoice</Text>
+          <Text style={styles.subtitle}>Begin your institutional intelligence journey.</Text>
+        </View>
+
+        {errors.general && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{errors.general}</Text>
+          </View>
+        )}
+
+        <View style={styles.form}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>FIRST NAME</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Your name"
+              placeholderTextColor={theme.colors.outline}
+              value={firstName}
+              onChangeText={setFirstName}
+              editable={!loading && !oauthLoading}
+              autoCapitalize="words"
             />
-            <Text style={styles.title}>Memovoice</Text>
-            <Text style={styles.subtitle}>Begin your institutional intelligence journey.</Text>
           </View>
 
-          {errors.general && (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{errors.general}</Text>
-            </View>
-          )}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>EMAIL ADDRESS</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="name@company.com"
+              placeholderTextColor={theme.colors.outline}
+              value={email}
+              onChangeText={setEmail}
+              editable={!loading && !oauthLoading}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
 
-          <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>FIRST NAME</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Your name"
-                placeholderTextColor={theme.colors.outline}
-                value={firstName}
-                onChangeText={setFirstName}
-                editable={!loading && !oauthLoading}
-                autoCapitalize="words"
-              />
-            </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>PASSWORD</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="••••••••"
+              placeholderTextColor={theme.colors.outline}
+              value={password}
+              onChangeText={setPassword}
+              editable={!loading && !oauthLoading}
+              secureTextEntry
+            />
+          </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>EMAIL ADDRESS</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="name@company.com"
-                placeholderTextColor={theme.colors.outline}
-                value={email}
-                onChangeText={setEmail}
-                editable={!loading && !oauthLoading}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>CONFIRM PASSWORD</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="••••••••"
+              placeholderTextColor={theme.colors.outline}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              editable={!loading && !oauthLoading}
+              secureTextEntry
+            />
+          </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>PASSWORD</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="••••••••"
-                placeholderTextColor={theme.colors.outline}
-                value={password}
-                onChangeText={setPassword}
-                editable={!loading && !oauthLoading}
-                secureTextEntry
-              />
-            </View>
+          <TouchableOpacity
+            style={[styles.button, (loading || oauthLoading) && styles.buttonDisabled]}
+            onPress={onSignUpPress}
+            disabled={loading || oauthLoading}
+          >
+            {loading ? (
+              <ActivityIndicator color={theme.colors.onPrimary} />
+            ) : (
+              <Text style={styles.buttonText}>Initialize Account</Text>
+            )}
+          </TouchableOpacity>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>CONFIRM PASSWORD</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="••••••••"
-                placeholderTextColor={theme.colors.outline}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                editable={!loading && !oauthLoading}
-                secureTextEntry
-              />
-            </View>
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR SIGN UP WITH</Text>
+            <View style={styles.dividerLine} />
+          </View>
 
-            <TouchableOpacity
-              style={[styles.button, (loading || oauthLoading) && styles.buttonDisabled]}
-              onPress={onSignUpPress}
-              disabled={loading || oauthLoading}
-            >
-              {loading ? (
-                <ActivityIndicator color={theme.colors.onPrimary} />
-              ) : (
-                <Text style={styles.buttonText}>Initialize Account</Text>
-              )}
+          <TouchableOpacity
+            style={[styles.googleButton, oauthLoading && styles.buttonDisabled]}
+            onPress={onGoogleSignUp}
+            disabled={oauthLoading || loading}
+          >
+            {oauthLoading ? (
+              <ActivityIndicator color={theme.colors.onSurface} />
+            ) : (
+              <Text style={styles.googleButtonText}>Sign up with Google</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Already have an account? </Text>
+          <Link href="/sign-in" asChild>
+            <TouchableOpacity disabled={loading || oauthLoading}>
+              <Text style={styles.linkText}>Log in</Text>
             </TouchableOpacity>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR SIGN UP WITH</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.googleButton, oauthLoading && styles.buttonDisabled]}
-              onPress={onGoogleSignUp}
-              disabled={oauthLoading || loading}
-            >
-              {oauthLoading ? (
-                <ActivityIndicator color={theme.colors.onSurface} />
-              ) : (
-                <Text style={styles.googleButtonText}>Sign up with Google</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <Link href="/sign-in" asChild>
-              <TouchableOpacity disabled={loading || oauthLoading}>
-                <Text style={styles.linkText}>Log in</Text>
-              </TouchableOpacity>
-            </Link>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          </Link>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  </SafeAreaView>
 }
 
 const styles = StyleSheet.create({
