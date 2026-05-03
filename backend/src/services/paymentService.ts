@@ -1,3 +1,4 @@
+/// <reference path="../types/flutterwave-node-v3.d.ts" />
 import Flutterwave from 'flutterwave-node-v3';
 import { Paddle, Environment } from '@paddle/paddle-node-sdk';
 import { logger } from '../utils/logger';
@@ -93,7 +94,7 @@ export const cancelFlutterwaveSubscription = async (subscriptionId: string) => {
  */
 export const initializePaddleCheckout = async (userId: string, email: string, priceId: string) => {
   try {
-    const transaction = await paddle.transactions.create({
+    const payload: any = {
       items: [
         { priceId, quantity: 1 }
       ],
@@ -103,7 +104,9 @@ export const initializePaddleCheckout = async (userId: string, email: string, pr
       customData: {
         userId
       }
-    });
+    };
+
+    const transaction = await paddle.transactions.create(payload);
 
     return { paymentUrl: transaction.checkout?.url };
   } catch (error) {

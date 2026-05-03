@@ -30,7 +30,7 @@ REQUIRED_ENV.forEach(variable => {
 });
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 
 // Root Request Logger - Debug only
 app.use((req, _res, next) => {
