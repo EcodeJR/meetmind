@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 import { authMiddleware } from '../middleware/auth';
 import { apiRateLimiter, uploadRateLimiter } from '../middleware/rateLimiter';
 import {
@@ -16,10 +17,18 @@ import {
 
 const router = Router();
 
+// Use absolute path for uploads directory
+const uploadsDir = path.join(process.cwd(), 'uploads');
+
+// Ensure uploads directory exists
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 // Configure multer for audio uploads
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, uploadsDir);
   },
   filename: (_req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);

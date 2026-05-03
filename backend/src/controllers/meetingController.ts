@@ -72,7 +72,8 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
 
 // Full audio processing endpoint
 export const processMeeting = async (req: AuthRequest, res: Response): Promise<void> => {
-  const filePath = req.file?.path;
+  let localPath = req.file?.path;
+  let cloudinaryPublicId: string | null = null;
   const clerkId = req.clerkId;
   
   try {
@@ -80,27 +81,76 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
 
     console.log(`[DEBUGGER] Starting processMeeting for user: ${clerkId}`);
     console.log(`[DEBUGGER] File received: ${req.file?.originalname} (${req.file?.size} bytes)`);
+    console.log(`[DEBUGGER] Local file path: ${localPath}`);
 
-    if (!filePath) {
+    if (!localPath) {
       console.log(`[DEBUGGER] ERROR: No audio file provided`);
       sendError(res, 'MISSING_FILE', 'Audio file is required');
       return;
+    }
+
+    // Verify file exists before uploading
+    if (!fs.existsSync(localPath)) {
+      console.log(`[DEBUGGER] ERROR: Uploaded file not found at path: ${localPath}`);
+      sendError(res, 'FILE_NOT_FOUND', 'Audio file was not properly saved. Please try again.');
+      return;
+    }
+
+    // PERMANENT FIX: Step 1 - Upload to Cloudinary IMMEDIATELY
+    console.log(`[DEBUGGER] PHASE 1: Uploading audio to Cloudinary immediately...`);
+    let uploadResult;
+    try {
+      uploadResult = await uploadAudioToCloudinary(localPath);
+      cloudinaryPublicId = uploadResult.publicId;
+      console.log(`[DEBUGGER] Cloudinary upload SUCCESS. URL: ${uploadResult.url}`);
+    } catch (uploadError) {
+      console.error(`[DEBUGGER] Cloudinary upload FAILED:`, uploadError);
+      if (localPath && fs.existsSync(localPath)) {
+        fs.unlinkSync(localPath);
+      }
+      sendError(res, 'UPLOAD_ERROR', 'Failed to upload audio file', 500);
+      return;
+    }
+
+    // PERMANENT FIX: Step 2 - Delete local file IMMEDIATELY after Cloudinary upload
+    console.log(`[DEBUGGER] PHASE 1b: Deleting local file immediately...`);
+    if (localPath && fs.existsSync(localPath)) {
+      try {
+        fs.unlinkSync(localPath);
+        console.log(`[DEBUGGER] Local file deleted. From now on using Cloudinary URL only.`);
+      } catch (deleteError) {
+        console.error(`[DEBUGGER] WARNING: Failed to delete local file: ${localPath}`, deleteError);
+        // Continue anyway - the file will eventually be cleaned up
+      }
     }
 
     // 1. Find user
     const user = await User.findOne({ clerkId });
     if (!user) {
       console.log(`[DEBUGGER] ERROR: User not found in database: ${clerkId}`);
+      // Cleanup Cloudinary on error
+      if (cloudinaryPublicId) {
+        await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
+      }
       sendError(res, 'USER_NOT_FOUND', 'User record not found. Please sync user first.');
       return;
     }
 
-    // 2. Transcribe
-    console.log(`[DEBUGGER] PHASE 1: Transcribing audio with Whisper...`);
-    const transcript = await transcribeAudio(filePath);
+    // 2. Transcribe using Cloudinary URL (NOT local file)
+    console.log(`[DEBUGGER] PHASE 2: Transcribing audio with Whisper (from Cloudinary URL)...`);
+    let transcript;
+    try {
+      transcript = await transcribeAudio(uploadResult.url);
+    } catch (transcriptError) {
+      console.error(`[DEBUGGER] Transcription FAILED:`, transcriptError);
+      await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
+      sendError(res, 'TRANSCRIPTION_ERROR', 'Failed to transcribe audio', 500);
+      return;
+    }
     
     if (!transcript || transcript.trim().length === 0) {
-      console.log(`[DEBUGGER] ERROR: Whisper returned an empty transcript.`);
+      console.log(`[DEBUGGER] ERROR: Transcription returned empty result.`);
+      await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
       sendError(res, 'EMPTY_TRANSCRIPT', 'No speech detected in the recording. Please try again with clearer audio.');
       return;
     }
@@ -108,20 +158,24 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
     console.log(`[DEBUGGER] Transcription SUCCESS. Length: ${transcript.length} characters.`);
 
     // 3. Summarize
-    console.log(`[DEBUGGER] PHASE 2: Generating summary with AI (Claude/Gemini)...`);
-    const aiAnalysis = await summarizeTranscript(transcript);
+    console.log(`[DEBUGGER] PHASE 3: Generating summary with AI (Claude/Gemini)...`);
+    let aiAnalysis;
+    try {
+      aiAnalysis = await summarizeTranscript(transcript);
+    } catch (summaryError) {
+      console.error(`[DEBUGGER] Summarization FAILED:`, summaryError);
+      await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
+      sendError(res, 'SUMMARIZATION_ERROR', 'Failed to generate summary', 500);
+      return;
+    }
     console.log(`[DEBUGGER] AI Summary SUCCESS. Items: ${aiAnalysis.actionItems.length} action items, ${aiAnalysis.keyDecisions.length} decisions.`);
 
-    // 4. Upload to Cloudinary
-    console.log(`[DEBUGGER] PHASE 3: Uploading audio to Cloudinary...`);
-    const uploadResult = await uploadAudioToCloudinary(filePath);
-    console.log(`[DEBUGGER] Cloudinary SUCCESS. URL: ${uploadResult.url}`);
+    // Calculate file size in MB (from req.file, since local file is already deleted)
+    const fileSizeMB = (req.file?.size || 0) / (1024 * 1024);
+    console.log(`[DEBUGGER] File size: ${fileSizeMB} MB`);
 
-    // Get file size in MB
-    const stats = fs.statSync(filePath);
-    const fileSizeMB = stats.size / (1024 * 1024);
-
-    // 5. Save to Database
+    // 4. Save to Database
+    console.log(`[DEBUGGER] PHASE 4: Saving meeting to database...`);
     const meeting = new Meeting({
       userId: user._id,
       title: title || aiAnalysis.title || 'New Recording',
@@ -142,23 +196,29 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
     user.meetingCount = (user.meetingCount || 0) + 1;
     user.storageUsedMB = (user.storageUsedMB || 0) + fileSizeMB;
     await user.save();
+    console.log(`[DEBUGGER] User storage updated. Total: ${user.storageUsedMB} MB`);
 
-    // 6. Cleanup local file
-    try {
-      fs.unlinkSync(filePath);
-      console.log(`[DEBUGGER] Local file cleanup SUCCESS.`);
-    } catch (err) {
-      console.error(`[DEBUGGER] WARNING: Failed to delete temp file: ${filePath}`, err);
-    }
-
+    console.log(`[DEBUGGER] COMPLETE: Meeting processing successful!`);
     sendSuccess(res, { meeting }, 201);
   } catch (error: any) {
     console.error(`[DEBUGGER] FATAL ERROR in processMeeting:`, error);
     logger.error({ error, clerkId }, 'Error processing meeting');
     
-    // Cleanup on error
-    if (filePath && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    // Cleanup Cloudinary if we uploaded but something failed afterwards
+    if (cloudinaryPublicId) {
+      console.log(`[DEBUGGER] Cleaning up Cloudinary: ${cloudinaryPublicId}`);
+      await deleteAudioFromCloudinary(cloudinaryPublicId).catch(cleanupErr => {
+        console.error(`[DEBUGGER] WARNING: Failed to clean up Cloudinary:`, cleanupErr);
+      });
+    }
+    
+    // Cleanup local file if it somehow still exists
+    if (localPath && fs.existsSync(localPath)) {
+      try {
+        fs.unlinkSync(localPath);
+      } catch (deleteErr) {
+        console.error(`[DEBUGGER] WARNING: Failed to clean up local file:`, deleteErr);
+      }
     }
     
     sendError(res, 'PROCESSING_ERROR', error.message || 'Failed to process meeting', 500);

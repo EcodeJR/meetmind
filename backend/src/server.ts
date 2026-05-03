@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import path from 'path';
+import fs from 'fs';
 import { logger } from './utils/logger';
 import { connectDB } from './utils/database';
 import { errorHandling } from './middleware/errorHandler';
@@ -78,10 +80,22 @@ app.use('/api/payments', paymentRoutes);
 // Error handling
 app.use(errorHandling);
 
+// Ensure uploads directory exists
+const ensureUploadsDirectory = () => {
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    logger.info(`Created uploads directory: ${uploadsDir}`);
+  }
+};
+
 // Start server
 const start = async () => {
   try {
     logger.info('Initializing Memovoice Services...');
+    
+    // Ensure uploads directory exists before starting server
+    ensureUploadsDirectory();
     
     // Bind to port immediately to satisfy platform health checks
     const port = Number(PORT);
