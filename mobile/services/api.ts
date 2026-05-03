@@ -39,7 +39,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized - user should be logged out
+      console.warn('[API] Received 401 Unauthorized - user session may be invalid');
+      // Don't automatically log out here - let the app handle it
+    }
+    if (error.config?.url) {
+      console.error(`[API Error] ${error.config.method?.toUpperCase()} ${error.config.url}: ${error.response?.status || error.code}`);
     }
     return Promise.reject(error);
   }

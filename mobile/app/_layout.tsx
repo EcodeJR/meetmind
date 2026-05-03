@@ -3,7 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { ClerkProvider, useAuth, useUser } from '@clerk/clerk-expo';
 import * as SecureStore from 'expo-secure-store';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, Text } from 'react-native';
 import { setTokenGetter } from '@/services/api';
 import apiClient from '@/services/api';
 import { 
@@ -56,6 +56,18 @@ function RootLayoutNav() {
     'SpaceGrotesk-SemiBold': SpaceGrotesk_600SemiBold,
   });
 
+  // Debug logging
+  useEffect(() => {
+    console.log('[RootLayout Debug]', {
+      isAuthLoaded,
+      isSignedIn,
+      fontsLoaded,
+      fontError: fontError?.message || null,
+      userEmail: user?.primaryEmailAddress?.emailAddress || null,
+      segments: segments.join('/'),
+    });
+  }, [isAuthLoaded, isSignedIn, fontsLoaded, fontError, user?.primaryEmailAddress?.emailAddress, segments]);
+
   // Wire up API auth token
   useEffect(() => {
     setTokenGetter(getToken);
@@ -67,10 +79,16 @@ function RootLayoutNav() {
 
     const inAuthGroup = segments[0] === '(auth)';
 
+    console.log('[RootLayout] Auth check:', { isSignedIn, inAuthGroup, segments });
+
     if (isSignedIn && inAuthGroup) {
+      console.log('[RootLayout] Signed in but in auth group, redirecting to tabs');
       router.replace('/(tabs)');
     } else if (!isSignedIn && !inAuthGroup) {
+      console.log('[RootLayout] Not signed in but in protected route, redirecting to login');
       router.replace('/(auth)/sign-in');
+    } else {
+      console.log('[RootLayout] Auth state consistent with route');
     }
   }, [isSignedIn, isAuthLoaded, fontsLoaded, segments]);
 
@@ -97,14 +115,25 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
+      console.log('[RootLayout] Fonts loaded or error - hiding splash screen');
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
 
-  if ((!isAuthLoaded || !fontsLoaded) && !fontError) {
+  if (!isAuthLoaded || (!fontsLoaded && !fontError)) {
+    console.log('[RootLayout] Showing loading screen');
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fbf8fc' }}>
         <ActivityIndicator size="large" color="#000317" />
+      </View>
+    );
+  }
+
+  if (fontError) {
+    console.error('[RootLayout] Font loading error:', fontError);
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fbf8fc' }}>
+        <Text style={{ color: '#000' }}>Font Loading Error</Text>
       </View>
     );
   }

@@ -10,6 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useUser } from '@clerk/clerk-expo';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
@@ -27,6 +28,7 @@ import Animated, {
 
 
 export default function HomeScreen() {
+  const router = useRouter();
   const { user } = useUser();
   const [meetingTitle, setMeetingTitle] = useState('');
   const [isRecording, setIsRecording] = useState(false);
