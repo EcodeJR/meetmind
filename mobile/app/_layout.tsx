@@ -150,7 +150,6 @@ function RootLayoutNav() {
           headerTitleStyle: { fontFamily: 'Manrope-Bold', fontSize: 18, color: '#111' },
           headerStyle: { backgroundColor: '#fbf8fc' },
           headerShadowVisible: false,
-          headerBackTitleVisible: false,
         }}
       />
     </Stack>
@@ -158,9 +157,21 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+  if (!clerkPublishableKey) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fbf8fc', padding: 24 }}>
+        <Text style={{ color: '#000317', textAlign: 'center' }}>
+          Missing Clerk publishable key. Check mobile/.env and rebuild the app.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <ClerkProvider
-      publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!}
+      publishableKey={clerkPublishableKey}
       tokenCache={tokenCache}
     >
       <QueryClientProvider client={queryClient}>

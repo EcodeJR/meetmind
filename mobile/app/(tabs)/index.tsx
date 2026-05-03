@@ -36,6 +36,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [debugStatus, setDebugStatus] = useState('');
+  const userInitial = (user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress?.charAt(0) || '?').toUpperCase();
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulse = useSharedValue(1);
@@ -119,7 +120,7 @@ export default function HomeScreen() {
           ios: {
             ...Audio.RecordingOptionsPresets.HIGH_QUALITY.ios,
             extension: '.m4a',
-            outputFormat: Audio.IOSOutputFormat.MPEG4,
+            outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
             audioQuality: Audio.IOSAudioQuality.HIGH,
             sampleRate: 44100,
             numberOfChannels: 1,
@@ -229,7 +230,7 @@ export default function HomeScreen() {
               ) : (
                 <View style={styles.headerAvatarPlaceholder}>
                   <Text style={styles.headerAvatarText}>
-                    {user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress.charAt(0).toUpperCase()}
+                    {userInitial}
                   </Text>
                 </View>
               )}

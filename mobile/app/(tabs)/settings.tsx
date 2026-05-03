@@ -24,6 +24,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const userInitial = (user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress?.charAt(0) || '?').toUpperCase();
 
   const fetchUserData = useCallback(async () => {
     try {
@@ -115,7 +116,7 @@ export default function SettingsScreen() {
                 ) : (
                   <View style={styles.avatarPlaceholder}>
                     <Text style={styles.avatarText}>
-                      {user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress.charAt(0).toUpperCase()}
+                      {userInitial}
                     </Text>
                   </View>
                 )}
