@@ -4,8 +4,34 @@ import { sendSuccess, sendError } from '../utils/responses';
 import { User } from '../models/User';
 import { Meeting } from '../models/Meeting';
 import { deleteAudioFromCloudinary } from '../services/cloudinaryService';
+import { sendWelcomeEmail } from '../services/emailService';
 import { logger } from '../utils/logger';
 import axios from 'axios';
+
+const detectCountryFromRequest = async (req: AuthRequest): Promise<string | null> => {
+  const countryHeader = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'];
+  if (typeof countryHeader === 'string' && countryHeader.length === 2) {
+    return countryHeader.toUpperCase();
+  }
+
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  if (!ip || ip === '::1' || ip === '127.0.0.1') {
+    return null;
+  }
+
+  const ipStr = Array.isArray(ip) ? ip[0] : ip;
+  const normalizedIp = ipStr.split(',')[0].trim().replace('::ffff:', '');
+  if (!normalizedIp) {
+    return null;
+  }
+
+  const geoRes = await axios.get(`http://ip-api.com/json/${normalizedIp}`);
+  if (geoRes.data && geoRes.data.countryCode) {
+    return String(geoRes.data.countryCode).toUpperCase();
+  }
+
+  return null;
+};
 
 export const syncClerkUser = async (req: AuthRequest, res: Response) => {
   try {
@@ -18,25 +44,18 @@ export const syncClerkUser = async (req: AuthRequest, res: Response) => {
 
     let user = await User.findOne({ clerkId });
 
-    if (!user) {
-      let country = null;
-      try {
-        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-        if (ip && ip !== '::1' && ip !== '127.0.0.1') {
-          const ipStr = Array.isArray(ip) ? ip[0] : ip;
-          const geoRes = await axios.get(`http://ip-api.com/json/${ipStr.split(',')[0]}`);
-          if (geoRes.data && geoRes.data.countryCode) {
-            country = geoRes.data.countryCode;
-          }
-        }
-      } catch (err) {
-        logger.warn({ err }, 'Failed to detect country via IP');
-      }
+    let detectedCountry: string | null = null;
+    try {
+      detectedCountry = await detectCountryFromRequest(req);
+    } catch (err) {
+      logger.warn({ err }, 'Failed to detect country via IP');
+    }
 
+    if (!user) {
       user = new User({
         clerkId,
         email,
-        country,
+        country: detectedCountry,
         subscription: {
           plan: 'free',
           status: 'inactive'
@@ -44,6 +63,16 @@ export const syncClerkUser = async (req: AuthRequest, res: Response) => {
       });
       await user.save();
       logger.info({ clerkId }, 'New user created');
+
+      // Send welcome email asynchronously (don't block user creation)
+      const firstName = req.body.firstName || 'there';
+      sendWelcomeEmail(email, firstName).catch(err => {
+        logger.error({ error: err, email }, 'Failed to send welcome email');
+      });
+    } else if (!user.country && detectedCountry) {
+      user.country = detectedCountry;
+      await user.save();
+      logger.info({ clerkId, country: detectedCountry }, 'Backfilled user country during sync');
     }
 
     return sendSuccess(res, { user }, 201);
@@ -169,5 +198,35 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     logger.error({ error }, 'Error updating profile');
     return sendError(res, 'UPDATE_ERROR', 'Failed to update profile', 500);
+  }
+};
+
+/**
+ * Update Expo push token for receiving push notifications
+ */
+export const updateExpoPushToken = async (req: AuthRequest, res: Response) => {
+  try {
+    const clerkId = req.clerkId;
+    const { expoPushToken } = req.body;
+
+    if (expoPushToken !== null && expoPushToken !== undefined && typeof expoPushToken !== 'string') {
+      return sendError(res, 'INVALID_TOKEN', 'Expo push token must be a string or null');
+    }
+
+    const user = await User.findOneAndUpdate(
+      { clerkId },
+      { $set: { expoPushToken: expoPushToken || null } },
+      { new: true }
+    );
+
+    if (!user) {
+      return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+    }
+
+    logger.info({ clerkId, tokenLength: expoPushToken.length }, 'Expo push token updated');
+    return sendSuccess(res, { user });
+  } catch (error) {
+    logger.error({ error }, 'Error updating Expo push token');
+    return sendError(res, 'UPDATE_ERROR', 'Failed to update push token', 500);
   }
 };

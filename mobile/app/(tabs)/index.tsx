@@ -15,6 +15,7 @@ import { useUser } from '@clerk/clerk-expo';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Audio } from 'expo-av';
+import * as Notifications from 'expo-notifications';
 import Animated, {
   useAnimatedStyle,
   withRepeat,
@@ -87,6 +88,21 @@ export default function HomeScreen() {
 
   const [volumes, setVolumes] = useState<number[]>(new Array(12).fill(0));
 
+  const sendLocalNotification = async (title: string, body: string) => {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          sound: true,
+        },
+        trigger: null,
+      });
+    } catch (error) {
+      console.warn('[PUSH] Failed to schedule local notification:', error);
+    }
+  };
+
   const handleStartRecording = async () => {
     try {
       if (!meetingTitle.trim()) {
@@ -146,6 +162,7 @@ export default function HomeScreen() {
       setDuration(0);
       setIsRecording(true);
       setDebugStatus('RECORDING ACTIVE');
+      sendLocalNotification('Recording Started', meetingTitle || 'Your meeting is now being recorded');
     } catch (err) {
       console.error('Failed to start recording', err);
       Alert.alert('Hardware Error', 'Could not initialize the microphone.');
@@ -169,6 +186,7 @@ export default function HomeScreen() {
       }
 
       setDebugStatus('Preparing for AI analysis...');
+      sendLocalNotification('Transcription Started', 'Your meeting is being transcribed now');
 
       // Use FormData to upload the file
       const formData = new FormData();
@@ -192,6 +210,11 @@ export default function HomeScreen() {
       console.log('[DEBUG] Server response:', response.data);
       setDebugStatus('ANALYSIS COMPLETE');
 
+      const summaryPreview = response.data?.data?.meeting?.summary
+        ? String(response.data.data.meeting.summary).slice(0, 120)
+        : 'Your meeting is ready.';
+      sendLocalNotification('Meeting Processed', summaryPreview);
+
       Alert.alert('Success', 'Your meeting has been transcribed and summarized.');
       setMeetingTitle('');
       setDuration(0);
@@ -199,6 +222,7 @@ export default function HomeScreen() {
     } catch (error: any) {
       console.error('[DEBUG] Processing failed:', error);
       setDebugStatus('ANALYSIS FAILED');
+      sendLocalNotification('Processing Failed', error.response?.data?.error?.message || 'The AI pipeline encountered an issue.');
       Alert.alert('Analysis Failed', error.response?.data?.error?.message || 'The AI pipeline encountered an issue.');
     } finally {
       setLoading(false);

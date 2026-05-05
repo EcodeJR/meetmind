@@ -7,6 +7,8 @@ import { logger } from '../utils/logger';
 import { transcribeAudio } from '../services/transcriptionService';
 import { summarizeTranscript } from '../services/summarizationService';
 import { uploadAudioToCloudinary, deleteAudioFromCloudinary } from '../services/cloudinaryService';
+import { sendMeetingProcessedEmail, sendMeetingFailedEmail } from '../services/emailService';
+import { sendTranscriptionStartedNotification, sendMeetingProcessedNotification, sendMeetingFailedNotification } from '../services/pushNotificationService';
 import fs from 'fs';
 
 // Create a new meeting
@@ -136,14 +138,34 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    const canSendEmails = user.preferences?.notificationsEnabled ?? true;
+    const canSendPush = user.preferences?.pushNotificationsEnabled ?? true;
+
     // 2. Transcribe using Cloudinary URL (NOT local file)
     console.log(`[DEBUGGER] PHASE 2: Transcribing audio with Whisper (from Cloudinary URL)...`);
+    
+    // Send notification that transcription is starting
+    if (canSendPush && user.expoPushToken) {
+      sendTranscriptionStartedNotification(user.expoPushToken, title).catch(err => {
+        logger.warn({ error: err }, 'Failed to send transcription started notification');
+      });
+    }
+
     let transcript;
     try {
       transcript = await transcribeAudio(uploadResult.url);
     } catch (transcriptError) {
       console.error(`[DEBUGGER] Transcription FAILED:`, transcriptError);
       await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
+      
+      // Send failure notification and email
+      if (canSendPush && user.expoPushToken) {
+        sendMeetingFailedNotification(user.expoPushToken, title || 'Meeting', 'Transcription failed').catch(() => {});
+      }
+      if (canSendEmails) {
+        await sendMeetingFailedEmail(user.email, user.clerkId, title || 'Meeting', 'Audio transcription failed. Please try again with clearer audio.').catch(() => {});
+      }
+      
       sendError(res, 'TRANSCRIPTION_ERROR', 'Failed to transcribe audio', 500);
       return;
     }
@@ -151,6 +173,15 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
     if (!transcript || transcript.trim().length === 0) {
       console.log(`[DEBUGGER] ERROR: Transcription returned empty result.`);
       await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
+      
+      // Send failure notification and email
+      if (canSendPush && user.expoPushToken) {
+        sendMeetingFailedNotification(user.expoPushToken, title || 'Meeting', 'No speech detected').catch(() => {});
+      }
+      if (canSendEmails) {
+        await sendMeetingFailedEmail(user.email, user.clerkId, title || 'Meeting', 'No speech detected in the recording. Please try again with clearer audio.').catch(() => {});
+      }
+      
       sendError(res, 'EMPTY_TRANSCRIPT', 'No speech detected in the recording. Please try again with clearer audio.');
       return;
     }
@@ -165,6 +196,15 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
     } catch (summaryError) {
       console.error(`[DEBUGGER] Summarization FAILED:`, summaryError);
       await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
+      
+      // Send failure notification and email
+      if (canSendPush && user.expoPushToken) {
+        sendMeetingFailedNotification(user.expoPushToken, title || 'Meeting', 'AI summarization failed').catch(() => {});
+      }
+      if (canSendEmails) {
+        await sendMeetingFailedEmail(user.email, user.clerkId, title || 'Meeting', 'AI summarization service encountered an error. Please try again later.').catch(() => {});
+      }
+      
       sendError(res, 'SUMMARIZATION_ERROR', 'Failed to generate summary', 500);
       return;
     }
@@ -199,10 +239,49 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
     console.log(`[DEBUGGER] User storage updated. Total: ${user.storageUsedMB} MB`);
 
     console.log(`[DEBUGGER] COMPLETE: Meeting processing successful!`);
+    
+    // Send success notification and email
+    if (canSendPush && user.expoPushToken) {
+      sendMeetingProcessedNotification(user.expoPushToken, title || 'Meeting', aiAnalysis.summary).catch(err => {
+        logger.warn({ error: err }, 'Failed to send meeting processed notification');
+      });
+    }
+    
+    // Send success email with summary
+    if (canSendEmails) {
+      await sendMeetingProcessedEmail(
+        user.email,
+        user.clerkId,
+        title || 'Meeting',
+        aiAnalysis.summary
+      ).catch(err => {
+        logger.warn({ error: err }, 'Failed to send meeting processed email');
+      });
+    }
+    
     sendSuccess(res, { meeting }, 201);
   } catch (error: any) {
     console.error(`[DEBUGGER] FATAL ERROR in processMeeting:`, error);
     logger.error({ error, clerkId }, 'Error processing meeting');
+    
+    // Send failure notification and email
+    const user = await User.findOne({ clerkId }).catch(() => null);
+    if (user) {
+      const canSendEmails = user.preferences?.notificationsEnabled ?? true;
+      const canSendPush = user.preferences?.pushNotificationsEnabled ?? true;
+
+      if (canSendPush && user.expoPushToken) {
+        sendMeetingFailedNotification(user.expoPushToken, 'Unknown Meeting', error.message).catch(() => {});
+      }
+      if (canSendEmails) {
+        await sendMeetingFailedEmail(
+          user.email,
+          user.clerkId,
+          'Meeting Processing',
+          error.message || 'An unexpected error occurred during processing'
+        ).catch(() => {});
+      }
+    }
     
     // Cleanup Cloudinary if we uploaded but something failed afterwards
     if (cloudinaryPublicId) {

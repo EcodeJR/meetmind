@@ -129,16 +129,22 @@ export default function SettingsScreen() {
                 <Text style={styles.userEmail}>{user?.primaryEmailAddress?.emailAddress || ''}</Text>
 
                 <View style={styles.badgesRow}>
-                  <View style={[styles.planBadge, userData?.subscription?.plan === 'free' && styles.freeBadge]}>
-                    <Text style={styles.planBadgeText}>{(userData?.subscription?.plan || 'pro').toUpperCase()}</Text>
-                  </View>
-                  {userData?.subscription?.plan === 'free' && (
-                    <TouchableOpacity
-                      style={styles.upgradeButton}
-                      onPress={() => router.push('/settings/upgrade')}
-                    >
-                      <Text style={styles.upgradeButtonText}>Upgrade</Text>
-                    </TouchableOpacity>
+                  {loading ? (
+                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                  ) : (
+                    <>
+                      <View style={[styles.planBadge, userData?.subscription?.plan === 'free' && styles.freeBadge]}>
+                        <Text style={styles.planBadgeText}>{(userData?.subscription?.plan || 'free').toUpperCase()}</Text>
+                      </View>
+                      {userData?.subscription?.plan === 'free' && (
+                        <TouchableOpacity
+                          style={styles.upgradeButton}
+                          onPress={() => router.push('/settings/upgrade')}
+                        >
+                          <Text style={styles.upgradeButtonText}>Upgrade</Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
                   )}
                 </View>
 

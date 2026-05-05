@@ -1,5 +1,6 @@
 /// <reference path="../types/flutterwave-node-v3.d.ts" />
 import Flutterwave from 'flutterwave-node-v3';
+import axios from 'axios';
 import { Paddle, Environment } from '@paddle/paddle-node-sdk';
 import { logger } from '../utils/logger';
 
@@ -9,9 +10,22 @@ const flw = new Flutterwave(
   process.env.FLUTTERWAVE_SECRET_KEY as string
 );
 
-export const paddle = new Paddle(process.env.PADDLE_API_KEY as string, {
-  environment: process.env.NODE_ENV === 'production' ? Environment.production : Environment.sandbox,
-});
+const paddleApiKey = process.env.PADDLE_API_KEY;
+const paddleEnvironment = process.env.PADDLE_ENVIRONMENT === 'production'
+  ? Environment.production
+  : process.env.PADDLE_ENVIRONMENT === 'sandbox'
+    ? Environment.sandbox
+    : process.env.NODE_ENV === 'production'
+      ? Environment.production
+      : Environment.sandbox;
+
+export const paddle = paddleApiKey
+  ? new Paddle(paddleApiKey, {
+      environment: paddleEnvironment,
+    })
+  : null;
+
+export const isPaddleConfigured = Boolean(paddleApiKey);
 
 /**
  * Detects which payment provider to use based on the user's country
@@ -50,13 +64,30 @@ export const initializeFlutterwavePayment = async (
       }
     };
 
-    const response = await flw.Payment.create(payload);
-    
-    if (response.status === 'success') {
-      return { paymentUrl: response.data.link };
-    } else {
-      throw new Error(response.message);
+    // Some versions of the flutterwave SDK don't expose a `Payment` helper that
+    // creates hosted payment links. Use the REST API as a reliable fallback.
+    const secret = process.env.FLUTTERWAVE_SECRET_KEY;
+    if (!secret) throw new Error('Missing FLUTTERWAVE_SECRET_KEY');
+
+    const resp = await axios.post(
+      'https://api.flutterwave.com/v3/payments',
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${secret}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      }
+    );
+
+    const body = resp?.data;
+    // Prefer returned hosted link fields if present
+    const link = body?.data?.link || body?.data?.authorization_url || body?.data?.payment_link || null;
+    if (body?.status === 'success' && link) {
+      return { paymentUrl: link };
     }
+    throw new Error(body?.message || 'Flutterwave initialization failed');
   } catch (error) {
     logger.error({ error }, 'Flutterwave initialization failed');
     throw error;
@@ -94,6 +125,10 @@ export const cancelFlutterwaveSubscription = async (subscriptionId: string) => {
  */
 export const initializePaddleCheckout = async (userId: string, email: string, priceId: string) => {
   try {
+    if (!paddle) {
+      throw new Error('Paddle is not configured on this server');
+    }
+
     const payload: any = {
       items: [
         { priceId, quantity: 1 }
@@ -120,6 +155,10 @@ export const initializePaddleCheckout = async (userId: string, email: string, pr
  */
 export const cancelPaddleSubscription = async (subscriptionId: string) => {
   try {
+    if (!paddle) {
+      throw new Error('Paddle is not configured on this server');
+    }
+
     const subscription = await paddle.subscriptions.cancel(subscriptionId, {
       effectiveFrom: 'next_billing_period'
     });
@@ -135,6 +174,10 @@ export const cancelPaddleSubscription = async (subscriptionId: string) => {
  */
 export const getPaddleSubscription = async (subscriptionId: string) => {
   try {
+    if (!paddle) {
+      throw new Error('Paddle is not configured on this server');
+    }
+
     const subscription = await paddle.subscriptions.get(subscriptionId);
     return subscription;
   } catch (error) {

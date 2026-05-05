@@ -28,6 +28,8 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [firstName, setFirstName] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [requiresVerification, setRequiresVerification] = useState(false);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOAuthLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -55,6 +57,9 @@ export default function SignUpScreen() {
     setLoading(true);
 
     try {
+      setRequiresVerification(false);
+      setVerificationCode('');
+
       const signUpAttempt = await signUp.create({
         emailAddress: email,
         password,
@@ -62,14 +67,50 @@ export default function SignUpScreen() {
       });
 
       if (signUpAttempt.status === 'complete') {
-        await setActive({ session: signUpAttempt.createdSessionId });
-        router.replace('/(tabs)');
+        if (signUpAttempt.createdSessionId) {
+          await setActive({ session: signUpAttempt.createdSessionId });
+          router.replace('/(tabs)');
+        } else {
+          setErrors({ general: 'Account created, but the session could not be started. Please try signing in.' });
+        }
       } else {
-        setErrors({ general: 'Verification required. Please contact support.' });
+        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+        setRequiresVerification(true);
+        setErrors({ general: 'Verification code sent. Enter the code below to finish creating your account.' });
       }
     } catch (err: any) {
       console.error('Sign up error:', err);
       const errorMessage = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err?.message || 'Account creation failed';
+      setErrors({ general: errorMessage });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onVerifyCodePress = async () => {
+    if (!isLoaded) return;
+
+    if (!verificationCode.trim()) {
+      setErrors({ general: 'Enter the verification code sent to your email' });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const verificationAttempt = await signUp.attemptEmailAddressVerification({
+        code: verificationCode.trim(),
+      });
+
+      if (verificationAttempt.status === 'complete' && verificationAttempt.createdSessionId) {
+        await setActive({ session: verificationAttempt.createdSessionId });
+        router.replace('/(tabs)');
+      } else {
+        setErrors({ general: 'Verification was not completed. Please check the code and try again.' });
+      }
+    } catch (err: any) {
+      console.error('Email verification error:', err);
+      const errorMessage = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err?.message || 'Verification failed';
       setErrors({ general: errorMessage });
     } finally {
       setLoading(false);
@@ -190,6 +231,32 @@ export default function SignUpScreen() {
                 <Text style={styles.buttonText}>Initialize Account</Text>
               )}
             </TouchableOpacity>
+
+            {requiresVerification && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>VERIFICATION CODE</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter the code from your email"
+                  placeholderTextColor={theme.colors.outline}
+                  value={verificationCode}
+                  onChangeText={setVerificationCode}
+                  editable={!loading && !oauthLoading}
+                  keyboardType="number-pad"
+                />
+                <TouchableOpacity
+                  style={[styles.button, (loading || oauthLoading) && styles.buttonDisabled]}
+                  onPress={onVerifyCodePress}
+                  disabled={loading || oauthLoading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={theme.colors.onPrimary} />
+                  ) : (
+                    <Text style={styles.buttonText}>Verify Email</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={styles.divider}>
               <View style={styles.dividerLine} />

@@ -11,6 +11,11 @@ interface RawRequest extends Request {
 
 export const paddleWebhookHandler = async (req: RawRequest, res: Response): Promise<void> => {
   try {
+    if (!paddle) {
+      res.status(503).json({ error: 'Paddle is not configured' });
+      return;
+    }
+
     const signature = req.headers['paddle-signature'] as string;
     const rawBody = req.body as Buffer; // express.raw() makes req.body a Buffer
     const secret = process.env.PADDLE_WEBHOOK_SECRET;

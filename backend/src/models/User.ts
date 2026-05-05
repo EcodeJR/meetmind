@@ -19,6 +19,7 @@ export interface IUser extends Document {
   storageUsedMB: number;
   onboardingCompleted: boolean;
   profileImage?: string;
+  expoPushToken?: string; // For push notifications on mobile
   preferences: {
     notificationsEnabled: boolean;
     pushNotificationsEnabled: boolean;
@@ -86,6 +87,10 @@ const userSchema = new Schema<IUser>(
     },
     profileImage: {
       type: String,
+    },
+    expoPushToken: {
+      type: String,
+      default: null,
     },
     preferences: {
       notificationsEnabled: {

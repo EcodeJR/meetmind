@@ -14,12 +14,19 @@ import { useRouter } from 'expo-router';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  clearDevicePushToken,
+  registerDeviceForPushNotifications,
+  syncPushTokenWithBackend,
+} from '@/services/pushNotificationService';
 
 export default function NotificationSettingsScreen() {
   const [enabled, setEnabled] = useState(true);
   const [pushEnabled, setPushEnabled] = useState(true);
+  const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [registeringDevice, setRegisteringDevice] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -32,6 +39,7 @@ export default function NotificationSettingsScreen() {
       const user = response.data.data?.user || response.data.user;
       setEnabled(user.preferences?.notificationsEnabled ?? true);
       setPushEnabled(user.preferences?.pushNotificationsEnabled ?? true);
+      setExpoPushToken(user.expoPushToken || null);
     } catch (error) {
       console.error('Error fetching preferences:', error);
     } finally {
@@ -48,12 +56,49 @@ export default function NotificationSettingsScreen() {
       await apiClient.patch('/users/preferences', {
         preferences: { [key]: value }
       });
+
+      if (key === 'pushNotificationsEnabled' && !value) {
+        await clearDevicePushToken();
+        setExpoPushToken(null);
+      }
+
+      if (key === 'pushNotificationsEnabled' && value && !expoPushToken) {
+        Alert.alert(
+          'Device registration needed',
+          'Push alerts are enabled, but this device is not registered yet. Tap Register This Device to receive notifications.'
+        );
+      }
     } catch (error) {
       Alert.alert('Update Failed', 'Could not sync settings.');
       if (key === 'notificationsEnabled') setEnabled(!value);
       if (key === 'pushNotificationsEnabled') setPushEnabled(!value);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRegisterDevice = async () => {
+    setRegisteringDevice(true);
+    try {
+      const token = await registerDeviceForPushNotifications();
+      if (!token) {
+        Alert.alert('Permission required', 'Enable notifications on this device to register it.');
+        return;
+      }
+
+      const synced = await syncPushTokenWithBackend(token);
+      if (!synced) {
+        Alert.alert('Registration Failed', 'Could not save this device for notifications.');
+        return;
+      }
+
+      setExpoPushToken(token);
+      Alert.alert('Device Registered', 'This device will now receive push notifications.');
+    } catch (error) {
+      console.error('Error registering device:', error);
+      Alert.alert('Registration Failed', 'Could not register this device for notifications.');
+    } finally {
+      setRegisteringDevice(false);
     }
   };
 
@@ -97,6 +142,9 @@ export default function NotificationSettingsScreen() {
             <View style={styles.info}>
               <Text style={styles.label}>Push Notifications</Text>
               <Text style={styles.description}>Receive instant mobile alerts when your session summaries are ready.</Text>
+              <Text style={styles.statusText}>
+                {expoPushToken ? 'This device is registered.' : 'This device is not registered yet.'}
+              </Text>
             </View>
             <Switch
               trackColor={{ false: theme.colors.outlineVariant, true: theme.colors.accent }}
@@ -105,6 +153,28 @@ export default function NotificationSettingsScreen() {
               value={pushEnabled}
               disabled={saving}
             />
+          </View>
+
+          <View style={styles.separator} />
+
+          <View style={styles.row}>
+            <View style={styles.info}>
+              <Text style={styles.label}>Register This Device</Text>
+              <Text style={styles.description}>
+                Save this phone for backend push alerts so meeting updates can appear in your notification bar.
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={handleRegisterDevice}
+              disabled={saving || registeringDevice}
+              style={[styles.registerButton, (saving || registeringDevice) && styles.registerButtonDisabled]}
+            >
+              {registeringDevice ? (
+                <ActivityIndicator color={theme.colors.onPrimary} />
+              ) : (
+                <Text style={styles.registerButtonText}>{expoPushToken ? 'Re-register' : 'Register'}</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -183,10 +253,33 @@ const styles = StyleSheet.create({
     color: theme.colors.onSurfaceVariant,
     lineHeight: 18,
   },
+  statusText: {
+    marginTop: 6,
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: theme.colors.outline,
+  },
   separator: {
     height: 1,
     backgroundColor: theme.colors.surfaceContainer,
     marginHorizontal: theme.spacing.lg,
+  },
+  registerButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.base,
+    minWidth: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  registerButtonDisabled: {
+    opacity: 0.7,
+  },
+  registerButtonText: {
+    fontFamily: 'Manrope-SemiBold',
+    fontSize: 12,
+    color: theme.colors.onPrimary,
   },
   hintContainer: {
     flexDirection: 'row',
