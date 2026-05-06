@@ -1,31 +1,52 @@
 import nodemailer from 'nodemailer';
 import { logger } from '../utils/logger';
 
-// Initialize nodemailer transporter with Gmail
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD, // Use Gmail App Password, not your actual password
-  },
-});
+// Initialize nodemailer transporter with Gmail - try port 587 (TLS) if 465 (SSL) fails
+let transporter: nodemailer.Transporter | null = null;
 
-// Verify connection at startup
-transporter.verify((error, _success) => {
-  if (error) {
-    logger.error({ error }, 'Email service verification failed - notifications will not be sent');
-  } else {
-    logger.info('Email service verified and ready to send emails');
+const createTransporter = () => {
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    logger.warn('Gmail credentials not configured (GMAIL_USER or GMAIL_APP_PASSWORD missing)');
+    return null;
   }
-});
+
+  return nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 587, // Use TLS (port 587) instead of SSL (port 465) for Railway compatibility
+    secure: false,
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD, // Must be Gmail App Password with 2FA, not account password
+    },
+  });
+};
+
+transporter = createTransporter();
+
+// Verify connection at startup with timeout
+if (transporter) {
+  transporter.verify((error, _success) => {
+    if (error) {
+      logger.error(
+        { error: JSON.stringify(error) },
+        `Email service verification failed (code: ${(error as any).code}, errno: ${(error as any).errno}). Emails will not be sent.`
+      );
+      logger.info(
+        'TROUBLESHOOTING: Verify GMAIL_USER and GMAIL_APP_PASSWORD are set correctly on Railway. Gmail requires App Password (not account password) if 2FA is enabled.'
+      );
+    } else {
+      logger.info('Email service verified and ready to send emails');
+    }
+  });
+}
 
 /**
  * Send welcome/sign-up email
  */
 export const sendWelcomeEmail = async (email: string, firstName: string): Promise<boolean> => {
   try {
-    if (!process.env.GMAIL_USER) {
-      logger.warn('Gmail not configured - skipping welcome email');
+    if (!transporter) {
+      logger.warn('Email service not initialized - skipping welcome email');
       return false;
     }
 
@@ -82,8 +103,8 @@ export const sendMeetingStartedEmail = async (
   meetingTitle?: string
 ): Promise<boolean> => {
   try {
-    if (!process.env.GMAIL_USER) {
-      logger.warn('Gmail not configured - skipping meeting started email');
+    if (!transporter) {
+      logger.warn('Email service not initialized - skipping meeting started email');
       return false;
     }
 
@@ -129,8 +150,8 @@ export const sendMeetingProcessedEmail = async (
   summary: string
 ): Promise<boolean> => {
   try {
-    if (!process.env.GMAIL_USER) {
-      logger.warn('Gmail not configured - skipping meeting processed email');
+    if (!transporter) {
+      logger.warn('Email service not initialized - skipping meeting processed email');
       return false;
     }
 
@@ -182,8 +203,8 @@ export const sendMeetingFailedEmail = async (
   errorMessage: string
 ): Promise<boolean> => {
   try {
-    if (!process.env.GMAIL_USER) {
-      logger.warn('Gmail not configured - skipping meeting failed email');
+    if (!transporter) {
+      logger.warn('Email service not initialized - skipping meeting failed email');
       return false;
     }
 
@@ -233,8 +254,8 @@ export const sendSubscriptionUpgradeEmail = async (
   userName: string
 ): Promise<boolean> => {
   try {
-    if (!process.env.GMAIL_USER) {
-      logger.warn('Gmail not configured - skipping subscription email');
+    if (!transporter) {
+      logger.warn('Email service not initialized - skipping subscription email');
       return false;
     }
 

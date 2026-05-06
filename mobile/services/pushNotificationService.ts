@@ -2,19 +2,45 @@ import * as Notifications from 'expo-notifications';
 import { useUser } from '@clerk/clerk-expo';
 import { useEffect, useState } from 'react';
 import apiClient from './api';
+import { Platform } from 'react-native';
+
+// Configure Android notification channel on app start
+export const configureNotifications = async () => {
+  if (Platform.OS === 'android') {
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7F',
+      });
+      console.log('[PUSH] Android notification channel configured');
+    } catch (error) {
+      console.error('[PUSH] Failed to configure Android notification channel:', error);
+    }
+  }
+};
 
 export const registerDeviceForPushNotifications = async (): Promise<string | null> => {
   try {
-    const { status } = await Notifications.requestPermissionsAsync();
-    if (status !== 'granted') {
-      console.warn('[PUSH] Permission to send notifications was denied');
+    const projectId = process.env.EXPO_PUBLIC_PROJECT_ID;
+    if (!projectId) {
+      console.error('[PUSH] EXPO_PUBLIC_PROJECT_ID not configured. Add it to .env: EXPO_PUBLIC_PROJECT_ID=<your-project-id>');
       return null;
     }
 
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') {
+      console.warn('[PUSH] Notification permissions not granted by user');
+      return null;
+    }
+
+    console.log('[PUSH] Requesting Expo push token with projectId:', projectId);
     const expoToken = await Notifications.getExpoPushTokenAsync({
-      projectId: process.env.EXPO_PUBLIC_PROJECT_ID,
+      projectId,
     });
 
+    console.log('[PUSH] Successfully obtained Expo token:', expoToken.data?.substring(0, 20) + '...');
     return expoToken.data;
   } catch (error) {
     console.error('[PUSH] Failed to register push token:', error);
@@ -24,9 +50,11 @@ export const registerDeviceForPushNotifications = async (): Promise<string | nul
 
 export const syncPushTokenWithBackend = async (expoPushToken: string | null): Promise<boolean> => {
   try {
-    await apiClient.patch('/users/push-token', {
+    console.log('[PUSH] Syncing push token with backend:', expoPushToken ? expoPushToken.substring(0, 20) + '...' : 'clearing');
+    const response = await apiClient.patch('/users/push-token', {
       expoPushToken,
     });
+    console.log('[PUSH] Backend sync successful:', response.status);
     return true;
   } catch (error) {
     console.error('[PUSH] Failed to sync push token with backend:', error);
@@ -67,18 +95,29 @@ export const usePushNotifications = () => {
     registerPushToken();
   }, [user?.id]);
 
-  // Set up notification handler
+  // Set up notification handlers
   useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(
+    // Handle notification tapped/opened
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(
       (response: any) => {
-        console.log('[PUSH] Notification tapped:', response.notification.request.content);
+        console.log('[PUSH] Notification opened/tapped:', response.notification.request.content.body);
         // Handle notification action here if needed
         // e.g., navigate to meeting screen
       }
     );
 
+    // Handle notification received in foreground
+    const foregroundSubscription = Notifications.addNotificationReceivedListener(
+      (notification: any) => {
+        console.log('[PUSH] Notification received (foreground):', notification.request.content.body);
+        // Android: notification will display in system tray if channel is set up
+        // iOS: might need manual notification display
+      }
+    );
+
     return () => {
-      subscription.remove();
+      responseSubscription.remove();
+      foregroundSubscription.remove();
     };
   }, []);
 

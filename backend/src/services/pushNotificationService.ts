@@ -199,6 +199,11 @@ export const sendPaymentNotification = async (
  */
 async function sendPushNotification(payload: PushNotificationPayload): Promise<void> {
   try {
+    logger.debug(
+      { token: payload.to.substring(0, 20) + '...', title: payload.title },
+      'Sending push notification via Expo API'
+    );
+
     const response = await axios.post(EXPO_PUSH_API_URL, payload, {
       headers: {
         'Content-Type': 'application/json',
@@ -209,14 +214,21 @@ async function sendPushNotification(payload: PushNotificationPayload): Promise<v
 
     if (response.data?.errors?.length > 0) {
       logger.warn(
-        { errors: response.data.errors },
+        { errors: response.data.errors, token: payload.to.substring(0, 20) + '...' },
         'Push notification sent with errors'
       );
     } else {
-      logger.debug({ ticketId: response.data?.data?.[0]?.id }, 'Push notification sent');
+      const ticketId = response.data?.data?.[0]?.id;
+      logger.info(
+        { ticketId, token: payload.to.substring(0, 20) + '...', title: payload.title },
+        'Push notification sent successfully to Expo API'
+      );
     }
   } catch (error) {
-    logger.error({ error }, 'Failed to send push notification via Expo API');
+    logger.error(
+      { error, token: payload.to.substring(0, 20) + '...', title: payload.title },
+      'Failed to send push notification via Expo API'
+    );
     throw error;
   }
 }

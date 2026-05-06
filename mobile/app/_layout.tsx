@@ -6,6 +6,7 @@ import * as SecureStore from 'expo-secure-store';
 import { ActivityIndicator, View, Text } from 'react-native';
 import { setTokenGetter } from '@/services/api';
 import apiClient from '@/services/api';
+import { configureNotifications } from '@/services/pushNotificationService';
 import { 
   useFonts, 
   Manrope_700Bold, 
@@ -56,6 +57,10 @@ function RootLayoutNav() {
     'SpaceGrotesk-SemiBold': SpaceGrotesk_600SemiBold,
   });
 
+  // Configure Android notification channel on app start
+  useEffect(() => {
+    configureNotifications();
+  }, []);
   // Debug logging
   useEffect(() => {
     console.log('[RootLayout Debug]', {
