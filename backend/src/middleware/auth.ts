@@ -23,13 +23,22 @@ export const authMiddleware = async (
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
+    // Verify token with Clerk SDK
+    // The SDK automatically validates issuer, audience, and signature using Clerk's public keys
     const decoded = await verifyToken(token, {
       secretKey: process.env.CLERK_SECRET_KEY,
-      issuer: null,
+      issuer: process.env.CLERK_ISSUER || null,
     });
 
-    if (!decoded) {
+    if (!decoded || !decoded.sub) {
       sendError(res, 'INVALID_TOKEN', 'Invalid or expired token', 401);
+      return;
+    }
+
+    // Verify token has required claims for production use
+    if (!decoded.iss) {
+      logger.warn({ sub: decoded.sub }, 'Token missing issuer claim');
+      sendError(res, 'INVALID_TOKEN', 'Token missing required claims', 401);
       return;
     }
 

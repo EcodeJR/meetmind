@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { validateRequest } from '../middleware/validateRequest';
 import { User } from '../models/User';
 import { sendSuccess, sendError } from '../utils/responses';
 import axios from 'axios';
@@ -12,8 +13,18 @@ import {
   isPaddleConfigured
 } from '../services/paymentService';
 import { logger } from '../utils/logger';
+import { z } from 'zod';
 
 const router = Router();
+
+// Validation schemas
+const initializePaymentSchema = z.object({
+  email: z.string().email().optional(),
+});
+
+const verifyFlutterwaveSchema = z.object({
+  transactionId: z.string().min(1),
+});
 
 const detectCountryFromRequest = async (req: AuthRequest): Promise<string | null> => {
   const countryHeader = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'];
@@ -32,7 +43,7 @@ const detectCountryFromRequest = async (req: AuthRequest): Promise<string | null
     return null;
   }
 
-  const geoRes = await axios.get(`http://ip-api.com/json/${normalizedIp}`);
+  const geoRes = await axios.get(`https://ip-api.com/json/${normalizedIp}`, { timeout: 5000 });
   if (geoRes.data && geoRes.data.countryCode) {
     return String(geoRes.data.countryCode).toUpperCase();
   }
@@ -43,7 +54,7 @@ const detectCountryFromRequest = async (req: AuthRequest): Promise<string | null
 // Require auth for all standard payment endpoints
 router.use(authMiddleware);
 
-router.post('/initialize', async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/initialize', validateRequest(initializePaymentSchema), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const clerkId = req.clerkId;
     const { email } = req.body;
@@ -94,7 +105,7 @@ router.post('/initialize', async (req: AuthRequest, res: Response): Promise<void
   }
 });
 
-router.post('/verify-flutterwave', async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/verify-flutterwave', validateRequest(verifyFlutterwaveSchema), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { transactionId } = req.body;
     const clerkId = req.clerkId;

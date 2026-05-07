@@ -7,7 +7,7 @@ import fs from 'fs';
 import { logger } from './utils/logger';
 import { connectDB } from './utils/database';
 import { errorHandling } from './middleware/errorHandler';
-import { globalRateLimiter } from './middleware/rateLimiter';
+import { globalRateLimiter, webhookRateLimiter } from './middleware/rateLimiter';
 import healthRoutes from './routes/healthRoutes';
 import userRoutes from './routes/userRoutes';
 import meetingRoutes from './routes/meetingRoutes';
@@ -59,11 +59,13 @@ app.use('/api', globalRateLimiter);
 // Webhooks need raw body - mounting before generic parsers
 app.post(
   '/webhooks/flutterwave',
+  webhookRateLimiter,
   express.raw({ type: 'application/json' }),
   flutterwaveWebhookHandler
 );
 app.post(
   '/webhooks/paddle',
+  webhookRateLimiter,
   express.raw({ type: 'application/json' }),
   paddleWebhookHandler
 );

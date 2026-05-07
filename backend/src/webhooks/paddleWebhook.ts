@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { paddle } from '../services/paymentService';
 import { User } from '../models/User';
+import { WebhookEvent } from '../models/WebhookEvent';
 import { logger } from '../utils/logger';
 
 // We need to extend the Request type or assume req.rawBody exists if we use a custom middleware
@@ -41,6 +42,23 @@ export const paddleWebhookHandler = async (req: RawRequest, res: Response): Prom
     // Parse the event
     const event = JSON.parse(bodyString);
     logger.info({ eventType: event.event_type }, 'Paddle Webhook received');
+
+    // Idempotency: check if we've already processed this event
+    const eventId = event.event_id || `paddle-${Date.now()}`;
+    try {
+      const existingEvent = await WebhookEvent.findOne({
+        provider: 'paddle',
+        eventId: eventId.toString(),
+      });
+
+      if (existingEvent) {
+        logger.info({ eventId, provider: 'paddle' }, 'Webhook event already processed; returning success');
+        res.status(200).send('Webhook OK');
+        return;
+      }
+    } catch (dbErr) {
+      logger.error({ error: dbErr }, 'Failed to check webhook event idempotency; proceeding with caution');
+    }
 
     const eventData = event.data;
     const customData = eventData.custom_data;
@@ -97,6 +115,18 @@ export const paddleWebhookHandler = async (req: RawRequest, res: Response): Prom
           await user.save();
         }
       }
+    }
+
+    // Mark this event as processed
+    try {
+      await WebhookEvent.create({
+        provider: 'paddle',
+        eventId: eventId.toString(),
+        eventType: event.event_type || 'unknown',
+        payload: event,
+      });
+    } catch (dbErr) {
+      logger.warn({ error: dbErr, eventId }, 'Failed to store webhook event; may cause duplicate processing on retry');
     }
 
     res.status(200).send('Webhook OK');

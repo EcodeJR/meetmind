@@ -25,7 +25,7 @@ const detectCountryFromRequest = async (req: AuthRequest): Promise<string | null
     return null;
   }
 
-  const geoRes = await axios.get(`http://ip-api.com/json/${normalizedIp}`);
+  const geoRes = await axios.get(`https://ip-api.com/json/${normalizedIp}`, { timeout: 5000 });
   if (geoRes.data && geoRes.data.countryCode) {
     return String(geoRes.data.countryCode).toUpperCase();
   }
@@ -181,7 +181,18 @@ export const deleteAccount = async (req: AuthRequest, res: Response) => {
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   try {
     const clerkId = req.clerkId;
-    const updates = req.body;
+    const allowedFields = ['profileImage', 'onboardingCompleted'] as const;
+    const updates: Record<string, unknown> = {};
+
+    for (const key of allowedFields) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        updates[key] = req.body[key];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return sendError(res, 'INVALID_UPDATE', 'No valid profile fields provided', 400);
+    }
 
     const user = await User.findOneAndUpdate(
       { clerkId },
@@ -223,7 +234,7 @@ export const updateExpoPushToken = async (req: AuthRequest, res: Response) => {
       return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
     }
 
-    logger.info({ clerkId, tokenLength: expoPushToken.length }, 'Expo push token updated');
+    logger.info({ clerkId, tokenLength: typeof expoPushToken === 'string' ? expoPushToken.length : 0 }, 'Expo push token updated');
     return sendSuccess(res, { user });
   } catch (error) {
     logger.error({ error }, 'Error updating Expo push token');

@@ -21,3 +21,10 @@ export const uploadRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+export const webhookRateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 120, // allow bursts from provider retries but mitigate abuse
+  standardHeaders: true,
+  legacyHeaders: false,
+});

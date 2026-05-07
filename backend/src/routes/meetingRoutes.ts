@@ -36,14 +36,26 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: Number(process.env.MAX_AUDIO_UPLOAD_MB || 50) * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype || !file.mimetype.startsWith('audio/')) {
+      cb(new Error('Only audio files are allowed'));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 // All routes require authentication
 router.use(authMiddleware);
 router.use(apiRateLimiter);
 
 router.post('/', createMeeting);
-router.post('/process', upload.single('audio'), uploadRateLimiter, processMeeting);
+router.post('/process', uploadRateLimiter, upload.single('audio'), processMeeting);
 router.get('/', getMeetings);
 router.get('/search', searchMeetings);
 router.get('/:id', getMeetingById);

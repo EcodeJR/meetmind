@@ -1,35 +1,53 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { User } from '../models/User';
+import { WebhookEvent } from '../models/WebhookEvent';
 import { logger } from '../utils/logger';
 
 export const flutterwaveWebhookHandler = async (req: Request, res: Response): Promise<void> => {
   try {
-    const signature = req.headers['verif-hash'];
+    const signatureHeader = req.headers['verif-hash'];
+    const signature = typeof signatureHeader === 'string' ? signatureHeader : '';
     if (!signature) {
       res.status(401).json({ error: 'No signature provided' });
       return;
     }
 
     const secretHash = process.env.FLUTTERWAVE_WEBHOOK_SECRET;
-    if (!secretHash || signature !== secretHash) {
-      // In Flutterwave, the verif-hash header usually matches the secret hash exactly
-      // (or we compute the HMAC depending on setup, but Flutterwave's standard says verif-hash = secret_hash)
-      // I will implement the requested HMAC just in case.
-      
-      const computedHash = crypto
-        .createHmac('sha256', secretHash || '')
-        .update(JSON.stringify(req.body))
-        .digest('hex');
-
-      if (signature !== secretHash && signature !== computedHash) {
-        res.status(401).json({ error: 'Invalid signature' });
-        return;
-      }
+    if (!secretHash) {
+      res.status(503).json({ error: 'Webhook secret not configured' });
+      return;
     }
 
-    const event = req.body;
+    // Flutterwave verif-hash must match the configured secret hash.
+    const sigBuf = Buffer.from(signature);
+    const secretBuf = Buffer.from(secretHash);
+    const validSignature = sigBuf.length === secretBuf.length && crypto.timingSafeEqual(sigBuf, secretBuf);
+    if (!validSignature) {
+      res.status(401).json({ error: 'Invalid signature' });
+      return;
+    }
+
+    const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : JSON.stringify(req.body);
+    const event = JSON.parse(rawBody);
     logger.info({ event: event.event }, 'Flutterwave Webhook received');
+
+    // Idempotency: check if we've already processed this event
+    const eventId = event.data?.id || event.id || `flw-${Date.now()}`;
+    try {
+      const existingEvent = await WebhookEvent.findOne({
+        provider: 'flutterwave',
+        eventId: eventId.toString(),
+      });
+
+      if (existingEvent) {
+        logger.info({ eventId, provider: 'flutterwave' }, 'Webhook event already processed; returning success');
+        res.status(200).send('Webhook OK');
+        return;
+      }
+    } catch (dbErr) {
+      logger.error({ error: dbErr }, 'Failed to check webhook event idempotency; proceeding with caution');
+    }
 
     // Handle events
     if (event.event === 'charge.completed' && event.data.status === 'successful') {
@@ -61,6 +79,18 @@ export const flutterwaveWebhookHandler = async (req: Request, res: Response): Pr
         user.subscription.flutterwaveSubscriptionId = event.data.id?.toString();
         await user.save();
       }
+    }
+
+    // Mark this event as processed
+    try {
+      await WebhookEvent.create({
+        provider: 'flutterwave',
+        eventId: eventId.toString(),
+        eventType: event.event || 'unknown',
+        payload: event,
+      });
+    } catch (dbErr) {
+      logger.warn({ error: dbErr, eventId }, 'Failed to store webhook event; may cause duplicate processing on retry');
     }
 
     res.status(200).send('Webhook OK');
