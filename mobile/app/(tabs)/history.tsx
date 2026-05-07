@@ -23,6 +23,7 @@ type Meeting = {
   createdAt: string;
   durationSeconds?: number;
   summary?: string;
+  status?: 'pending' | 'processing' | 'completed' | 'failed';
 };
 
 export default function HistoryScreen() {
@@ -161,9 +162,14 @@ export default function HistoryScreen() {
                   {item.summary}
                 </Text>
               ) : (
-                <Text style={styles.cardSummaryPlaceholder}>
-                  Analysis in progress...
-                </Text>
+                <View style={styles.processingRow}>
+                  <Text style={styles.cardSummaryPlaceholder}>Analysis in progress...</Text>
+                  {item.status && item.status !== 'completed' && (
+                    <View style={styles.processingBadge}>
+                      <Text style={styles.processingBadgeText}>{item.status.toUpperCase()}</Text>
+                    </View>
+                  )}
+                </View>
               )}
 
               <View style={styles.cardFooter}>
@@ -361,5 +367,21 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceGrotesk-SemiBold',
     fontSize: 8,
     color: theme.colors.onSecondaryContainer,
+  },
+  processingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  processingBadge: {
+    backgroundColor: theme.colors.primaryContainer,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  processingBadgeText: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 10,
+    color: theme.colors.primary,
   },
 });

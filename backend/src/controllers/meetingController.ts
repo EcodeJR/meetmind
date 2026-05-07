@@ -45,6 +45,7 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     // Create meeting
+    const initialStatus = rawTranscript || req.body.summary ? 'completed' : 'processing';
     const meeting = new Meeting({
       userId: user._id,
       title,
@@ -55,6 +56,9 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
       durationSeconds: duration || 0,
       audioUrl: req.body.audioUrl || '',
       tags: req.body.tags || [],
+      status: initialStatus,
+      processingStartedAt: initialStatus === 'processing' ? new Date() : undefined,
+      processingCompletedAt: initialStatus === 'completed' ? new Date() : undefined,
     });
 
     await meeting.save();
@@ -137,129 +141,102 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       sendError(res, 'USER_NOT_FOUND', 'User record not found. Please sync user first.');
       return;
     }
-
-    const canSendEmails = user.preferences?.notificationsEnabled ?? true;
-    const canSendPush = user.preferences?.pushNotificationsEnabled ?? true;
-
-    // 2. Transcribe using Cloudinary URL (NOT local file)
-    console.log(`[DEBUGGER] PHASE 2: Transcribing audio with Whisper (from Cloudinary URL)...`);
-    
-    // Send notification that transcription is starting
-    if (canSendPush && user.expoPushToken) {
-      sendTranscriptionStartedNotification(user.expoPushToken, title).catch(err => {
-        logger.warn({ error: err }, 'Failed to send transcription started notification');
-      });
-    }
-
-    let transcript;
-    try {
-      transcript = await transcribeAudio(uploadResult.url);
-    } catch (transcriptError) {
-      console.error(`[DEBUGGER] Transcription FAILED:`, transcriptError);
-      await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
-      
-      // Send failure notification and email
-      if (canSendPush && user.expoPushToken) {
-        sendMeetingFailedNotification(user.expoPushToken, title || 'Meeting', 'Transcription failed').catch(() => {});
-      }
-      if (canSendEmails) {
-        await sendMeetingFailedEmail(user.email, user.clerkId, title || 'Meeting', 'Audio transcription failed. Please try again with clearer audio.').catch(() => {});
-      }
-      
-      sendError(res, 'TRANSCRIPTION_ERROR', 'Failed to transcribe audio', 500);
-      return;
-    }
-    
-    if (!transcript || transcript.trim().length === 0) {
-      console.log(`[DEBUGGER] ERROR: Transcription returned empty result.`);
-      await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
-      
-      // Send failure notification and email
-      if (canSendPush && user.expoPushToken) {
-        sendMeetingFailedNotification(user.expoPushToken, title || 'Meeting', 'No speech detected').catch(() => {});
-      }
-      if (canSendEmails) {
-        await sendMeetingFailedEmail(user.email, user.clerkId, title || 'Meeting', 'No speech detected in the recording. Please try again with clearer audio.').catch(() => {});
-      }
-      
-      sendError(res, 'EMPTY_TRANSCRIPT', 'No speech detected in the recording. Please try again with clearer audio.');
-      return;
-    }
-    
-    console.log(`[DEBUGGER] Transcription SUCCESS. Length: ${transcript.length} characters.`);
-
-    // 3. Summarize
-    console.log(`[DEBUGGER] PHASE 3: Generating summary with AI (Claude/Gemini)...`);
-    let aiAnalysis;
-    try {
-      aiAnalysis = await summarizeTranscript(transcript);
-    } catch (summaryError) {
-      console.error(`[DEBUGGER] Summarization FAILED:`, summaryError);
-      await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
-      
-      // Send failure notification and email
-      if (canSendPush && user.expoPushToken) {
-        sendMeetingFailedNotification(user.expoPushToken, title || 'Meeting', 'AI summarization failed').catch(() => {});
-      }
-      if (canSendEmails) {
-        await sendMeetingFailedEmail(user.email, user.clerkId, title || 'Meeting', 'AI summarization service encountered an error. Please try again later.').catch(() => {});
-      }
-      
-      sendError(res, 'SUMMARIZATION_ERROR', 'Failed to generate summary', 500);
-      return;
-    }
-    console.log(`[DEBUGGER] AI Summary SUCCESS. Items: ${aiAnalysis.actionItems.length} action items, ${aiAnalysis.keyDecisions.length} decisions.`);
-
-    // Calculate file size in MB (from req.file, since local file is already deleted)
+    // Persist a processing meeting immediately so UI can show it in history
     const fileSizeMB = (req.file?.size || 0) / (1024 * 1024);
     console.log(`[DEBUGGER] File size: ${fileSizeMB} MB`);
 
-    // 4. Save to Database
-    console.log(`[DEBUGGER] PHASE 4: Saving meeting to database...`);
-    const meeting = new Meeting({
+    const processingMeeting = new Meeting({
       userId: user._id,
-      title: title || aiAnalysis.title || 'New Recording',
-      rawTranscript: transcript,
-      summary: aiAnalysis.summary,
-      actionItems: aiAnalysis.actionItems,
-      keyDecisions: aiAnalysis.keyDecisions,
+      title: title || 'New Recording',
+      rawTranscript: '',
+      summary: '',
+      actionItems: [],
+      keyDecisions: [],
       durationSeconds: Number(durationSeconds) || 0,
       audioUrl: uploadResult.url,
       audioPublicId: uploadResult.publicId,
       audioSizeMB: fileSizeMB,
+      status: 'processing',
+      processingStartedAt: new Date(),
     });
 
-    await meeting.save();
-    console.log(`[DEBUGGER] Database SUCCESS. Meeting ID: ${meeting._id}`);
-
-    // Update user meeting count and storage
+    await processingMeeting.save();
+    // Update user counters now so history reflects the new item
     user.meetingCount = (user.meetingCount || 0) + 1;
     user.storageUsedMB = (user.storageUsedMB || 0) + fileSizeMB;
     await user.save();
-    console.log(`[DEBUGGER] User storage updated. Total: ${user.storageUsedMB} MB`);
 
-    console.log(`[DEBUGGER] COMPLETE: Meeting processing successful!`);
-    
-    // Send success notification and email
-    if (canSendPush && user.expoPushToken) {
-      sendMeetingProcessedNotification(user.expoPushToken, title || 'Meeting', aiAnalysis.summary).catch(err => {
-        logger.warn({ error: err }, 'Failed to send meeting processed notification');
-      });
-    }
-    
-    // Send success email with summary
-    if (canSendEmails) {
-      await sendMeetingProcessedEmail(
-        user.email,
-        user.clerkId,
-        title || 'Meeting',
-        aiAnalysis.summary
-      ).catch(err => {
-        logger.warn({ error: err }, 'Failed to send meeting processed email');
-      });
-    }
-    
-    sendSuccess(res, { meeting }, 201);
+    // Respond quickly with the processing meeting so client can show progress
+    sendSuccess(res, { meeting: processingMeeting }, 202);
+
+    // Background processing: transcribe, summarize, update meeting
+    (async () => {
+      const canSendEmails = user.preferences?.notificationsEnabled ?? true;
+      const canSendPush = user.preferences?.pushNotificationsEnabled ?? true;
+
+      if (canSendPush && user.expoPushToken) {
+        sendTranscriptionStartedNotification(user.expoPushToken, title).catch(err => {
+          logger.warn({ error: err }, 'Failed to send transcription started notification');
+        });
+      }
+
+      try {
+        console.log(`[DEBUGGER] BACKGROUND: Transcribing meeting ${processingMeeting._id}`);
+        const transcript = await transcribeAudio(uploadResult.url);
+
+        if (!transcript || transcript.trim().length === 0) {
+          throw new Error('Empty transcript');
+        }
+
+        console.log(`[DEBUGGER] BACKGROUND: Transcription complete (${processingMeeting._id})`);
+
+        console.log(`[DEBUGGER] BACKGROUND: Summarizing meeting ${processingMeeting._id}`);
+        const aiAnalysis = await summarizeTranscript(transcript);
+
+        console.log(`[DEBUGGER] BACKGROUND: AI summary complete (${processingMeeting._id})`);
+
+        // Update meeting with final results
+        processingMeeting.rawTranscript = transcript;
+        processingMeeting.summary = aiAnalysis.summary;
+        processingMeeting.actionItems = aiAnalysis.actionItems;
+        processingMeeting.keyDecisions = aiAnalysis.keyDecisions;
+        processingMeeting.title = title || aiAnalysis.title || processingMeeting.title;
+        processingMeeting.status = 'completed';
+        processingMeeting.processingCompletedAt = new Date();
+        await processingMeeting.save();
+
+        // Send success notifications
+        if (canSendPush && user.expoPushToken) {
+          sendMeetingProcessedNotification(user.expoPushToken, processingMeeting.title || 'Meeting', aiAnalysis.summary).catch(err => {
+            logger.warn({ error: err }, 'Failed to send meeting processed notification');
+          });
+        }
+
+        if (canSendEmails) {
+          await sendMeetingProcessedEmail(user.email, user.clerkId, processingMeeting.title || 'Meeting', aiAnalysis.summary).catch(err => {
+            logger.warn({ error: err }, 'Failed to send meeting processed email');
+          });
+        }
+      } catch (bgError: any) {
+        console.error(`[DEBUGGER] BACKGROUND: Processing failed for ${processingMeeting._id}:`, bgError);
+        processingMeeting.status = 'failed';
+        processingMeeting.processingError = String(bgError.message || bgError);
+        processingMeeting.processingCompletedAt = new Date();
+        await processingMeeting.save().catch(() => {});
+
+        // Send failure notifications
+        if (user) {
+          if (user.expoPushToken) {
+            sendMeetingFailedNotification(user.expoPushToken, title || 'Meeting', bgError.message || 'Processing failed').catch(() => {});
+          }
+          if (user.preferences?.notificationsEnabled) {
+            sendMeetingFailedEmail(user.email, user.clerkId, title || 'Meeting', bgError.message || 'Processing failed').catch(() => {});
+          }
+        }
+      }
+    })();
+
+    return;
   } catch (error: any) {
     console.error(`[DEBUGGER] FATAL ERROR in processMeeting:`, error);
     logger.error({ error, clerkId }, 'Error processing meeting');

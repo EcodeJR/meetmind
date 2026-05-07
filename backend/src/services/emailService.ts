@@ -3,25 +3,33 @@ import { logger } from '../utils/logger';
 
 // Initialize nodemailer transporter with Gmail - try port 587 (TLS) if 465 (SSL) fails
 let transporter: nodemailer.Transporter | null = null;
+let fallbackTransporter: nodemailer.Transporter | null = null;
 
-const createTransporter = () => {
-  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+const gmailUser = process.env.GMAIL_USER?.trim();
+const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, '');
+
+const createTransporter = (port: number) => {
+  if (!gmailUser || !gmailAppPassword) {
     logger.warn('Gmail credentials not configured (GMAIL_USER or GMAIL_APP_PASSWORD missing)');
     return null;
   }
 
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587, // Use TLS (port 587) instead of SSL (port 465) for Railway compatibility
-    secure: false,
+    port,
+    secure: port === 465,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD, // Must be Gmail App Password with 2FA, not account password
+      user: gmailUser,
+      pass: gmailAppPassword,
     },
   });
 };
 
-transporter = createTransporter();
+transporter = createTransporter(587);
+fallbackTransporter = createTransporter(465);
 
 // Verify connection at startup with timeout
 if (transporter) {
@@ -34,6 +42,20 @@ if (transporter) {
       logger.info(
         'TROUBLESHOOTING: Verify GMAIL_USER and GMAIL_APP_PASSWORD are set correctly on Railway. Gmail requires App Password (not account password) if 2FA is enabled.'
       );
+
+      if (fallbackTransporter) {
+        fallbackTransporter.verify((fallbackError, _fallbackSuccess) => {
+          if (fallbackError) {
+            logger.error(
+              { error: JSON.stringify(fallbackError) },
+              `Fallback Gmail verification also failed (code: ${(fallbackError as any).code}, errno: ${(fallbackError as any).errno}).`
+            );
+          } else {
+            logger.info('Fallback Gmail transporter verified on port 465');
+            transporter = fallbackTransporter;
+          }
+        });
+      }
     } else {
       logger.info('Email service verified and ready to send emails');
     }
@@ -51,7 +73,7 @@ export const sendWelcomeEmail = async (email: string, firstName: string): Promis
     }
 
     const mailOptions = {
-      from: process.env.GMAIL_USER,
+      from: gmailUser,
       to: email,
       subject: 'Welcome to Memovoice - Professional Intelligence Platform',
       html: `
@@ -109,7 +131,7 @@ export const sendMeetingStartedEmail = async (
     }
 
     const mailOptions = {
-      from: process.env.GMAIL_USER,
+      from: gmailUser,
       to: email,
       subject: 'Meeting Recording Started - Memovoice',
       html: `
@@ -156,7 +178,7 @@ export const sendMeetingProcessedEmail = async (
     }
 
     const mailOptions = {
-      from: process.env.GMAIL_USER,
+      from: gmailUser,
       to: email,
       subject: `Meeting Summary Ready - ${meetingTitle}`,
       html: `
@@ -209,7 +231,7 @@ export const sendMeetingFailedEmail = async (
     }
 
     const mailOptions = {
-      from: process.env.GMAIL_USER,
+      from: gmailUser,
       to: email,
       subject: `Meeting Processing Failed - ${meetingTitle}`,
       html: `
@@ -260,7 +282,7 @@ export const sendSubscriptionUpgradeEmail = async (
     }
 
     const mailOptions = {
-      from: process.env.GMAIL_USER,
+      from: gmailUser,
       to: email,
       subject: 'Welcome to Memovoice Pro - Premium Features Unlocked',
       html: `

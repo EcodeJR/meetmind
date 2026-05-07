@@ -15,16 +15,18 @@ import { useUser } from '@clerk/clerk-expo';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Audio } from 'expo-av';
-import * as Notifications from 'expo-notifications';
 import Animated, {
   useAnimatedStyle,
   withRepeat,
   withTiming,
   withSequence,
   useSharedValue,
+  withDelay,
   interpolate,
   Extrapolate
 } from 'react-native-reanimated';
+
+const loadNotifications = async () => import('expo-notifications');
 
 
 
@@ -35,17 +37,41 @@ export default function HomeScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [processingStage, setProcessingStage] = useState<'finalizing' | 'uploading' | 'transcribing' | 'summarizing' | 'complete' | 'failed' | null>(null);
+  const [processingElapsed, setProcessingElapsed] = useState(0);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [debugStatus, setDebugStatus] = useState('');
   const userInitial = (user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress?.charAt(0) || '?').toUpperCase();
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const processingRef = useRef(false);
   const pulse = useSharedValue(1);
+  const spin = useSharedValue(0);
+  const floatY = useSharedValue(0);
+  const ringPulse = useSharedValue(1);
 
   useEffect(() => {
+    spin.value = withRepeat(withTiming(1, { duration: 1800 }), -1, false);
+    floatY.value = withRepeat(
+      withSequence(
+        withTiming(-6, { duration: 1200 }),
+        withTiming(0, { duration: 1200 })
+      ),
+      -1,
+      true
+    );
+    ringPulse.value = withRepeat(
+      withSequence(
+        withTiming(1.15, { duration: 900 }),
+        withDelay(120, withTiming(1, { duration: 900 }))
+      ),
+      -1,
+      true
+    );
+
     return () => {
-      if (recording) {
-        // Use a self-invoking async function or just ignore catch
+      if (recording && !processingRef.current) {
+        // Only stop the microphone if the user is still actively recording.
         recording.stopAndUnloadAsync().catch(() => {
           // Ignore errors during cleanup unloads
         });
@@ -79,6 +105,19 @@ export default function HomeScreen() {
     };
   }, [isRecording]);
 
+  useEffect(() => {
+    if (!loading) {
+      setProcessingElapsed(0);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setProcessingElapsed(prev => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [loading]);
+
   const recordButtonStyle = useAnimatedStyle(() => {
     return {
       transform: [{ scale: pulse.value }],
@@ -86,10 +125,21 @@ export default function HomeScreen() {
     };
   });
 
+  const processingOrbStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateY: floatY.value },
+        { scale: ringPulse.value },
+        { rotate: `${spin.value * 360}deg` },
+      ],
+    };
+  });
+
   const [volumes, setVolumes] = useState<number[]>(new Array(12).fill(0));
 
   const sendLocalNotification = async (title: string, body: string) => {
     try {
+      const Notifications = await loadNotifications();
       await Notifications.scheduleNotificationAsync({
         content: {
           title,
@@ -173,8 +223,10 @@ export default function HomeScreen() {
     if (!recording) return;
 
     try {
+      processingRef.current = true;
       setIsRecording(false);
       setLoading(true);
+      setProcessingStage('finalizing');
       setDebugStatus('Finalizing audio stream...');
 
       await recording.stopAndUnloadAsync();
@@ -186,6 +238,7 @@ export default function HomeScreen() {
       }
 
       setDebugStatus('Preparing for AI analysis...');
+      setProcessingStage('transcribing');
       sendLocalNotification('Transcription Started', 'Your meeting is being transcribed now');
 
       // Use FormData to upload the file
@@ -200,6 +253,7 @@ export default function HomeScreen() {
       formData.append('durationSeconds', duration.toString());
 
       setDebugStatus('UPLOADING TO INTELLIGENCE ENGINE...');
+      setProcessingStage('uploading');
 
       const response = await apiClient.post('/meetings/process', formData, {
         headers: {
@@ -208,6 +262,7 @@ export default function HomeScreen() {
       });
 
       console.log('[DEBUG] Server response:', response.data);
+      setProcessingStage('summarizing');
       setDebugStatus('ANALYSIS COMPLETE');
 
       const summaryPreview = response.data?.data?.meeting?.summary
@@ -219,22 +274,65 @@ export default function HomeScreen() {
       setMeetingTitle('');
       setDuration(0);
       setRecording(null);
+      setProcessingStage('complete');
     } catch (error: any) {
       console.error('[DEBUG] Processing failed:', error);
+      setProcessingStage('failed');
       setDebugStatus('ANALYSIS FAILED');
       sendLocalNotification('Processing Failed', error.response?.data?.error?.message || 'The AI pipeline encountered an issue.');
       Alert.alert('Analysis Failed', error.response?.data?.error?.message || 'The AI pipeline encountered an issue.');
     } finally {
       setLoading(false);
       setDebugStatus('');
+      processingRef.current = false;
+      setTimeout(() => setProcessingStage(null), 1200);
     }
   };
+
+  const processingSteps = [
+    {
+      key: 'finalizing',
+      title: 'Locking the recording',
+      detail: 'Saving the audio safely before analysis begins.',
+    },
+    {
+      key: 'uploading',
+      title: 'Uploading to the intelligence engine',
+      detail: 'Sending the audio to Cloudinary so it survives navigation and network hiccups.',
+    },
+    {
+      key: 'transcribing',
+      title: 'Transcribing the meeting',
+      detail: 'Whisper is converting speech into text.',
+    },
+    {
+      key: 'summarizing',
+      title: 'Generating the summary',
+      detail: 'Claude is organizing the transcript into a clean brief.',
+    },
+  ] as const;
+
+  const activeStepIndex = Math.max(
+    0,
+    processingSteps.findIndex(step => step.key === processingStage)
+  );
+  const activeStep = processingSteps[activeStepIndex] || processingSteps[0];
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
+
+  const processingWaves = Array.from({ length: 14 }, (_, index) => {
+    const phase = processingElapsed * 0.7 + index * 0.45;
+    const intensity = (Math.sin(phase) + 1) / 2;
+    return {
+      key: index,
+      height: 6 + intensity * 16,
+      opacity: 0.35 + intensity * 0.6,
+    };
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -313,6 +411,72 @@ export default function HomeScreen() {
             )}
           </View>
         </View>
+
+        {loading && (
+          <View style={styles.processingOverlay} pointerEvents="auto">
+            <View style={styles.processingCard}>
+              <View style={styles.processingHeader}>
+                <Animated.View style={[styles.processingOrb, processingOrbStyle]}>
+                  <View style={styles.processingCore} />
+                </Animated.View>
+                <View style={styles.processingHeaderCopy}>
+                  <Text style={styles.processingTitle}>Processing in progress</Text>
+                  <Text style={styles.processingSubtitle}>
+                    Keep this screen open until the summary is ready. The audio is already stored remotely.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.stepList}>
+                {processingSteps.map((step, index) => {
+                  const isActive = index === activeStepIndex;
+                  const isDone = index < activeStepIndex;
+                  return (
+                    <View key={step.key} style={styles.stepRow}>
+                      <View style={[styles.stepDot, isDone && styles.stepDotDone, isActive && styles.stepDotActive]}>
+                        <Text style={styles.stepDotText}>{isDone ? '✓' : index + 1}</Text>
+                      </View>
+                      <View style={styles.stepCopy}>
+                        <Text style={[styles.stepTitle, isActive && styles.stepTitleActive]}>{step.title}</Text>
+                        <Text style={styles.stepDetail}>{step.detail}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.progressBarFill, { width: `${Math.min(((activeStepIndex + 1) / processingSteps.length) * 100, 100)}%` }]} />
+              </View>
+
+              <View style={styles.processingWaveWrap}>
+                {processingWaves.map(wave => (
+                  <View
+                    key={wave.key}
+                    style={[
+                      styles.processingWaveBar,
+                      {
+                        height: wave.height,
+                        opacity: wave.opacity,
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
+
+              <View style={styles.tipBox}>
+                <Text style={styles.tipLabel}>What to do now</Text>
+                <Text style={styles.tipText}>
+                  You can switch tabs after upload starts, but avoid force-closing the app while the summary is being generated.
+                </Text>
+              </View>
+
+              <Text style={styles.processingStatus}>{activeStep.title}</Text>
+              <Text style={styles.processingTimer}>Elapsed {formatTime(processingElapsed)}</Text>
+              <Text style={styles.processingHint}>{debugStatus || activeStep.detail}</Text>
+            </View>
+          </View>
+        )}
 
         <View style={styles.footer}>
           <View style={styles.waveformContainer}>
@@ -511,6 +675,180 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: theme.colors.secondary,
     letterSpacing: 1,
+  },
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(7, 10, 20, 0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.md,
+    zIndex: 100,
+  },
+  processingCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 24,
+    backgroundColor: '#0d1222',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
+    gap: theme.spacing.sm,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 18,
+    maxHeight: '88%',
+  },
+  processingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  processingOrb: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  processingCore: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: theme.colors.primary,
+  },
+  processingHeaderCopy: {
+    flex: 1,
+  },
+  processingTitle: {
+    fontFamily: 'Manrope-Bold',
+    fontSize: 20,
+    color: theme.colors.onPrimary,
+  },
+  processingSubtitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    lineHeight: 17,
+    color: 'rgba(255,255,255,0.76)',
+    marginTop: 2,
+  },
+  stepList: {
+    gap: 10,
+    marginTop: 4,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  stepDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  stepDotDone: {
+    backgroundColor: '#1f8f5f',
+    borderColor: '#1f8f5f',
+  },
+  stepDotActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  stepDotText: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 10,
+    color: '#fff',
+  },
+  stepCopy: {
+    flex: 1,
+  },
+  stepTitle: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.84)',
+  },
+  stepTitleActive: {
+    color: theme.colors.onPrimary,
+  },
+  stepDetail: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.58)',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  tipBox: {
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 4,
+  },
+  tipLabel: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: theme.colors.secondary,
+  },
+  tipText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 11,
+    lineHeight: 15,
+    color: 'rgba(255,255,255,0.74)',
+  },
+  progressBarTrack: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: theme.colors.accent,
+  },
+  processingWaveWrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 4,
+    minHeight: 22,
+  },
+  processingWaveBar: {
+    width: 4,
+    borderRadius: 3,
+    backgroundColor: theme.colors.primary,
+  },
+  processingStatus: {
+    fontFamily: 'Manrope-Bold',
+    fontSize: 14,
+    color: theme.colors.onPrimary,
+    marginTop: 2,
+  },
+  processingTimer: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 11,
+    letterSpacing: 0.5,
+    color: theme.colors.secondary,
+    marginTop: -2,
+  },
+  processingHint: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 11,
+    lineHeight: 15,
+    color: 'rgba(255,255,255,0.7)',
   },
   footer: {
     alignItems: 'center',

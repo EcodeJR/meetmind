@@ -59,7 +59,9 @@ function RootLayoutNav() {
 
   // Configure Android notification channel on app start
   useEffect(() => {
-    configureNotifications();
+    configureNotifications().catch(error => {
+      console.warn('[PUSH] Notification channel setup skipped or failed:', error);
+    });
   }, []);
   // Debug logging
   useEffect(() => {

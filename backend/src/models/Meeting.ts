@@ -15,6 +15,10 @@ export interface IMeeting extends Document {
   audioUrl: string;
   audioPublicId?: string;
   audioSizeMB?: number;
+  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  processingStartedAt?: Date;
+  processingCompletedAt?: Date;
+  processingError?: string;
   language: string;
   tags: string[];
   createdAt: Date;
@@ -79,6 +83,21 @@ const meetingSchema = new Schema<IMeeting>(
     tags: {
       type: [String],
       default: [],
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'processing', 'completed', 'failed'],
+      default: 'processing',
+      index: true,
+    },
+    processingStartedAt: {
+      type: Date,
+    },
+    processingCompletedAt: {
+      type: Date,
+    },
+    processingError: {
+      type: String,
     },
   },
   {
