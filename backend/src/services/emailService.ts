@@ -1,19 +1,28 @@
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { logger } from '../utils/logger';
 
 // Initialize nodemailer transporter with Gmail - try port 587 (TLS) if 465 (SSL) fails
 let transporter: nodemailer.Transporter | null = null;
 let fallbackTransporter: nodemailer.Transporter | null = null;
+let resendClient: Resend | null = null;
 
 const gmailUser = process.env.GMAIL_USER?.trim();
 const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, '');
+const resendApiKey = process.env.RESEND_API_KEY?.trim();
 
 // Log what we're reading at startup for debugging
 logger.info({
   gmailUserSet: !!gmailUser,
   gmailUserValue: gmailUser ? `${gmailUser.substring(0, 3)}...` : 'NOT SET',
   gmailAppPasswordSet: !!gmailAppPassword,
+  resendApiKeySet: !!resendApiKey,
 }, 'Email service startup - checking credentials');
+
+// Initialize Resend client if API key is provided
+if (resendApiKey) {
+  resendClient = new Resend(resendApiKey);
+}
 
 const createTransporter = (port: number) => {
   if (!gmailUser || !gmailAppPassword) {
@@ -70,17 +79,55 @@ if (transporter) {
 }
 
 /**
- * Send email with automatic fallback retry
+ * Send email via Resend API
+ */
+const sendEmailWithResend = async (
+  mailOptions: nodemailer.SendMailOptions
+): Promise<{ success: boolean; messageId?: string }> => {
+  if (!resendClient) {
+    logger.warn('Resend client not initialized (RESEND_API_KEY not set)');
+    return { success: false };
+  }
+
+  try {
+    const response = await resendClient.emails.send({
+      from: mailOptions.from as string,
+      to: mailOptions.to as string,
+      subject: mailOptions.subject as string,
+      html: mailOptions.html as string,
+    });
+
+    if (response.error) {
+      logger.error(
+        { error: response.error },
+        'Resend API returned error'
+      );
+      return { success: false };
+    }
+
+    logger.info({ messageId: response.data?.id }, 'Email sent via Resend API (fallback)');
+    return { success: true, messageId: response.data?.id };
+  } catch (error: any) {
+    logger.error(
+      { error: error.message },
+      'Resend API request failed'
+    );
+    return { success: false };
+  }
+};
+
+/**
+ * Send email with automatic fallback retry (Gmail SMTP → Resend API)
  */
 const sendEmailWithRetry = async (
   mailOptions: nodemailer.SendMailOptions
 ): Promise<{ success: boolean; messageId?: string }> => {
-  if (!transporter && !fallbackTransporter) {
-    logger.warn('No email transporters available');
+  if (!transporter && !fallbackTransporter && !resendClient) {
+    logger.warn('No email transporters available (Gmail SMTP and Resend API not configured)');
     return { success: false };
   }
 
-  // Try primary transporter
+  // Try primary transporter (Gmail SMTP port 587)
   if (transporter) {
     try {
       const info = await transporter.sendMail(mailOptions);
@@ -91,21 +138,23 @@ const sendEmailWithRetry = async (
         'Primary Gmail transporter failed; attempting fallback on port 465'
       );
 
-      // Try fallback transporter if primary failed
+      // Try fallback transporter (Gmail SMTP port 465)
       if (fallbackTransporter && fallbackTransporter !== transporter) {
         try {
           const info = await fallbackTransporter.sendMail(mailOptions);
-          logger.info('Email sent via fallback transporter (port 465)');
+          logger.info('Email sent via fallback Gmail transporter (port 465)');
           return { success: true, messageId: info.messageId };
         } catch (fallbackError: any) {
-          logger.error(
+          logger.warn(
             { primaryError: primaryError.message, fallbackError: fallbackError.message },
-            'Both Gmail transporters failed'
+            'Both Gmail transporters failed; attempting Resend API'
           );
-          return { success: false };
+          // Try Resend API as final fallback
+          return await sendEmailWithResend(mailOptions);
         }
       }
-      return { success: false };
+      // If no fallback transporter, try Resend directly
+      return await sendEmailWithResend(mailOptions);
     }
   }
 
@@ -115,12 +164,16 @@ const sendEmailWithRetry = async (
       const info = await fallbackTransporter.sendMail(mailOptions);
       return { success: true, messageId: info.messageId };
     } catch (error: any) {
-      logger.error({ error: error.message }, 'Fallback Gmail transporter failed');
-      return { success: false };
+      logger.warn(
+        { error: error.message },
+        'Fallback Gmail transporter failed; attempting Resend API'
+      );
+      return await sendEmailWithResend(mailOptions);
     }
   }
 
-  return { success: false };
+  // If no SMTP transporters, try Resend API
+  return await sendEmailWithResend(mailOptions);
 };
 
 /**
