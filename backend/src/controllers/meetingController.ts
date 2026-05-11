@@ -348,7 +348,7 @@ export const updateMeeting = async (req: AuthRequest, res: Response): Promise<vo
     const meeting = await Meeting.findOneAndUpdate(
       { _id: id, userId: user._id },
       { title, tags, summary },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!meeting) {

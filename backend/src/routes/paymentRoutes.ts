@@ -43,9 +43,13 @@ const detectCountryFromRequest = async (req: AuthRequest): Promise<string | null
     return null;
   }
 
-  const geoRes = await axios.get(`https://ip-api.com/json/${normalizedIp}`, { timeout: 5000 });
-  if (geoRes.data && geoRes.data.countryCode) {
-    return String(geoRes.data.countryCode).toUpperCase();
+  try {
+    const geoRes = await axios.get(`http://ip-api.com/json/${normalizedIp}`, { timeout: 5000 });
+    if (geoRes.data && geoRes.data.countryCode) {
+      return String(geoRes.data.countryCode).toUpperCase();
+    }
+  } catch (error) {
+    logger.warn({ error }, 'HTTP IP-API failed; skipping country detection');
   }
 
   return null;

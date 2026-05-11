@@ -15,9 +15,17 @@ export const authMiddleware = async (
 ): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
+    const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+    const clerkIssuer = process.env.CLERK_ISSUER ?? null;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       sendError(res, 'MISSING_AUTH', 'Missing or invalid authorization header', 401);
+      return;
+    }
+
+    if (!clerkSecretKey) {
+      logger.error('CLERK_SECRET_KEY is not configured');
+      sendError(res, 'AUTH_ERROR', 'Authentication is not configured', 500);
       return;
     }
 
@@ -26,8 +34,8 @@ export const authMiddleware = async (
     // Verify token with Clerk SDK
     // The SDK automatically validates issuer, audience, and signature using Clerk's public keys
     const decoded = await verifyToken(token, {
-      secretKey: process.env.CLERK_SECRET_KEY,
-      issuer: process.env.CLERK_ISSUER || null,
+      secretKey: clerkSecretKey,
+      issuer: clerkIssuer,
     });
 
     if (!decoded || !decoded.sub) {

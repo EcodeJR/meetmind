@@ -5,9 +5,11 @@ import { Paddle, Environment } from '@paddle/paddle-node-sdk';
 import { logger } from '../utils/logger';
 
 // Initialize SDKs
+const flutterwavePublicKey = process.env.FLUTTERWAVE_PUBLIC_KEY?.trim();
+const flutterwaveSecretKey = process.env.FLUTTERWAVE_SECRET_KEY?.trim();
 const flw = new Flutterwave(
-  process.env.FLUTTERWAVE_PUBLIC_KEY as string,
-  process.env.FLUTTERWAVE_SECRET_KEY as string
+  flutterwavePublicKey as string,
+  flutterwaveSecretKey as string
 );
 
 const paddleApiKey = process.env.PADDLE_API_KEY;
@@ -66,7 +68,7 @@ export const initializeFlutterwavePayment = async (
 
     // Some versions of the flutterwave SDK don't expose a `Payment` helper that
     // creates hosted payment links. Use the REST API as a reliable fallback.
-    const secret = process.env.FLUTTERWAVE_SECRET_KEY;
+    const secret = flutterwaveSecretKey;
     if (!secret) throw new Error('Missing FLUTTERWAVE_SECRET_KEY');
 
     const resp = await axios.post(

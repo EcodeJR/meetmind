@@ -63,7 +63,11 @@ export default function MeetingDetailScreen() {
   }, [id]);
 
   const isProcessing = Boolean(
-    meeting && (meeting.status === 'pending' || meeting.status === 'processing' || (!meeting.rawTranscript || !meeting.summary))
+    meeting && (
+      meeting.status === 'pending' ||
+      meeting.status === 'processing' ||
+      (meeting.status !== 'completed' && meeting.status !== 'failed' && (!meeting.rawTranscript || !meeting.summary))
+    )
   );
 
   useEffect(() => {

@@ -63,15 +63,64 @@ if (transporter) {
 }
 
 /**
+ * Send email with automatic fallback retry
+ */
+const sendEmailWithRetry = async (
+  mailOptions: nodemailer.SendMailOptions
+): Promise<{ success: boolean; messageId?: string }> => {
+  if (!transporter && !fallbackTransporter) {
+    logger.warn('No email transporters available');
+    return { success: false };
+  }
+
+  // Try primary transporter
+  if (transporter) {
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      return { success: true, messageId: info.messageId };
+    } catch (primaryError: any) {
+      logger.warn(
+        { error: primaryError.message, code: primaryError.code },
+        'Primary Gmail transporter failed; attempting fallback on port 465'
+      );
+
+      // Try fallback transporter if primary failed
+      if (fallbackTransporter && fallbackTransporter !== transporter) {
+        try {
+          const info = await fallbackTransporter.sendMail(mailOptions);
+          logger.info('Email sent via fallback transporter (port 465)');
+          return { success: true, messageId: info.messageId };
+        } catch (fallbackError: any) {
+          logger.error(
+            { primaryError: primaryError.message, fallbackError: fallbackError.message },
+            'Both Gmail transporters failed'
+          );
+          return { success: false };
+        }
+      }
+      return { success: false };
+    }
+  }
+
+  // If primary is null, try fallback directly
+  if (fallbackTransporter) {
+    try {
+      const info = await fallbackTransporter.sendMail(mailOptions);
+      return { success: true, messageId: info.messageId };
+    } catch (error: any) {
+      logger.error({ error: error.message }, 'Fallback Gmail transporter failed');
+      return { success: false };
+    }
+  }
+
+  return { success: false };
+};
+
+/**
  * Send welcome/sign-up email
  */
 export const sendWelcomeEmail = async (email: string, firstName: string): Promise<boolean> => {
   try {
-    if (!transporter) {
-      logger.warn('Email service not initialized - skipping welcome email');
-      return false;
-    }
-
     const mailOptions = {
       from: gmailUser,
       to: email,
@@ -107,9 +156,12 @@ export const sendWelcomeEmail = async (email: string, firstName: string): Promis
       `,
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    logger.info({ email, messageId: info.messageId }, 'Welcome email sent successfully');
-    return true;
+    const result = await sendEmailWithRetry(mailOptions);
+    if (result.success) {
+      logger.info({ email, messageId: result.messageId }, 'Welcome email sent successfully');
+      return true;
+    }
+    return false;
   } catch (error) {
     logger.error({ error, email }, 'Failed to send welcome email');
     return false;
@@ -125,11 +177,6 @@ export const sendMeetingStartedEmail = async (
   meetingTitle?: string
 ): Promise<boolean> => {
   try {
-    if (!transporter) {
-      logger.warn('Email service not initialized - skipping meeting started email');
-      return false;
-    }
-
     const mailOptions = {
       from: gmailUser,
       to: email,
@@ -153,9 +200,12 @@ export const sendMeetingStartedEmail = async (
       `,
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    logger.info({ email, messageId: info.messageId }, 'Meeting started email sent');
-    return true;
+    const result = await sendEmailWithRetry(mailOptions);
+    if (result.success) {
+      logger.info({ email, messageId: result.messageId }, 'Meeting started email sent');
+      return true;
+    }
+    return false;
   } catch (error) {
     logger.error({ error, email }, 'Failed to send meeting started email');
     return false;
@@ -172,11 +222,6 @@ export const sendMeetingProcessedEmail = async (
   summary: string
 ): Promise<boolean> => {
   try {
-    if (!transporter) {
-      logger.warn('Email service not initialized - skipping meeting processed email');
-      return false;
-    }
-
     const mailOptions = {
       from: gmailUser,
       to: email,
@@ -206,9 +251,12 @@ export const sendMeetingProcessedEmail = async (
       `,
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    logger.info({ email, messageId: info.messageId }, 'Meeting processed email sent');
-    return true;
+    const result = await sendEmailWithRetry(mailOptions);
+    if (result.success) {
+      logger.info({ email, messageId: result.messageId }, 'Meeting processed email sent');
+      return true;
+    }
+    return false;
   } catch (error) {
     logger.error({ error, email }, 'Failed to send meeting processed email');
     return false;
@@ -225,11 +273,6 @@ export const sendMeetingFailedEmail = async (
   errorMessage: string
 ): Promise<boolean> => {
   try {
-    if (!transporter) {
-      logger.warn('Email service not initialized - skipping meeting failed email');
-      return false;
-    }
-
     const mailOptions = {
       from: gmailUser,
       to: email,
@@ -259,9 +302,12 @@ export const sendMeetingFailedEmail = async (
       `,
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    logger.info({ email, messageId: info.messageId }, 'Meeting failed email sent');
-    return true;
+    const result = await sendEmailWithRetry(mailOptions);
+    if (result.success) {
+      logger.info({ email, messageId: result.messageId }, 'Meeting failed email sent');
+      return true;
+    }
+    return false;
   } catch (error) {
     logger.error({ error, email }, 'Failed to send meeting failed email');
     return false;
@@ -276,11 +322,6 @@ export const sendSubscriptionUpgradeEmail = async (
   userName: string
 ): Promise<boolean> => {
   try {
-    if (!transporter) {
-      logger.warn('Email service not initialized - skipping subscription email');
-      return false;
-    }
-
     const mailOptions = {
       from: gmailUser,
       to: email,
@@ -311,9 +352,12 @@ export const sendSubscriptionUpgradeEmail = async (
       `,
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    logger.info({ email, messageId: info.messageId }, 'Subscription upgrade email sent');
-    return true;
+    const result = await sendEmailWithRetry(mailOptions);
+    if (result.success) {
+      logger.info({ email, messageId: result.messageId }, 'Subscription upgrade email sent');
+      return true;
+    }
+    return false;
   } catch (error) {
     logger.error({ error, email }, 'Failed to send subscription upgrade email');
     return false;
