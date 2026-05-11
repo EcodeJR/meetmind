@@ -51,6 +51,7 @@ function RootLayoutNav() {
   const router = useRouter();
   const hasSynced = useRef(false);
   const hasPromptedForOfflineSync = useRef(false);
+  const hasRedirectedToOnboarding = useRef(false);
 
   const [fontsLoaded, fontError] = useFonts({
     'Manrope-Bold': Manrope_700Bold,
@@ -90,6 +91,12 @@ function RootLayoutNav() {
     // Wait until Clerk SDK finished initializing before performing route redirects.
     if (!isAuthLoaded) return;
 
+    // Don't redirect if user is actively recording
+    if ((global as any).__meetmindIsRecording) {
+      console.log('[RootLayout] User is recording, skipping auth redirect');
+      return;
+    }
+
     const inAuthGroup = segments[0] === '(auth)';
 
     console.log('[RootLayout] Auth check:', { isSignedIn, inAuthGroup, segments });
@@ -117,7 +124,8 @@ function RootLayoutNav() {
     apiClient.post('/users/sync', { email })
       .then((response: any) => {
         const userData = response.data.data?.user || response.data.user;
-        if (userData && !userData.onboardingCompleted) {
+        if (userData && !userData.onboardingCompleted && !hasRedirectedToOnboarding.current) {
+          hasRedirectedToOnboarding.current = true;
           router.replace('/onboarding');
         }
       })

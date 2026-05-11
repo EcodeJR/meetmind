@@ -14,3 +14,4 @@ yarn-error.log*
 *.swo
 *~
 uploads/
+testEmail.ts

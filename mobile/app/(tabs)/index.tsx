@@ -48,6 +48,11 @@ export default function HomeScreen() {
   const floatY = useSharedValue(0);
   const ringPulse = useSharedValue(1);
 
+  // Expose recording state globally so root layout can prevent redirect during recording
+  useEffect(() => {
+    (global as any).__memovoiceIsRecording = isRecording;
+  }, [isRecording]);
+
   useEffect(() => {
     spin.value = withRepeat(withTiming(1, { duration: 1800 }), -1, false);
     floatY.value = withRepeat(
@@ -153,6 +158,9 @@ export default function HomeScreen() {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
       });
 
       setDebugStatus('Initializing high-fidelity recorder...');
@@ -195,6 +203,7 @@ export default function HomeScreen() {
       setIsRecording(true);
       setDebugStatus('RECORDING ACTIVE');
       sendLocalNotification('Recording Started', meetingTitle || 'Your meeting is now being recorded');
+      await sendLocalNotification('🎙️ Recording in progress', 'Tap to return to Memovoice');
     } catch (err) {
       console.error('Failed to start recording', err);
       Alert.alert('Hardware Error', 'Could not initialize the microphone.');
@@ -212,6 +221,10 @@ export default function HomeScreen() {
       setDebugStatus('Finalizing audio stream...');
 
       await recording.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        staysActiveInBackground: false,
+      });
       const uri = recording.getURI();
       console.log('[DEBUG] Recording stored at:', uri);
 

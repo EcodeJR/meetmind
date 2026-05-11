@@ -24,6 +24,11 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.memovoice.app",
+      "permissions": [
+        "RECORD_AUDIO",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -51,6 +56,12 @@
         "expo-audio",
         {
           "microphonePermission": "Allow Memovoice to access your microphone for AI session recording."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow Memovoice to record background audio during meetings."
         }
       ],
       "expo-asset",
