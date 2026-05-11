@@ -8,6 +8,13 @@ let fallbackTransporter: nodemailer.Transporter | null = null;
 const gmailUser = process.env.GMAIL_USER?.trim();
 const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, '');
 
+// Log what we're reading at startup for debugging
+logger.info({
+  gmailUserSet: !!gmailUser,
+  gmailUserValue: gmailUser ? `${gmailUser.substring(0, 3)}...` : 'NOT SET',
+  gmailAppPasswordSet: !!gmailAppPassword,
+}, 'Email service startup - checking credentials');
+
 const createTransporter = (port: number) => {
   if (!gmailUser || !gmailAppPassword) {
     logger.warn('Gmail credentials not configured (GMAIL_USER or GMAIL_APP_PASSWORD missing)');
