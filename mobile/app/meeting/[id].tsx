@@ -27,9 +27,34 @@ type Meeting = {
   actionItems?: string[];
   keyDecisions?: string[];
   durationSeconds?: number;
+  processingStartedAt?: string;
+  processingCompletedAt?: string;
   tags?: string[];
   status?: 'pending' | 'processing' | 'completed' | 'failed';
   processingError?: string;
+};
+
+const formatDateTime = (value: Date) =>
+  value.toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+const formatDuration = (totalSeconds: number) => {
+  const safeSeconds = Math.max(0, Math.round(totalSeconds || 0));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+
+  const parts: string[] = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
+  return parts.join(' ');
 };
 
 export default function MeetingDetailScreen() {
@@ -202,6 +227,10 @@ export default function MeetingDetailScreen() {
     month: 'long',
     day: 'numeric',
   });
+  const meetingStart = new Date(meeting.createdAt);
+  const meetingDurationSeconds = meeting.durationSeconds ?? 0;
+  const meetingEnd = new Date(meetingStart.getTime() + meetingDurationSeconds * 1000);
+  const hasDuration = meetingDurationSeconds > 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -240,6 +269,27 @@ export default function MeetingDetailScreen() {
                 <Ionicons name="share-outline" size={20} color={theme.colors.secondary} />
                 <Text style={styles.actionButtonText}>Export Intelligence</Text>
               </TouchableOpacity>
+            </View>
+
+            <View style={styles.meetingMetaCard}>
+              <View style={styles.meetingMetaItem}>
+                <Text style={styles.meetingMetaLabel}>START TIME</Text>
+                <Text style={styles.meetingMetaValue}>{formatDateTime(meetingStart)}</Text>
+              </View>
+              <View style={styles.meetingMetaDivider} />
+              <View style={styles.meetingMetaItem}>
+                <Text style={styles.meetingMetaLabel}>END TIME</Text>
+                <Text style={styles.meetingMetaValue}>
+                  {hasDuration ? formatDateTime(meetingEnd) : 'In progress'}
+                </Text>
+              </View>
+              <View style={styles.meetingMetaDivider} />
+              <View style={styles.meetingMetaItem}>
+                <Text style={styles.meetingMetaLabel}>DURATION</Text>
+                <Text style={styles.meetingMetaValue}>
+                  {hasDuration ? formatDuration(meetingDurationSeconds) : '—'}
+                </Text>
+              </View>
             </View>
 
             {/* Tags Section */}
@@ -440,6 +490,38 @@ const styles = StyleSheet.create({
     fontFamily: 'Manrope-SemiBold',
     fontSize: 14,
     color: theme.colors.secondary,
+  },
+  meetingMetaCard: {
+    marginTop: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: theme.colors.surfaceContainerLowest,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  meetingMetaItem: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  meetingMetaLabel: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 10,
+    color: theme.colors.onSurfaceVariant,
+    letterSpacing: 1.2,
+    marginBottom: 6,
+  },
+  meetingMetaValue: {
+    fontFamily: 'Manrope-SemiBold',
+    fontSize: 13,
+    color: theme.colors.primary,
+    lineHeight: 18,
+  },
+  meetingMetaDivider: {
+    width: 1,
+    backgroundColor: theme.colors.outlineVariant,
   },
   tagsWrapper: {
     marginTop: theme.spacing.md,
