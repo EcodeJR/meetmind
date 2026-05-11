@@ -10,12 +10,15 @@ import {
   Platform,
   TextInput,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { getOfflineMeetingQueue } from '@/services/offlineMeetingQueue';
 
 type Meeting = {
   _id: string;
@@ -24,6 +27,7 @@ type Meeting = {
   durationSeconds?: number;
   summary?: string;
   status?: 'pending' | 'processing' | 'completed' | 'failed';
+  source?: 'remote' | 'offline';
 };
 
 export default function HistoryScreen() {
@@ -32,15 +36,54 @@ export default function HistoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [queueCount, setQueueCount] = useState(0);
   const router = useRouter();
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
 
   const loadMeetings = useCallback(async (query: string = '') => {
     try {
       const endpoint = query ? `/meetings/search?q=${encodeURIComponent(query)}` : '/meetings';
-      const response = await apiClient.get(endpoint);
-      setMeetings(response.data.data?.meetings || response.data.meetings || []);
+      const [response, offlineQueue] = await Promise.all([
+        apiClient.get(endpoint),
+        getOfflineMeetingQueue(),
+      ]);
+
+      const remoteMeetings = response.data.data?.meetings || response.data.meetings || [];
+      setQueueCount(offlineQueue.length);
+      const filteredOfflineMeetings = query
+        ? offlineQueue.filter(item => item.title.toLowerCase().includes(query.toLowerCase()))
+        : offlineQueue;
+
+      const pendingMeetings: Meeting[] = filteredOfflineMeetings.map(item => ({
+        _id: `offline-${item.id}`,
+        title: item.title,
+        createdAt: item.createdAt,
+        durationSeconds: item.durationSeconds,
+        summary: undefined,
+        status: item.status === 'failed' ? 'failed' : 'pending',
+        source: 'offline',
+      }));
+
+      setMeetings([...remoteMeetings, ...pendingMeetings].sort((a, b) => {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }));
     } catch (error) {
       console.error('Error loading history:', error);
+      const offlineQueue = await getOfflineMeetingQueue();
+      setQueueCount(offlineQueue.length);
+      const filteredOfflineMeetings = query
+        ? offlineQueue.filter(item => item.title.toLowerCase().includes(query.toLowerCase()))
+        : offlineQueue;
+
+      setMeetings(filteredOfflineMeetings.map(item => ({
+        _id: `offline-${item.id}`,
+        title: item.title,
+        createdAt: item.createdAt,
+        durationSeconds: item.durationSeconds,
+        summary: undefined,
+        status: item.status === 'failed' ? 'failed' : 'pending',
+        source: 'offline',
+      })));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -85,6 +128,8 @@ export default function HistoryScreen() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
   };
 
+  const showQueuedBanner = isAuthLoaded && !isSignedIn && queueCount > 0;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -101,6 +146,25 @@ export default function HistoryScreen() {
             />
           </View>
         </View>
+
+        {showQueuedBanner && (
+          <View style={styles.banner}>
+            <View style={styles.bannerIconWrap}>
+              <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.primary} />
+            </View>
+            <View style={styles.bannerContent}>
+              <Text style={styles.bannerTitle}>
+                {queueCount} recording{queueCount === 1 ? '' : 's'} saved on this device
+              </Text>
+              <Text style={styles.bannerText}>
+                Sign in to upload them to your account and process the summaries automatically.
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.bannerButton} onPress={() => router.push('/(auth)/sign-in')}>
+              <Text style={styles.bannerButtonText}>Sign in</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={18} color={theme.colors.outline} style={styles.searchIcon} />
@@ -145,7 +209,14 @@ export default function HistoryScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.card}
-              onPress={() => router.push(`/meeting/${item._id}`)}
+              onPress={() => {
+                if (item._id.startsWith('offline-')) {
+                  Alert.alert('Waiting for connection', 'This meeting is saved locally and will sync automatically when you are back online.');
+                  return;
+                }
+
+                router.push(`/meeting/${item._id}`);
+              }}
               activeOpacity={0.7}
             >
               <View style={styles.cardHeader}>
@@ -163,7 +234,9 @@ export default function HistoryScreen() {
                 </Text>
               ) : (
                 <View style={styles.processingRow}>
-                  <Text style={styles.cardSummaryPlaceholder}>Analysis in progress...</Text>
+                  <Text style={styles.cardSummaryPlaceholder}>
+                    {item._id.startsWith('offline-') ? 'Waiting for connection...' : 'Analysis in progress...'}
+                  </Text>
                   {item.status && item.status !== 'completed' && (
                     <View style={styles.processingBadge}>
                       <Text style={styles.processingBadgeText}>{item.status.toUpperCase()}</Text>
@@ -241,6 +314,52 @@ const styles = StyleSheet.create({
   },
   searchIcon: {
     marginRight: theme.spacing.sm,
+  },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.secondaryContainer,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.secondary,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  bannerIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.onSecondaryContainer + '18',
+  },
+  bannerContent: {
+    flex: 1,
+  },
+  bannerTitle: {
+    fontFamily: 'Manrope-Bold',
+    fontSize: 14,
+    color: theme.colors.onSecondaryContainer,
+    marginBottom: 2,
+  },
+  bannerText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    lineHeight: 16,
+    color: theme.colors.onSecondaryContainer,
+    opacity: 0.9,
+  },
+  bannerButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.base,
+  },
+  bannerButtonText: {
+    fontFamily: 'Manrope-SemiBold',
+    fontSize: 12,
+    color: theme.colors.onPrimary,
   },
   searchInput: {
     flex: 1,

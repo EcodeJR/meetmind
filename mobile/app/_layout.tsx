@@ -3,10 +3,12 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { ClerkProvider, useAuth, useUser } from '@clerk/clerk-expo';
 import * as SecureStore from 'expo-secure-store';
-import { ActivityIndicator, View, Text } from 'react-native';
+import { ActivityIndicator, AppState, View, Text, Alert } from 'react-native';
 import { setTokenGetter } from '@/services/api';
 import apiClient from '@/services/api';
-import { configureNotifications } from '@/services/pushNotificationService';
+import { configureNotifications, usePushNotifications } from '@/services/pushNotificationService';
+import NetInfo from '@react-native-community/netinfo';
+import { getOfflineMeetingCount, processOfflineMeetingQueue } from '@/services/offlineMeetingQueue';
 import { 
   useFonts, 
   Manrope_700Bold, 
@@ -48,6 +50,7 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
   const hasSynced = useRef(false);
+  const hasPromptedForOfflineSync = useRef(false);
 
   const [fontsLoaded, fontError] = useFonts({
     'Manrope-Bold': Manrope_700Bold,
@@ -63,6 +66,8 @@ function RootLayoutNav() {
       console.warn('[PUSH] Notification channel setup skipped or failed:', error);
     });
   }, []);
+
+  usePushNotifications();
   // Debug logging
   useEffect(() => {
     console.log('[RootLayout Debug]', {
@@ -82,7 +87,8 @@ function RootLayoutNav() {
 
   // Auto-redirect based on auth state
   useEffect(() => {
-    if (!isAuthLoaded || !fontsLoaded) return;
+    // Wait until Clerk SDK finished initializing before performing route redirects.
+    if (!isAuthLoaded) return;
 
     const inAuthGroup = segments[0] === '(auth)';
 
@@ -121,14 +127,104 @@ function RootLayoutNav() {
   }, [isSignedIn, user]);
 
   useEffect(() => {
+    if (isSignedIn || hasPromptedForOfflineSync.current) {
+      return;
+    }
+
+    const promptIfQueuedRecordingsExist = async () => {
+      try {
+        const queueCount = await getOfflineMeetingCount();
+        const online = await NetInfo.fetch();
+
+        if (!queueCount) {
+          return;
+        }
+
+        if (!online.isConnected || online.isInternetReachable === false) {
+          return;
+        }
+
+        hasPromptedForOfflineSync.current = true;
+
+        Alert.alert(
+          'Sign in to sync recordings',
+          'You have recordings saved locally. Sign in now to upload them to your account and process them automatically.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            {
+              text: 'Sign in',
+              onPress: () => router.replace('/(auth)/sign-in'),
+            },
+          ]
+        );
+      } catch (error) {
+        console.warn('[OFFLINE] Failed to check queued recordings:', error);
+      }
+    };
+
+    promptIfQueuedRecordingsExist();
+
+    const unsubscribeNetInfo = NetInfo.addEventListener(state => {
+      if (state.isConnected && state.isInternetReachable !== false) {
+        promptIfQueuedRecordingsExist();
+      }
+    });
+
+    const appStateSubscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        promptIfQueuedRecordingsExist();
+      }
+    });
+
+    return () => {
+      unsubscribeNetInfo();
+      appStateSubscription.remove();
+    };
+  }, [isSignedIn, router]);
+
+    useEffect(() => {
+      if (!isSignedIn) {
+        return;
+      }
+
+      const syncPendingMeetings = async () => {
+        try {
+          await processOfflineMeetingQueue();
+        } catch (error) {
+          console.warn('[OFFLINE] Pending meeting sync skipped:', error);
+        }
+      };
+
+      syncPendingMeetings();
+
+      const unsubscribeNetInfo = NetInfo.addEventListener(state => {
+        if (state.isConnected && state.isInternetReachable !== false) {
+          syncPendingMeetings();
+        }
+      });
+
+      const appStateSubscription = AppState.addEventListener('change', nextState => {
+        if (nextState === 'active') {
+          syncPendingMeetings();
+        }
+      });
+
+      return () => {
+        unsubscribeNetInfo();
+        appStateSubscription.remove();
+      };
+    }, [isSignedIn]);
+
+  useEffect(() => {
     if (fontsLoaded || fontError) {
       console.log('[RootLayout] Fonts loaded or error - hiding splash screen');
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
 
-  if (!isAuthLoaded || (!fontsLoaded && !fontError)) {
-    console.log('[RootLayout] Showing loading screen');
+  // Only block app render for fonts; allow UI to render if Clerk's SDK is still initializing
+  if (!fontsLoaded && !fontError) {
+    console.log('[RootLayout] Showing loading screen (fonts)');
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fbf8fc' }}>
         <ActivityIndicator size="large" color="#000317" />

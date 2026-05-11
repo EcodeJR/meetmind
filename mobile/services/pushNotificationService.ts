@@ -8,8 +8,42 @@ const isExpoGo = Constants.appOwnership === 'expo';
 
 const loadNotifications = async () => import('expo-notifications');
 
+export const sendLocalNotification = async (title: string, body: string) => {
+  try {
+    const Notifications = await loadNotifications();
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: true,
+        ...(Platform.OS === 'android' ? { channelId: 'default' } : {}),
+      },
+      trigger: null,
+    });
+  } catch (error) {
+    console.warn('[PUSH] Failed to schedule local notification:', error);
+  }
+};
+
 // Configure Android notification channel on app start
 export const configureNotifications = async () => {
+  try {
+    const Notifications = await loadNotifications();
+
+    await Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch (error) {
+    console.warn('[PUSH] Failed to configure notification handler:', error);
+  }
+
   if (isExpoGo) {
     console.log('[PUSH] Skipping notification channel setup in Expo Go');
     return;

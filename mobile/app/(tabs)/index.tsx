@@ -12,9 +12,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useUser } from '@clerk/clerk-expo';
-import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Audio } from 'expo-av';
+import { enqueueOfflineRecording, isOnline, processOfflineMeetingQueue } from '@/services/offlineMeetingQueue';
+import { sendLocalNotification } from '@/services/pushNotificationService';
 import Animated, {
   useAnimatedStyle,
   withRepeat,
@@ -26,9 +27,6 @@ import Animated, {
   Extrapolate
 } from 'react-native-reanimated';
 
-const loadNotifications = async () => import('expo-notifications');
-
-
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -37,7 +35,7 @@ export default function HomeScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [processingStage, setProcessingStage] = useState<'finalizing' | 'uploading' | 'transcribing' | 'summarizing' | 'complete' | 'failed' | null>(null);
+  const [processingStage, setProcessingStage] = useState<'finalizing' | 'queued' | 'uploading' | 'transcribing' | 'summarizing' | 'complete' | 'failed' | null>(null);
   const [processingElapsed, setProcessingElapsed] = useState(0);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [debugStatus, setDebugStatus] = useState('');
@@ -137,22 +135,6 @@ export default function HomeScreen() {
 
   const [volumes, setVolumes] = useState<number[]>(new Array(12).fill(0));
 
-  const sendLocalNotification = async (title: string, body: string) => {
-    try {
-      const Notifications = await loadNotifications();
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title,
-          body,
-          sound: true,
-        },
-        trigger: null,
-      });
-    } catch (error) {
-      console.warn('[PUSH] Failed to schedule local notification:', error);
-    }
-  };
-
   const handleStartRecording = async () => {
     try {
       if (!meetingTitle.trim()) {
@@ -237,38 +219,32 @@ export default function HomeScreen() {
         throw new Error('No recording URI found');
       }
 
+      const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration);
+      const online = await isOnline();
+
+      if (!online) {
+        setProcessingStage('queued');
+        setDebugStatus('Saved locally. Waiting for connection...');
+        sendLocalNotification('Saved offline', 'Your meeting will upload automatically when connection returns.');
+        Alert.alert('Saved Offline', 'Your recording is saved locally and will sync when you are back online.');
+        setMeetingTitle('');
+        setDuration(0);
+        setRecording(null);
+        console.log('[DEBUG] Offline queue item saved:', offlineItem.id);
+        return;
+      }
+
       setDebugStatus('Preparing for AI analysis...');
       setProcessingStage('transcribing');
-      sendLocalNotification('Transcription Started', 'Your meeting is being transcribed now');
-
-      // Use FormData to upload the file
-      const formData = new FormData();
-      // @ts-ignore
-      formData.append('audio', {
-        uri,
-        name: `recording-${Date.now()}.m4a`,
-        type: 'audio/m4a',
-      });
-      formData.append('title', meetingTitle);
-      formData.append('durationSeconds', duration.toString());
 
       setDebugStatus('UPLOADING TO INTELLIGENCE ENGINE...');
       setProcessingStage('uploading');
 
-      const response = await apiClient.post('/meetings/process', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const queueResult = await processOfflineMeetingQueue();
 
-      console.log('[DEBUG] Server response:', response.data);
+      console.log('[DEBUG] Queue sync result:', queueResult);
       setProcessingStage('summarizing');
       setDebugStatus('ANALYSIS COMPLETE');
-
-      const summaryPreview = response.data?.data?.meeting?.summary
-        ? String(response.data.data.meeting.summary).slice(0, 120)
-        : 'Your meeting is ready.';
-      sendLocalNotification('Meeting Processed', summaryPreview);
 
       Alert.alert('Success', 'Your meeting has been transcribed and summarized.');
       setMeetingTitle('');
@@ -279,7 +255,6 @@ export default function HomeScreen() {
       console.error('[DEBUG] Processing failed:', error);
       setProcessingStage('failed');
       setDebugStatus('ANALYSIS FAILED');
-      sendLocalNotification('Processing Failed', error.response?.data?.error?.message || 'The AI pipeline encountered an issue.');
       Alert.alert('Analysis Failed', error.response?.data?.error?.message || 'The AI pipeline encountered an issue.');
     } finally {
       setLoading(false);
@@ -294,6 +269,11 @@ export default function HomeScreen() {
       key: 'finalizing',
       title: 'Locking the recording',
       detail: 'Saving the audio safely before analysis begins.',
+    },
+    {
+      key: 'queued',
+      title: 'Saved on device',
+      detail: 'No connection right now. The recording stays on the phone until the app is back online.',
     },
     {
       key: 'uploading',
