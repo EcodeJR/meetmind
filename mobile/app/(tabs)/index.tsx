@@ -8,12 +8,14 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useUser } from '@clerk/clerk-expo';
 import { theme } from '@/constants/theme';
 import { Audio } from 'expo-av';
+import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import { enqueueOfflineRecording, isOnline, processOfflineMeetingQueue } from '@/services/offlineMeetingQueue';
 import { sendLocalNotification } from '@/services/pushNotificationService';
 import Animated, {
@@ -43,14 +45,89 @@ export default function HomeScreen() {
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const processingRef = useRef(false);
+  const recoveryInProgressRef = useRef(false);
   const pulse = useSharedValue(1);
   const spin = useSharedValue(0);
   const floatY = useSharedValue(0);
   const ringPulse = useSharedValue(1);
 
+  const recoverPartialRecording = async (
+    reason: 'stop_race' | 'os_interruption',
+    durationHintSeconds?: number
+  ): Promise<boolean> => {
+    if (!recording || recoveryInProgressRef.current) {
+      return false;
+    }
+
+    recoveryInProgressRef.current = true;
+
+    try {
+      let uri = recording.getURI();
+
+      if (!uri) {
+        try {
+          await recording.stopAndUnloadAsync();
+        } catch {
+          // Ignore: recorder may already be stopped by OS.
+        }
+        uri = recording.getURI();
+      }
+
+      if (!uri) {
+        return false;
+      }
+
+      const recoveredDuration = Math.max(durationHintSeconds ?? duration, 1);
+      const fallbackTitle = `Recovered meeting ${new Date().toLocaleTimeString()}`;
+      const recoveredTitle = meetingTitle.trim() || fallbackTitle;
+
+      const offlineItem = await enqueueOfflineRecording(uri, recoveredTitle, recoveredDuration);
+
+      setIsRecording(false);
+      setRecording(null);
+      setLoading(false);
+      setProcessingStage(null);
+      setDuration(0);
+      setMeetingTitle('');
+
+      await sendLocalNotification(
+        'Recording Recovered',
+        'A partial recording was recovered and saved for upload.'
+      );
+
+      Alert.alert(
+        'Recording Recovered',
+        'Your recording was interrupted by the OS, but the captured audio was recovered and saved offline.'
+      );
+
+      console.log('[RECOVERY] Partial recording queued:', { id: offlineItem.id, reason });
+      return true;
+    } catch (error) {
+      console.warn('[RECOVERY] Failed to recover interrupted recording:', error);
+      return false;
+    } finally {
+      recoveryInProgressRef.current = false;
+      processingRef.current = false;
+    }
+  };
+
   // Expose recording state globally so root layout can prevent redirect during recording
   useEffect(() => {
+    // Backwards-compatible: set both legacy and current global flags
     (global as any).__memovoiceIsRecording = isRecording;
+    (global as any).__meetmindIsRecording = isRecording;
+  }, [isRecording]);
+
+  useEffect(() => {
+    if (isRecording) {
+      activateKeepAwake();
+      return () => {
+        deactivateKeepAwake();
+      };
+    }
+
+    deactivateKeepAwake();
+    return undefined;
   }, [isRecording]);
 
   useEffect(() => {
@@ -107,6 +184,41 @@ export default function HomeScreen() {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [isRecording]);
+
+  useEffect(() => {
+    const appStateSubscription = AppState.addEventListener('change', async nextState => {
+      if (
+        nextState !== 'active' ||
+        !isRecording ||
+        !recording ||
+        processingRef.current ||
+        recoveryInProgressRef.current
+      ) {
+        return;
+      }
+
+      try {
+        const status = await recording.getStatusAsync();
+        const durationFromStatus =
+          typeof status.durationMillis === 'number'
+            ? Math.max(Math.floor(status.durationMillis / 1000), duration)
+            : duration;
+
+        const interruptedByOs =
+          status.isDoneRecording || (!status.isRecording && status.canRecord === false);
+
+        if (interruptedByOs) {
+          await recoverPartialRecording('os_interruption', durationFromStatus);
+        }
+      } catch (error) {
+        console.warn('[RECOVERY] Could not inspect recorder state on resume:', error);
+      }
+    });
+
+    return () => {
+      appStateSubscription.remove();
+    };
+  }, [isRecording, recording, duration, meetingTitle]);
 
   useEffect(() => {
     if (!loading) {
@@ -220,7 +332,14 @@ export default function HomeScreen() {
       setProcessingStage('finalizing');
       setDebugStatus('Finalizing audio stream...');
 
-      await recording.stopAndUnloadAsync();
+      let stopError: unknown = null;
+      try {
+        await recording.stopAndUnloadAsync();
+      } catch (error) {
+        stopError = error;
+        console.warn('[RECOVERY] stopAndUnloadAsync failed; attempting partial recovery', error);
+      }
+
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         staysActiveInBackground: false,
@@ -229,6 +348,14 @@ export default function HomeScreen() {
       console.log('[DEBUG] Recording stored at:', uri);
 
       if (!uri) {
+        const recovered = await recoverPartialRecording('stop_race', duration);
+        if (recovered) {
+          return;
+        }
+
+        if (stopError) {
+          throw stopError;
+        }
         throw new Error('No recording URI found');
       }
 

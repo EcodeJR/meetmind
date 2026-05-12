@@ -16,7 +16,12 @@
       "**/*"
     ],
     "ios": {
-      "bundleIdentifier": "com.memovoice.app"
+      "bundleIdentifier": "com.memovoice.app",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {

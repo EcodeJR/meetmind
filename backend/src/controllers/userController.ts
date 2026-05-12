@@ -40,7 +40,9 @@ const detectCountryFromRequest = async (req: AuthRequest): Promise<string | null
 export const syncClerkUser = async (req: AuthRequest, res: Response) => {
   try {
     const clerkId = req.clerkId;
-    const { email } = req.body;
+    const { email, firstName } = req.body;
+
+    logger.info({ clerkId, email, firstName: firstName || null }, 'Syncing Clerk user');
 
     if (!clerkId || !email) {
       return sendError(res, 'MISSING_DATA', 'clerkId and email are required');
@@ -69,8 +71,9 @@ export const syncClerkUser = async (req: AuthRequest, res: Response) => {
       logger.info({ clerkId }, 'New user created');
 
       // Send welcome email asynchronously (don't block user creation)
-      const firstName = req.body.firstName || 'there';
-      sendWelcomeEmail(email, firstName).catch(err => {
+      const resolvedFirstName = firstName || 'there';
+      logger.info({ clerkId, email, resolvedFirstName }, 'Dispatching welcome email');
+      sendWelcomeEmail(email, resolvedFirstName).catch(err => {
         logger.error({ error: err, email }, 'Failed to send welcome email');
       });
     } else if (!user.country && detectedCountry) {

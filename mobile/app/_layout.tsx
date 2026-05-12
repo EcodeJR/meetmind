@@ -117,11 +117,12 @@ function RootLayoutNav() {
     if (!isSignedIn || !user || hasSynced.current) return;
 
     const email = user.primaryEmailAddress?.emailAddress;
+    const firstName = user.firstName || user.username || user.fullName || undefined;
     if (!email) return;
 
     hasSynced.current = true;
 
-    apiClient.post('/users/sync', { email })
+    apiClient.post('/users/sync', { email, firstName })
       .then((response: any) => {
         const userData = response.data.data?.user || response.data.user;
         if (userData && !userData.onboardingCompleted && !hasRedirectedToOnboarding.current) {
