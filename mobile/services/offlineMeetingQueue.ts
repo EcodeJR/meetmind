@@ -1,11 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import apiClient from './api';
 import { sendLocalNotification } from './pushNotificationService';
 
 const QUEUE_STORAGE_KEY = 'offline_meeting_queue_v1';
-const OFFLINE_AUDIO_DIR = `${FileSystem.documentDirectory ?? ''}offline-meetings/`;
+const DOCUMENT_DIR: string = (FileSystem as any).documentDirectory ?? '';
+const OFFLINE_AUDIO_DIR = `${DOCUMENT_DIR}offline-meetings/`;
 
 export type OfflineMeetingQueueItem = {
   id: string;
@@ -47,7 +48,7 @@ const writeQueue = async (queue: OfflineMeetingQueueItem[]): Promise<void> => {
 };
 
 const ensureOfflineDirectory = async (): Promise<void> => {
-  if (!FileSystem.documentDirectory) {
+  if (!DOCUMENT_DIR) {
     throw new Error('Document directory is not available');
   }
 
