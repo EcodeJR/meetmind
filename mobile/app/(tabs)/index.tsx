@@ -547,9 +547,16 @@ export default function HomeScreen() {
             {loading ? (
               <Text style={styles.debugText}>{debugStatus}</Text>
             ) : (
-              <Text style={styles.hint}>
-                {isRecording ? 'Tap to finish and summarize' : 'Tap to start capturing conversation'}
-              </Text>
+              <View style={styles.statusStack}>
+                <Text style={styles.hint}>
+                  {isRecording ? 'Tap to finish and summarize' : 'Tap to start capturing conversation'}
+                </Text>
+                {isRecording && (
+                  <Text style={styles.statusSubtext}>
+                    Recordings stay awake so audio capture is less likely to be interrupted.
+                  </Text>
+                )}
+              </View>
             )}
           </View>
         </View>
@@ -823,10 +830,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: theme.spacing.lg,
   },
+  statusStack: {
+    alignItems: 'center',
+    gap: 4,
+  },
   hint: {
     fontFamily: 'Inter-Regular',
     color: theme.colors.onSurfaceVariant,
     fontSize: 14,
+  },
+  statusSubtext: {
+    fontFamily: 'Inter-Regular',
+    color: theme.colors.outline,
+    fontSize: 11,
+    textAlign: 'center',
   },
   debugText: {
     fontFamily: 'SpaceGrotesk-SemiBold',

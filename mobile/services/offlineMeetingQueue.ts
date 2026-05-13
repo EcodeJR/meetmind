@@ -127,8 +127,8 @@ export const updateOfflineMeeting = async (
 
 const deleteLocalAudioFile = async (localUri: string): Promise<void> => {
   try {
-    const info = await FileSystem.getInfoAsync(localUri);
-    if (info.exists) {
+    const file = new FileSystem.File(localUri);
+    if (file.exists) {
       await FileSystem.deleteAsync(localUri, { idempotent: true });
     }
   } catch (error) {
@@ -154,11 +154,11 @@ export const uploadQueuedMeeting = async (item: OfflineMeetingQueueItem): Promis
 
   try {
     // Check if file exists before upload
-    const fileInfo = await FileSystem.getInfoAsync(item.localUri);
-    const fileSize = (fileInfo as any).size;
-    console.log('[UPLOAD] File exists:', fileInfo.exists, 'Size:', fileSize, 'bytes');
+    const file = new FileSystem.File(item.localUri);
+    const fileSize = file.size;
+    console.log('[UPLOAD] File exists:', file.exists, 'Size:', fileSize, 'bytes');
 
-    if (!fileInfo.exists) {
+    if (!file.exists) {
       throw new Error(`Local file not found at ${item.localUri}`);
     }
 

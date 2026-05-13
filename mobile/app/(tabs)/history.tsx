@@ -26,7 +26,7 @@ type Meeting = {
   createdAt: string;
   durationSeconds?: number;
   summary?: string;
-  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  status?: 'queued' | 'pending' | 'processing' | 'completed' | 'failed';
   source?: 'remote' | 'offline';
 };
 
@@ -60,7 +60,7 @@ export default function HistoryScreen() {
         createdAt: item.createdAt,
         durationSeconds: item.durationSeconds,
         summary: undefined,
-        status: item.status === 'failed' ? 'failed' : 'pending',
+        status: item.status === 'failed' ? 'failed' : item.status === 'processing' ? 'processing' : 'queued',
         source: 'offline',
       }));
 
@@ -81,7 +81,7 @@ export default function HistoryScreen() {
         createdAt: item.createdAt,
         durationSeconds: item.durationSeconds,
         summary: undefined,
-        status: item.status === 'failed' ? 'failed' : 'pending',
+        status: item.status === 'failed' ? 'failed' : item.status === 'processing' ? 'processing' : 'queued',
         source: 'offline',
       })));
     } finally {
@@ -235,11 +235,19 @@ export default function HistoryScreen() {
               ) : (
                 <View style={styles.processingRow}>
                   <Text style={styles.cardSummaryPlaceholder}>
-                    {item._id.startsWith('offline-') ? 'Waiting for connection...' : 'Analysis in progress...'}
+                    {item.status === 'queued'
+                      ? 'Queued locally. Syncs when you are online.'
+                      : item.status === 'processing'
+                        ? 'Uploading and transcribing now...'
+                        : item._id.startsWith('offline-')
+                          ? 'Waiting for connection...'
+                          : 'Analysis in progress...'}
                   </Text>
                   {item.status && item.status !== 'completed' && (
                     <View style={styles.processingBadge}>
-                      <Text style={styles.processingBadgeText}>{item.status.toUpperCase()}</Text>
+                      <Text style={styles.processingBadgeText}>
+                        {item.status === 'queued' ? 'QUEUED' : item.status.toUpperCase()}
+                      </Text>
                     </View>
                   )}
                 </View>

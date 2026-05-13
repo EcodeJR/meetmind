@@ -10,6 +10,7 @@ let resendClient: Resend | null = null;
 const gmailUser = process.env.GMAIL_USER?.trim();
 const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, '');
 const resendApiKey = process.env.RESEND_API_KEY?.trim();
+const resendFromEmail = process.env.RESEND_FROM_EMAIL?.trim() || 'Memovoice <onboarding@resend.dev>';
 
 // Log what we're reading at startup for debugging
 logger.info({
@@ -91,7 +92,7 @@ const sendEmailWithResend = async (
 
   try {
     const response = await resendClient.emails.send({
-      from: mailOptions.from as string,
+      from: resendFromEmail,
       to: mailOptions.to as string,
       subject: mailOptions.subject as string,
       html: mailOptions.html as string,
