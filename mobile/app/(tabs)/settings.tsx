@@ -85,10 +85,20 @@ export default function SettingsScreen() {
           onPress: async () => {
             try {
               setLoading(true);
-              await apiClient.delete('/users/me');
+              console.log('[DELETE] Sending delete request to /users/me');
+              const response = await apiClient.delete('/users/me');
+              console.log('[DELETE] Response:', response.data);
+              console.log('[DELETE] Signing out...');
               await signOut();
-            } catch (error) {
-              Alert.alert('Purge Failed', 'Error while destroying account data.');
+              console.log('[DELETE] Sign out complete');
+            } catch (error: any) {
+              console.error('[DELETE] Error:', error);
+              console.error('[DELETE] Error message:', error?.message);
+              console.error('[DELETE] Error code:', error?.code);
+              console.error('[DELETE] Response status:', error?.response?.status);
+              console.error('[DELETE] Response data:', error?.response?.data);
+              const errorMsg = error?.response?.data?.error?.message || error?.message || 'Unknown error';
+              Alert.alert('Purge Failed', `Error while destroying account data: ${errorMsg}`);
             } finally {
               setLoading(false);
             }

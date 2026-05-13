@@ -146,41 +146,58 @@ export const updateUserPreferences = async (req: AuthRequest, res: Response) => 
 export const deleteAccount = async (req: AuthRequest, res: Response) => {
   try {
     const clerkId = req.clerkId;
+    console.log(`[DELETE] Starting account deletion for user: ${clerkId}`);
 
+    // 1. Find user
+    console.log(`[DELETE] Finding user by clerkId: ${clerkId}`);
     const user = await User.findOne({ clerkId });
     if (!user) {
+      console.log(`[DELETE] User not found: ${clerkId}`);
       return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
     }
+    console.log(`[DELETE] User found: ${user._id}`);
 
-    // 1. Identify all associated meetings
+    // 2. Identify all associated meetings
+    console.log(`[DELETE] Finding meetings for user: ${user._id}`);
     const meetings = await Meeting.find({ userId: user._id });
+    console.log(`[DELETE] Found ${meetings.length} meetings`);
     const publicIds = meetings.map(m => m.audioPublicId).filter(Boolean) as string[];
+    console.log(`[DELETE] Found ${publicIds.length} Cloudinary assets to clean up`);
     
-    // 2. Resilient Asset Cleanup (Cloudinary)
+    // 3. Resilient Asset Cleanup (Cloudinary)
     // We swallow errors here so that a single missing file doesn't block account deletion
     if (publicIds.length > 0) {
-      console.log(`[DEBUGGER] Account Deletion: Purging ${publicIds.length} assets from Cloudinary...`);
+      console.log(`[DELETE] Phase 1: Purging ${publicIds.length} assets from Cloudinary...`);
       await Promise.allSettled(publicIds.map(async (id) => {
         try {
+          console.log(`[DELETE] Deleting Cloudinary asset: ${id}`);
           await deleteAudioFromCloudinary(id);
+          console.log(`[DELETE] Successfully deleted Cloudinary asset: ${id}`);
         } catch (err: any) {
-          console.log(`[DEBUGGER] WARNING: Failed to delete asset ${id}: ${err.message}`);
+          console.log(`[DELETE] WARNING: Failed to delete asset ${id}: ${err.message}`);
         }
       }));
+      console.log(`[DELETE] Cloudinary cleanup complete`);
     }
 
-    // 3. Purge Database Records
-    await Meeting.deleteMany({ userId: user._id });
-    console.log(`[DEBUGGER] Account Deletion: All meetings purged for user ${clerkId}`);
+    // 4. Purge Database Records
+    console.log(`[DELETE] Phase 2: Deleting all meetings for user ${user._id}`);
+    const deleteResult = await Meeting.deleteMany({ userId: user._id });
+    console.log(`[DELETE] Successfully deleted ${deleteResult.deletedCount} meetings`);
 
-    // 4. Dissolve User Identity
+    // 5. Dissolve User Identity
+    console.log(`[DELETE] Phase 3: Deleting user record: ${user._id}`);
     await User.deleteOne({ _id: user._id });
-    console.log(`[DEBUGGER] Account Deletion: User identity dissolved`);
+    console.log(`[DELETE] User identity dissolved`);
 
     logger.info({ clerkId }, 'User account and all data deleted successfully');
+    console.log(`[DELETE] Account deletion complete for: ${clerkId}`);
     return sendSuccess(res, { message: 'Account and all associated memory purged' });
   } catch (error: any) {
-    console.error(`[DEBUGGER] FATAL ERROR in deleteAccount:`, error.message);
+    console.error(`[DELETE] FATAL ERROR in deleteAccount:`);
+    console.error(`[DELETE] Error message:`, error.message);
+    console.error(`[DELETE] Error stack:`, error.stack);
+    console.error(`[DELETE] Full error:`, error);
     logger.error({ error }, 'Error deleting account');
     return sendError(res, 'DELETE_ERROR', `Failed to delete account: ${error.message}`, 500);
   }

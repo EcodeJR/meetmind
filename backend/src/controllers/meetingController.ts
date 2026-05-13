@@ -182,13 +182,14 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
 
       try {
         console.log(`[DEBUGGER] BACKGROUND: Transcribing meeting ${processingMeeting._id}`);
+        console.log(`[DEBUGGER] BACKGROUND: Using Cloudinary URL: ${uploadResult.url}`);
         const transcript = await transcribeAudio(uploadResult.url);
 
         if (!transcript || transcript.trim().length === 0) {
           throw new Error('Empty transcript');
         }
 
-        console.log(`[DEBUGGER] BACKGROUND: Transcription complete (${processingMeeting._id})`);
+        console.log(`[DEBUGGER] BACKGROUND: Transcription complete (${processingMeeting._id}), length: ${transcript.length} chars`);
 
         console.log(`[DEBUGGER] BACKGROUND: Summarizing meeting ${processingMeeting._id}`);
         const aiAnalysis = await summarizeTranscript(transcript);
@@ -218,7 +219,11 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
           });
         }
       } catch (bgError: any) {
-        console.error(`[DEBUGGER] BACKGROUND: Processing failed for ${processingMeeting._id}:`, bgError);
+        console.error(`[DEBUGGER] BACKGROUND: Processing failed for ${processingMeeting._id}:`);
+        console.error(`[DEBUGGER] BACKGROUND: Error message:`, bgError.message || bgError);
+        console.error(`[DEBUGGER] BACKGROUND: Error stack:`, bgError.stack);
+        console.error(`[DEBUGGER] BACKGROUND: Full error object:`, JSON.stringify(bgError, null, 2));
+        
         processingMeeting.status = 'failed';
         processingMeeting.processingError = String(bgError.message || bgError);
         processingMeeting.processingCompletedAt = new Date();

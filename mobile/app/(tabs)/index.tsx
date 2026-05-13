@@ -16,7 +16,7 @@ import { useUser } from '@clerk/clerk-expo';
 import { theme } from '@/constants/theme';
 import { Audio } from 'expo-av';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
-import { enqueueOfflineRecording, isOnline, processOfflineMeetingQueue } from '@/services/offlineMeetingQueue';
+import { enqueueOfflineRecording, isOnline, processOfflineMeetingQueue, uploadQueuedMeeting } from '@/services/offlineMeetingQueue';
 import { sendLocalNotification } from '@/services/pushNotificationService';
 import Animated, {
   useAnimatedStyle,
@@ -359,10 +359,10 @@ export default function HomeScreen() {
         throw new Error('No recording URI found');
       }
 
-      const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration);
       const online = await isOnline();
 
       if (!online) {
+        const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration);
         setProcessingStage('queued');
         setDebugStatus('Saved locally. Waiting for connection...');
         sendLocalNotification('Saved offline', 'Your meeting will upload automatically when connection returns.');
@@ -380,9 +380,19 @@ export default function HomeScreen() {
       setDebugStatus('UPLOADING TO INTELLIGENCE ENGINE...');
       setProcessingStage('uploading');
 
-      const queueResult = await processOfflineMeetingQueue();
+      const directRecordingItem = {
+        id: `live-${Date.now()}`,
+        title: meetingTitle.trim() || 'Untitled Meeting',
+        durationSeconds: duration,
+        localUri: uri,
+        createdAt: new Date().toISOString(),
+        status: 'queued' as const,
+      };
 
-      console.log('[DEBUG] Queue sync result:', queueResult);
+      console.log('[STOP-RECORDING] Uploading recording directly:', directRecordingItem.id);
+      const queueResult = await uploadQueuedMeeting(directRecordingItem);
+
+      console.log('[STOP-RECORDING] Direct upload result:', JSON.stringify(queueResult, null, 2));
       setProcessingStage('summarizing');
       setDebugStatus('ANALYSIS COMPLETE');
 
@@ -392,10 +402,17 @@ export default function HomeScreen() {
       setRecording(null);
       setProcessingStage('complete');
     } catch (error: any) {
-      console.error('[DEBUG] Processing failed:', error);
+      console.error('[STOP-RECORDING] Processing failed:', error);
+      console.error('[STOP-RECORDING] Error message:', error?.message);
+      console.error('[STOP-RECORDING] Error code:', error?.code);
+      console.error('[STOP-RECORDING] Error response status:', error?.response?.status);
+      console.error('[STOP-RECORDING] Error response data:', error?.response?.data);
+      
       setProcessingStage('failed');
       setDebugStatus('ANALYSIS FAILED');
-      Alert.alert('Analysis Failed', error.response?.data?.error?.message || 'The AI pipeline encountered an issue.');
+      const errorMsg = error?.response?.data?.error?.message || error?.message || 'The AI pipeline encountered an issue.';
+      console.error('[STOP-RECORDING] Showing alert:', errorMsg);
+      Alert.alert('Analysis Failed', errorMsg);
     } finally {
       setLoading(false);
       setDebugStatus('');
@@ -499,6 +516,11 @@ export default function HomeScreen() {
             <View style={styles.timerContainer}>
               <Text style={styles.timerText}>{formatTime(duration)}</Text>
               <Text style={styles.recordingStatus}>LIVE AUDIO CAPTURE</Text>
+              <View style={styles.keepAwakeNotice}>
+                <Text style={styles.keepAwakeNoticeText}>
+                  Screen stays on to prevent interruption
+                </Text>
+              </View>
             </View>
           )}
 
@@ -726,6 +748,22 @@ const styles = StyleSheet.create({
     color: theme.colors.pulseRed,
     letterSpacing: 2,
     marginTop: -theme.spacing.sm,
+  },
+  keepAwakeNotice: {
+    marginTop: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.base,
+    backgroundColor: 'rgba(66, 133, 244, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(66, 133, 244, 0.3)',
+  },
+  keepAwakeNoticeText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: 'rgba(66, 133, 244, 0.8)',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   buttonContainer: {
     justifyContent: 'center',

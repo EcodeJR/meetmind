@@ -19,15 +19,28 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const getAudioStream = async (source: string) => {
   // If it's a URL, download it
   if (source.startsWith('http')) {
-    console.log(`[DEBUGGER] Downloading audio from URL: ${source}`);
-    const response = await fetch(source);
-    if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
-    return response.body as any;
+    console.log(`[DEBUGGER] Attempting to download audio from URL: ${source.substring(0, 100)}...`);
+    try {
+      const response = await fetch(source, { timeout: 30000 } as any);
+      console.log(`[DEBUGGER] Fetch response status: ${response.status}`);
+      if (!response.ok) {
+        console.error(`[DEBUGGER] HTTP error: ${response.status} ${response.statusText}`);
+        throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+      }
+      console.log(`[DEBUGGER] Successfully downloaded audio stream`);
+      return response.body as any;
+    } catch (error: any) {
+      console.error(`[DEBUGGER] Download failed:`, error.message);
+      throw error;
+    }
   }
   // Otherwise treat as local file path
+  console.log(`[DEBUGGER] Attempting to read local file: ${source}`);
   if (!fs.existsSync(source)) {
+    console.error(`[DEBUGGER] File not found: ${source}`);
     throw new Error(`File not found: ${source}`);
   }
+  console.log(`[DEBUGGER] Successfully opened local file stream`);
   return fs.createReadStream(source);
 };
 
@@ -111,23 +124,30 @@ export const transcribeAudio = async (source: string): Promise<string> => {
   
   // 1. Try OpenAI Whisper
   try {
+    console.log(`[DEBUGGER] Attempting OpenAI Whisper...`);
     return await transcribeWithWhisper(source);
   } catch (error: any) {
     console.log(`[DEBUGGER] OpenAI Whisper failed, attempting Groq... (${error.message})`);
+    console.error(`[DEBUGGER] OpenAI error details:`, error);
   }
 
   // 2. Try Groq Whisper (Super fast fallback)
   try {
+    console.log(`[DEBUGGER] Attempting Groq Whisper fallback...`);
     return await transcribeWithGroq(source);
   } catch (error: any) {
     console.log(`[DEBUGGER] Groq Fallback failed, attempting Gemini... (${error.message})`);
+    console.error(`[DEBUGGER] Groq error details:`, error);
   }
 
   // 3. Try Gemini 2.5 Flash
   try {
+    console.log(`[DEBUGGER] Attempting Gemini fallback...`);
     return await transcribeWithGemini(source);
   } catch (error: any) {
-    console.error(`[DEBUGGER] FATAL: All transcription providers failed.`, error.message);
-    throw new Error('Transcription pipeline exhausted all providers.');
+    console.error(`[DEBUGGER] FATAL: All transcription providers failed.`);
+    console.error(`[DEBUGGER] Gemini error details:`, error.message);
+    console.error(`[DEBUGGER] Source was:`, source);
+    throw new Error(`Transcription pipeline exhausted all providers: ${error.message}`);
   }
 };
