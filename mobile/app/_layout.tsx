@@ -51,6 +51,7 @@ function RootLayoutNav() {
   const router = useRouter();
   const hasSynced = useRef(false);
   const hasPromptedForOfflineSync = useRef(false);
+  const hasPromptedAttachOnSignIn = useRef(false);
   const hasRedirectedToOnboarding = useRef(false);
 
   const [fontsLoaded, fontError] = useFonts({
@@ -98,14 +99,15 @@ function RootLayoutNav() {
     }
 
     const inAuthGroup = segments[0] === '(auth)';
+    const inTabs = segments[0] === '(tabs)';
 
-    console.log('[RootLayout] Auth check:', { isSignedIn, inAuthGroup, segments });
+    console.log('[RootLayout] Auth check:', { isSignedIn, inAuthGroup, inTabs, segments });
 
     if (isSignedIn && inAuthGroup) {
       console.log('[RootLayout] Signed in but in auth group, redirecting to tabs');
       router.replace('/(tabs)');
-    } else if (!isSignedIn && !inAuthGroup) {
-      console.log('[RootLayout] Not signed in but in protected route, redirecting to login');
+    } else if (!isSignedIn && !inAuthGroup && !inTabs) {
+      console.log('[RootLayout] Not signed in and in protected route, redirecting to login');
       router.replace('/(auth)/sign-in');
     } else {
       console.log('[RootLayout] Auth state consistent with route');
@@ -134,6 +136,12 @@ function RootLayoutNav() {
         console.warn('User sync failed (non-fatal):', err);
       });
   }, [isSignedIn, user]);
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      hasPromptedAttachOnSignIn.current = false;
+    }
+  }, [isSignedIn]);
 
   useEffect(() => {
     if (isSignedIn || hasPromptedForOfflineSync.current) {
@@ -191,38 +199,73 @@ function RootLayoutNav() {
     };
   }, [isSignedIn, router]);
 
-    useEffect(() => {
-      if (!isSignedIn) {
-        return;
+  useEffect(() => {
+    if (!isSignedIn || hasPromptedAttachOnSignIn.current) {
+      return;
+    }
+
+    const promptAttachAndProcessQueue = async () => {
+      try {
+        const queueCount = await getOfflineMeetingCount();
+        if (!queueCount) {
+          return;
+        }
+
+        const online = await NetInfo.fetch();
+        if (!online.isConnected || online.isInternetReachable === false) {
+          return;
+        }
+
+        hasPromptedAttachOnSignIn.current = true;
+
+        Alert.alert(
+          'Attach saved recordings?',
+          `You have ${queueCount} recording${queueCount === 1 ? '' : 's'} saved locally. Attach and upload them to this account now?`,
+          [
+            {
+              text: 'Later',
+              style: 'cancel',
+            },
+            {
+              text: 'Attach now',
+              onPress: async () => {
+                try {
+                  const result = await processOfflineMeetingQueue();
+                  if (result.processedCount > 0) {
+                    Alert.alert('Upload started', `${result.processedCount} recording${result.processedCount === 1 ? '' : 's'} attached and processed.`);
+                  }
+                } catch (error) {
+                  console.warn('[OFFLINE] Explicit attach flow failed:', error);
+                  Alert.alert('Upload failed', 'Could not upload queued recordings right now. Please try again from History or Settings.');
+                }
+              },
+            },
+          ]
+        );
+      } catch (error) {
+        console.warn('[OFFLINE] Failed to prompt attach-on-signin:', error);
       }
+    };
 
-      const syncPendingMeetings = async () => {
-        try {
-          await processOfflineMeetingQueue();
-        } catch (error) {
-          console.warn('[OFFLINE] Pending meeting sync skipped:', error);
-        }
-      };
+    promptAttachAndProcessQueue();
 
-      syncPendingMeetings();
+    const unsubscribeNetInfo = NetInfo.addEventListener(state => {
+      if (state.isConnected && state.isInternetReachable !== false) {
+        promptAttachAndProcessQueue();
+      }
+    });
 
-      const unsubscribeNetInfo = NetInfo.addEventListener(state => {
-        if (state.isConnected && state.isInternetReachable !== false) {
-          syncPendingMeetings();
-        }
-      });
+    const appStateSubscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        promptAttachAndProcessQueue();
+      }
+    });
 
-      const appStateSubscription = AppState.addEventListener('change', nextState => {
-        if (nextState === 'active') {
-          syncPendingMeetings();
-        }
-      });
-
-      return () => {
-        unsubscribeNetInfo();
-        appStateSubscription.remove();
-      };
-    }, [isSignedIn]);
+    return () => {
+      unsubscribeNetInfo();
+      appStateSubscription.remove();
+    };
+  }, [isSignedIn]);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {

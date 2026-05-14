@@ -16,6 +16,7 @@ import { useSignIn, useOAuth } from '@clerk/clerk-expo';
 import { useRouter, Link } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
+import { Ionicons } from '@expo/vector-icons';
 import { theme } from '@/constants/theme';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -96,12 +97,23 @@ export default function SignInScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <Image
-              source={require('../../assets/logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+          <View style={styles.headerTop}>
+            <View style={styles.headerLeft}>
+              <Image
+                source={require('../../assets/logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
+            <TouchableOpacity
+              style={styles.authHomeButton}
+              onPress={() => router.replace('/(tabs)')}
+              accessibilityLabel="Go to app"
+            >
+              <Ionicons name="home" size={20} color={theme.colors.onPrimary} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.headerContent}>
             <Text style={styles.title}>Memovoice</Text>
             <Text style={styles.subtitle}>Institutional trust. Professional depth.</Text>
           </View>
@@ -200,9 +212,17 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.xl,
     justifyContent: 'center',
   },
-  header: {
-    marginBottom: theme.spacing.xl,
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: theme.spacing.md,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  headerContent: {
+    marginBottom: theme.spacing.xl,
   },
   logo: {
     width: 60,
@@ -327,6 +347,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: theme.spacing.md,
+  },
+  appLinkRow: {
+    // kept for backward compat, but primary layout uses authHomeButton
+    marginTop: theme.spacing.md,
+    alignItems: 'center',
+  },
+  appLinkButton: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+  },
+  authHomeButton: {
+    width: 44,
+    height: 44,
+    backgroundColor: theme.colors.primaryContainer,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
   },
   footerText: {
     color: theme.colors.onSurfaceVariant,

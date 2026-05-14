@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useUser } from '@clerk/clerk-expo';
+import { useUser, useAuth } from '@clerk/clerk-expo';
 import { theme } from '@/constants/theme';
 import { Audio } from 'expo-av';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
@@ -33,6 +33,7 @@ import Animated, {
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useUser();
+  const { isSignedIn } = useAuth();
   const [meetingTitle, setMeetingTitle] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -390,7 +391,13 @@ export default function HomeScreen() {
       };
 
       console.log('[STOP-RECORDING] Uploading recording directly:', directRecordingItem.id);
-      const queueResult = await uploadQueuedMeeting(directRecordingItem);
+      
+      // Add safety timeout: if upload takes > 45 seconds, bail and use fallback
+      const uploadPromise = uploadQueuedMeeting(directRecordingItem);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Upload timeout: exceeded 45 seconds')), 45000)
+      );
+      const queueResult = await Promise.race([uploadPromise, timeoutPromise]);
 
       console.log('[STOP-RECORDING] Direct upload result:', JSON.stringify(queueResult, null, 2));
       setProcessingStage('summarizing');
@@ -407,6 +414,29 @@ export default function HomeScreen() {
       console.error('[STOP-RECORDING] Error code:', error?.code);
       console.error('[STOP-RECORDING] Error response status:', error?.response?.status);
       console.error('[STOP-RECORDING] Error response data:', error?.response?.data);
+      
+      // Fallback: if online upload failed (e.g., auth error after sign-out), save locally
+      try {
+        const uri = recording?.getURI();
+        if (uri) {
+          console.log('[STOP-RECORDING] Upload failed; attempting fallback to offline queue');
+          const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration);
+          console.log('[STOP-RECORDING] Fallback saved to offline queue:', offlineItem.id);
+          
+          setProcessingStage('queued');
+          setDebugStatus('Saved locally. Sign in to process.');
+          Alert.alert(
+            'Saved Offline',
+            'The upload failed. Your meeting has been saved locally. Sign in to upload and process it.'
+          );
+          setMeetingTitle('');
+          setDuration(0);
+          setRecording(null);
+          return;
+        }
+      } catch (fallbackError) {
+        console.error('[STOP-RECORDING] Fallback to offline queue failed:', fallbackError);
+      }
       
       setProcessingStage('failed');
       setDebugStatus('ANALYSIS FAILED');
@@ -483,17 +513,21 @@ export default function HomeScreen() {
                 resizeMode="contain"
               />
             </View>
-            <TouchableOpacity onPress={() => router.push('/settings')} style={styles.profileButton}>
-              {user?.imageUrl ? (
-                <Image source={{ uri: user.imageUrl }} style={styles.headerAvatar} />
-              ) : (
-                <View style={styles.headerAvatarPlaceholder}>
-                  <Text style={styles.headerAvatarText}>
-                    {userInitial}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
+            {isSignedIn ? (
+              <TouchableOpacity onPress={() => router.push('/settings')} style={styles.profileButton}>
+                {user?.imageUrl ? (
+                  <Image source={{ uri: user.imageUrl }} style={styles.headerAvatar} />
+                ) : (
+                  <View style={styles.headerAvatarPlaceholder}>
+                    <Text style={styles.headerAvatarText}>{userInitial}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')} style={styles.authHeaderButton}>
+                <Text style={styles.authHeaderButtonText}>Sign in</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <Text style={styles.pageTitle}>New Record</Text>
           <Text style={styles.pageSubtitle}>Clear thoughts. Precise summaries.</Text>
@@ -675,6 +709,18 @@ const styles = StyleSheet.create({
   },
   profileButton: {
     padding: 2,
+  },
+  authHeaderButton: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  authHeaderButtonText: {
+    color: theme.colors.onPrimary,
+    fontFamily: 'SpaceGrotesk-SemiBold',
   },
   headerAvatar: {
     width: 36,

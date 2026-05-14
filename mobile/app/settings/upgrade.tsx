@@ -57,6 +57,7 @@ export default function SubscriptionScreen() {
         await WebBrowser.openBrowserAsync(paymentUrl);
         // User closed browser. Re-fetch status to see if they upgraded successfully.
         await loadUserStatus();
+        router.replace('/(tabs)');
       }
     } catch (error: any) {
       console.error('Upgrade error:', error);

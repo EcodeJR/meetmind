@@ -4,6 +4,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://[IP_ADDRESS]/api';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
+  timeout: 30000, // 30-second timeout to prevent hanging requests
   headers: {
     'Content-Type': 'application/json',
   },

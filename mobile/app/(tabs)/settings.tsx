@@ -8,6 +8,7 @@ import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'react-native';
+import { getOfflineMeetingCount, processOfflineMeetingQueue } from '@/services/offlineMeetingQueue';
 
 type UserData = {
   subscription: {
@@ -19,15 +20,25 @@ type UserData = {
 };
 
 export default function SettingsScreen() {
-  const { signOut } = useAuth();
+  const { signOut, isSignedIn } = useAuth();
   const { user } = useUser();
   const router = useRouter();
   const [userData, setUserData] = useState<UserData | null>(null);
+  const [queueCount, setQueueCount] = useState(0);
+  const [queueSyncing, setQueueSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const userInitial = (user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress?.charAt(0) || '?').toUpperCase();
 
   const fetchUserData = useCallback(async () => {
     try {
+      const count = await getOfflineMeetingCount();
+      setQueueCount(count);
+
+      if (!isSignedIn) {
+        setUserData(null);
+        return;
+      }
+
       const response = await apiClient.get('/users/me');
       setUserData(response.data.data?.user || response.data.user || null);
     } catch (error) {
@@ -35,7 +46,7 @@ export default function SettingsScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isSignedIn]);
 
   useFocusEffect(
     useCallback(() => {
@@ -108,6 +119,20 @@ export default function SettingsScreen() {
     );
   };
 
+  const handleUploadQueuedNow = async () => {
+    try {
+      setQueueSyncing(true);
+      const result = await processOfflineMeetingQueue();
+      Alert.alert('Upload complete', `${result.processedCount} recording${result.processedCount === 1 ? '' : 's'} uploaded.`);
+      await fetchUserData();
+    } catch (error: any) {
+      console.error('[SETTINGS] Manual queued upload failed:', error);
+      Alert.alert('Upload failed', error?.message || 'Could not upload queued recordings right now.');
+    } finally {
+      setQueueSyncing(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -120,30 +145,42 @@ export default function SettingsScreen() {
           <Text style={styles.sectionLabel}>ACCREDITED IDENTITY</Text>
           <View style={styles.card}>
             <View style={styles.userRow}>
-              <TouchableOpacity onPress={handleUpdateAvatar} style={styles.avatarContainer}>
-                {user?.imageUrl ? (
-                  <Image source={{ uri: user.imageUrl }} style={styles.avatar} />
-                ) : (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarText}>
-                      {userInitial}
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.editBadge}>
-                  <Ionicons name="camera" size={12} color={theme.colors.onPrimary} />
-                </View>
-              </TouchableOpacity>
-              <View style={styles.userInfo}>
-                <Text style={styles.userName}>{user?.fullName || 'Professional User'}</Text>
-                <Text style={styles.userEmail}>{user?.primaryEmailAddress?.emailAddress || ''}</Text>
-
-                <View style={styles.badgesRow}>
-                  {loading ? (
-                    <ActivityIndicator size="small" color={theme.colors.primary} />
+              {isSignedIn ? (
+                <TouchableOpacity onPress={handleUpdateAvatar} style={styles.avatarContainer}>
+                  {user?.imageUrl ? (
+                    <Image source={{ uri: user.imageUrl }} style={styles.avatar} />
                   ) : (
-                    <>
-                      <View style={[styles.planBadge, userData?.subscription?.plan === 'free' && styles.freeBadge]}>
+                    <View style={styles.avatarPlaceholder}>
+                      <Text style={styles.avatarText}>
+                        {userInitial}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.editBadge}>
+                    <Ionicons name="camera" size={12} color={theme.colors.onPrimary} />
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.authButtonsWrap}>
+                  <TouchableOpacity style={styles.authSmallButton} onPress={() => router.push('/(auth)/sign-in')}>
+                    <Text style={styles.authSmallButtonText}>Sign in</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.authSmallButton, styles.authSmallSecondary]} onPress={() => router.push('/(auth)/sign-up')}>
+                    <Text style={[styles.authSmallButtonText, styles.authSmallSecondaryText]}>Sign up</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              <View style={styles.userInfo}>
+                <Text style={styles.userName}>{user?.fullName || 'Unauthenticated User'}</Text>
+                <Text style={styles.userEmail}>{user?.primaryEmailAddress?.emailAddress || 'your_email@example.com'}</Text>
+
+                {user ? (
+                  <View style={styles.badgesRow}>
+                    {loading ? (
+                      <ActivityIndicator size="small" color={theme.colors.primary} />
+                    ) : (
+                      <>
+                        <View style={[styles.planBadge, userData?.subscription?.plan === 'free' && styles.freeBadge]}>
                         <Text style={styles.planBadgeText}>{(userData?.subscription?.plan || 'free').toUpperCase()}</Text>
                       </View>
                       {userData?.subscription?.plan === 'free' && (
@@ -156,10 +193,13 @@ export default function SettingsScreen() {
                       )}
                     </>
                   )}
-                </View>
+                </View> 
+                ) : null}
+                
 
                 <TouchableOpacity onPress={handleUpdateAvatar} style={styles.changePhotoBtn}>
-                  <Text style={styles.changePhotoText}>Change photo</Text>
+                  {user ? <Text style={styles.changePhotoText}>Change photo</Text> : null}
+                  
                 </TouchableOpacity>
               </View>
             </View>
@@ -175,6 +215,21 @@ export default function SettingsScreen() {
                 <Text style={styles.statLabel}>Storage</Text>
               </View>
             </View>
+
+            {isSignedIn && queueCount > 0 && (
+              <View style={styles.queueCardRow}>
+                <Text style={styles.queueCardText}>
+                  {queueCount} local recording{queueCount === 1 ? '' : 's'} waiting to be attached
+                </Text>
+                <TouchableOpacity
+                  style={styles.queueCardButton}
+                  onPress={handleUploadQueuedNow}
+                  disabled={queueSyncing}
+                >
+                  <Text style={styles.queueCardButtonText}>{queueSyncing ? 'Uploading...' : 'Upload now'}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
 
@@ -349,6 +404,28 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: theme.colors.surfaceContainerLowest,
   },
+  authButtonsWrap: {
+    flexDirection: 'column',
+    gap: theme.spacing.sm,
+  },
+  authSmallButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.sm,
+  },
+  authSmallButtonText: {
+    color: theme.colors.onPrimary,
+    fontFamily: 'SpaceGrotesk-SemiBold',
+  },
+  authSmallSecondary: {
+    backgroundColor: theme.colors.surfaceContainerLowest,
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+  },
+  authSmallSecondaryText: {
+    color: theme.colors.onSurface,
+  },
   userInfo: {
     flex: 1,
     gap: 2,
@@ -427,6 +504,33 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     backgroundColor: theme.colors.surfaceContainer,
+  },
+  queueCardRow: {
+    marginTop: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.surfaceContainer,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  queueCardText: {
+    flex: 1,
+    color: theme.colors.onSurfaceVariant,
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+  },
+  queueCardButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.base,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  queueCardButtonText: {
+    color: theme.colors.onPrimary,
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 12,
   },
   menuItem: {
     flexDirection: 'row',

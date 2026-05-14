@@ -5,7 +5,15 @@ import apiClient from './api';
 import { sendLocalNotification } from './pushNotificationService';
 
 const QUEUE_STORAGE_KEY = 'offline_meeting_queue_v1';
+const RECENT_UPLOADS_KEY = 'offline_recent_uploads_v1';
+const SYNCING_IDS_KEY = 'offline_syncing_ids_v1';
 const OFFLINE_AUDIO_DIR = new FileSystem.Directory(FileSystem.Paths.document, 'offline-meetings');
+const SYNCING_ID_TTL_MS = 1000 * 60 * 15;
+let processQueuePromise: Promise<{
+  processedCount: number;
+  remainingCount: number;
+  latestMeeting: ProcessedMeetingResult['meeting'] | null;
+}> | null = null;
 
 export type OfflineMeetingQueueItem = {
   id: string;
@@ -46,6 +54,56 @@ const writeQueue = async (queue: OfflineMeetingQueueItem[]): Promise<void> => {
   await AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue));
 };
 
+const readSyncingEntries = async (): Promise<{ id: string; startedAt: string }[]> => {
+  try {
+    const stored = await AsyncStorage.getItem(SYNCING_IDS_KEY);
+    if (!stored) {
+      return [];
+    }
+
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn('[OFFLINE] Failed to read syncing IDs:', error);
+    return [];
+  }
+};
+
+const writeSyncingEntries = async (entries: { id: string; startedAt: string }[]): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(SYNCING_IDS_KEY, JSON.stringify(entries));
+  } catch (error) {
+    console.warn('[OFFLINE] Failed to write syncing IDs:', error);
+  }
+};
+
+const markSyncingIds = async (ids: string[]): Promise<void> => {
+  if (!ids.length) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const existing = await readSyncingEntries();
+  const map = new Map(existing.map(entry => [entry.id, entry]));
+
+  for (const id of ids) {
+    map.set(id, { id, startedAt: now });
+  }
+
+  await writeSyncingEntries(Array.from(map.values()));
+};
+
+const clearSyncingIds = async (ids: string[]): Promise<void> => {
+  if (!ids.length) {
+    return;
+  }
+
+  const existing = await readSyncingEntries();
+  const idSet = new Set(ids);
+  const remaining = existing.filter(entry => !idSet.has(entry.id));
+  await writeSyncingEntries(remaining);
+};
+
 const ensureOfflineDirectory = async (): Promise<void> => {
   if (!OFFLINE_AUDIO_DIR.exists) {
     OFFLINE_AUDIO_DIR.create({ intermediates: true });
@@ -75,6 +133,21 @@ export const getOfflineMeetingCount = async (): Promise<number> => {
   return queue.length;
 };
 
+export const getSyncingOfflineMeetingIds = async (): Promise<string[]> => {
+  const entries = await readSyncingEntries();
+  const now = Date.now();
+  const validEntries = entries.filter(entry => {
+    const startedAt = new Date(entry.startedAt).getTime();
+    return Number.isFinite(startedAt) && now - startedAt <= SYNCING_ID_TTL_MS;
+  });
+
+  if (validEntries.length !== entries.length) {
+    await writeSyncingEntries(validEntries);
+  }
+
+  return validEntries.map(entry => entry.id);
+};
+
 export const enqueueOfflineRecording = async (
   sourceUri: string,
   title: string,
@@ -84,15 +157,16 @@ export const enqueueOfflineRecording = async (
 
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const extension = getFileExtension(sourceUri);
-  const localUri = new FileSystem.File(OFFLINE_AUDIO_DIR, `${id}.${extension}`).uri;
+  const sourceFile = new FileSystem.File(sourceUri);
+  const localFile = new FileSystem.File(OFFLINE_AUDIO_DIR, `${id}.${extension}`);
 
-  await FileSystem.copyAsync({ from: sourceUri, to: localUri });
+  sourceFile.copy(localFile);
 
   const item: OfflineMeetingQueueItem = {
     id,
     title: title.trim() || 'Untitled Meeting',
     durationSeconds,
-    localUri,
+    localUri: localFile.uri,
     createdAt: new Date().toISOString(),
     status: 'queued',
   };
@@ -129,7 +203,7 @@ const deleteLocalAudioFile = async (localUri: string): Promise<void> => {
   try {
     const file = new FileSystem.File(localUri);
     if (file.exists) {
-      await FileSystem.deleteAsync(localUri, { idempotent: true });
+      file.delete();
     }
   } catch (error) {
     console.warn('[OFFLINE] Failed to delete cached audio:', error);
@@ -185,60 +259,118 @@ export const uploadQueuedMeeting = async (item: OfflineMeetingQueueItem): Promis
   };
 };
 
+const readRecentUploads = async (): Promise<{ offlineId: string; remoteId: string; createdAt: string }[]> => {
+  try {
+    const stored = await AsyncStorage.getItem(RECENT_UPLOADS_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn('[OFFLINE] Failed to read recent uploads:', err);
+    return [];
+  }
+};
+
+const writeRecentUploads = async (arr: { offlineId: string; remoteId: string; createdAt: string }[]) => {
+  try {
+    await AsyncStorage.setItem(RECENT_UPLOADS_KEY, JSON.stringify(arr));
+  } catch (err) {
+    console.warn('[OFFLINE] Failed to write recent uploads:', err);
+  }
+};
+
+const addRecentUpload = async (offlineId: string, remoteId: string) => {
+  try {
+    const uploads = await readRecentUploads();
+    uploads.unshift({ offlineId, remoteId, createdAt: new Date().toISOString() });
+    // keep only recent 20
+    await writeRecentUploads(uploads.slice(0, 20));
+  } catch (err) {
+    console.warn('[OFFLINE] Failed to add recent upload mapping:', err);
+  }
+};
+
 export const processOfflineMeetingQueue = async (): Promise<{
   processedCount: number;
   remainingCount: number;
   latestMeeting: ProcessedMeetingResult['meeting'] | null;
 }> => {
-  if (!(await isOnline())) {
-    console.log('[QUEUE] Device is offline, skipping queue processing');
-    return { processedCount: 0, remainingCount: await getOfflineMeetingCount(), latestMeeting: null };
+  if (processQueuePromise) {
+    console.log('[QUEUE] Processing already in progress; reusing active sync run');
+    return processQueuePromise;
   }
 
-  const queue = await readQueue();
-  console.log('[QUEUE] Processing queue with', queue.length, 'item(s)');
-  
-  let processedCount = 0;
-  let latestMeeting: ProcessedMeetingResult['meeting'] | null = null;
-
-  for (const item of queue) {
-    console.log('[QUEUE] Processing item:', item.id);
-    await updateOfflineMeeting(item.id, { status: 'processing', error: undefined });
-    await sendLocalNotification('Transcription Started', `${item.title} is being transcribed now.`);
-
-    try {
-      console.log('[QUEUE] Uploading meeting:', item.id);
-      const result = await uploadQueuedMeeting(item);
-      latestMeeting = result.meeting || latestMeeting;
-      processedCount += 1;
-      console.log('[QUEUE] Successfully uploaded:', item.id, 'Meeting status:', result.meeting?.status);
-      
-      await removeOfflineMeeting(item.id);
-      await deleteLocalAudioFile(item.localUri);
-
-      const summaryPreview = result.meeting?.summary
-        ? String(result.meeting.summary).slice(0, 120)
-        : `${item.title} has been processed and is ready.`;
-      await sendLocalNotification('Meeting Processed', summaryPreview);
-    } catch (error: any) {
-      console.error('[QUEUE] Upload failed for:', item.id, 'Error:', error);
-      console.error('[QUEUE] Error message:', error?.message);
-      console.error('[QUEUE] Error response:', error?.response?.data);
-      
-      const message = error?.response?.data?.error?.message || error?.message || 'Failed to sync queued meeting';
-      await updateOfflineMeeting(item.id, { status: 'queued', error: message });
-      await sendLocalNotification('Processing Failed', message);
-      
-      console.log('[QUEUE] Breaking after first error - will retry next time');
-      break;
+  processQueuePromise = (async () => {
+    if (!(await isOnline())) {
+      console.log('[QUEUE] Device is offline, skipping queue processing');
+      return { processedCount: 0, remainingCount: await getOfflineMeetingCount(), latestMeeting: null };
     }
-  }
 
-  return {
-    processedCount,
-    remainingCount: await getOfflineMeetingCount(),
-    latestMeeting,
-  };
+    const queue = await readQueue();
+    console.log('[QUEUE] Processing queue with', queue.length, 'item(s)');
+
+    const queueIds = queue.map(item => item.id);
+    await markSyncingIds(queueIds);
+    
+    let processedCount = 0;
+    let latestMeeting: ProcessedMeetingResult['meeting'] | null = null;
+    try {
+      for (const item of queue) {
+        console.log('[QUEUE] Processing item:', item.id);
+        await updateOfflineMeeting(item.id, { status: 'processing', error: undefined });
+        await sendLocalNotification('Transcription Started', `${item.title} is being transcribed now.`);
+
+        try {
+          console.log('[QUEUE] Uploading meeting:', item.id);
+          const result = await uploadQueuedMeeting(item);
+          latestMeeting = result.meeting || latestMeeting;
+          processedCount += 1;
+          console.log('[QUEUE] Successfully uploaded:', item.id, 'Meeting status:', result.meeting?.status);
+          // record mapping so UI can dedupe reliably during short races
+          try {
+            if (result.meeting?._id) {
+              await addRecentUpload(item.id, result.meeting._id);
+            }
+          } catch (err) {
+            console.warn('[OFFLINE] Could not record recent upload mapping:', err);
+          }
+
+          await removeOfflineMeeting(item.id);
+          await deleteLocalAudioFile(item.localUri);
+
+          const summaryPreview = result.meeting?.summary
+            ? String(result.meeting.summary).slice(0, 120)
+            : `${item.title} has been processed and is ready.`;
+          await sendLocalNotification('Meeting Processed', summaryPreview);
+        } catch (error: any) {
+          console.error('[QUEUE] Upload failed for:', item.id, 'Error:', error);
+          console.error('[QUEUE] Error message:', error?.message);
+          console.error('[QUEUE] Error response:', error?.response?.data);
+          
+          const message = error?.response?.data?.error?.message || error?.message || 'Failed to sync queued meeting';
+          await updateOfflineMeeting(item.id, { status: 'queued', error: message });
+          await sendLocalNotification('Processing Failed', message);
+          
+          console.log('[QUEUE] Breaking after first error - will retry next time');
+          break;
+        }
+      }
+    } finally {
+      await clearSyncingIds(queueIds);
+    }
+
+    return {
+      processedCount,
+      remainingCount: await getOfflineMeetingCount(),
+      latestMeeting,
+    };
+  })();
+
+  try {
+    return await processQueuePromise;
+  } finally {
+    processQueuePromise = null;
+  }
 };
 
 export const useOfflineMeetingSync = () => {

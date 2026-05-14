@@ -11,14 +11,21 @@ import {
   TextInput,
   Image,
   Alert,
+  AppState,
 } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { getOfflineMeetingQueue } from '@/services/offlineMeetingQueue';
+import {
+  getOfflineMeetingQueue,
+  getSyncingOfflineMeetingIds,
+  processOfflineMeetingQueue,
+} from '@/services/offlineMeetingQueue';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Meeting = {
   _id: string;
@@ -37,24 +44,57 @@ export default function HistoryScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [queueCount, setQueueCount] = useState(0);
+  const [queueSyncing, setQueueSyncing] = useState(false);
   const router = useRouter();
   const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
 
   const loadMeetings = useCallback(async (query: string = '') => {
     try {
       const endpoint = query ? `/meetings/search?q=${encodeURIComponent(query)}` : '/meetings';
-      const [response, offlineQueue] = await Promise.all([
+      const [response, offlineQueue, syncingIds] = await Promise.all([
         apiClient.get(endpoint),
         getOfflineMeetingQueue(),
+        getSyncingOfflineMeetingIds(),
       ]);
 
-      const remoteMeetings = response.data.data?.meetings || response.data.meetings || [];
+      const remoteMeetings = (response.data.data?.meetings || response.data.meetings || []) as Meeting[];
       setQueueCount(offlineQueue.length);
-      const filteredOfflineMeetings = query
-        ? offlineQueue.filter(item => item.title.toLowerCase().includes(query.toLowerCase()))
-        : offlineQueue;
+      const syncingIdSet = new Set(syncingIds);
 
-      const pendingMeetings: Meeting[] = filteredOfflineMeetings.map(item => ({
+      const filteredOfflineMeetings = (query
+        ? offlineQueue.filter(item => item.title.toLowerCase().includes(query.toLowerCase()))
+        : offlineQueue).filter(item => !syncingIdSet.has(item.id));
+
+      // Deduplicate offline items that have been uploaded as remote meetings.
+      // Heuristics: prefer a) recent upload mapping, b) exact title + close duration, c) title + createdAt within 2 minutes.
+      const RECENT_UPLOADS_KEY = 'offline_recent_uploads_v1';
+      let recentUploads: { offlineId: string; remoteId: string; createdAt: string }[] = [];
+      try {
+        const stored = await AsyncStorage.getItem(RECENT_UPLOADS_KEY);
+        if (stored) recentUploads = JSON.parse(stored);
+      } catch (err) {
+        console.warn('[HISTORY] Failed to read recent uploads mapping:', err);
+      }
+
+      const dedupedOffline = filteredOfflineMeetings.filter(item => {
+        // mapped by recent uploads
+        const mapped = recentUploads.find(u => u.offlineId === item.id);
+        if (mapped) return false;
+
+        const itemTime = new Date(item.createdAt).getTime();
+        const found = remoteMeetings.find(rm => {
+          const rmTime = new Date(rm.createdAt).getTime();
+          const sameTitle = (rm.title || '').trim() === (item.title || '').trim();
+          const durationMatch = typeof rm.durationSeconds === 'number' && typeof item.durationSeconds === 'number'
+            ? Math.abs((rm.durationSeconds || 0) - (item.durationSeconds || 0)) <= 3
+            : false;
+          const closeTime = Math.abs(rmTime - itemTime) <= 120000; // 2 minutes
+          return sameTitle && (durationMatch || closeTime);
+        });
+        return !found;
+      });
+
+      const pendingMeetings: Meeting[] = dedupedOffline.map(item => ({
         _id: `offline-${item.id}`,
         title: item.title,
         createdAt: item.createdAt,
@@ -90,14 +130,41 @@ export default function HistoryScreen() {
     }
   }, []);
 
+  const refreshMeetings = useCallback(() => {
+    if (!searchQuery) {
+      loadMeetings();
+    }
+  }, [loadMeetings, searchQuery]);
+
   useFocusEffect(
     useCallback(() => {
       // Re-fetch when tab is focused
-      if (!searchQuery) {
-        loadMeetings();
-      }
-    }, [loadMeetings, searchQuery])
+      refreshMeetings();
+    }, [refreshMeetings])
   );
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      return;
+    }
+
+    const unsubscribeNetInfo = NetInfo.addEventListener(state => {
+      if (state.isConnected && state.isInternetReachable !== false) {
+        refreshMeetings();
+      }
+    });
+
+    const appStateSubscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        refreshMeetings();
+      }
+    });
+
+    return () => {
+      unsubscribeNetInfo();
+      appStateSubscription.remove();
+    };
+  }, [isSignedIn, refreshMeetings]);
 
   // Handle live search
   useEffect(() => {
@@ -129,6 +196,21 @@ export default function HistoryScreen() {
   };
 
   const showQueuedBanner = isAuthLoaded && !isSignedIn && queueCount > 0;
+  const showSignedInQueuedBanner = isAuthLoaded && Boolean(isSignedIn) && queueCount > 0;
+
+  const handleUploadQueuedNow = async () => {
+    try {
+      setQueueSyncing(true);
+      const result = await processOfflineMeetingQueue();
+      Alert.alert('Upload complete', `${result.processedCount} recording${result.processedCount === 1 ? '' : 's'} uploaded.`);
+      await loadMeetings(searchQuery);
+    } catch (error: any) {
+      console.error('[HISTORY] Manual queued upload failed:', error);
+      Alert.alert('Upload failed', error?.message || 'Could not upload queued recordings right now.');
+    } finally {
+      setQueueSyncing(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -162,6 +244,29 @@ export default function HistoryScreen() {
             </View>
             <TouchableOpacity style={styles.bannerButton} onPress={() => router.push('/(auth)/sign-in')}>
               <Text style={styles.bannerButtonText}>Sign in</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {showSignedInQueuedBanner && (
+          <View style={styles.banner}>
+            <View style={styles.bannerIconWrap}>
+              <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.primary} />
+            </View>
+            <View style={styles.bannerContent}>
+              <Text style={styles.bannerTitle}>
+                {queueCount} recording{queueCount === 1 ? '' : 's'} waiting for upload
+              </Text>
+              <Text style={styles.bannerText}>
+                Attach these local recordings to your signed-in account now.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.bannerButton}
+              onPress={handleUploadQueuedNow}
+              disabled={queueSyncing}
+            >
+              <Text style={styles.bannerButtonText}>{queueSyncing ? 'Uploading...' : 'Upload now'}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -509,6 +614,6 @@ const styles = StyleSheet.create({
   processingBadgeText: {
     fontFamily: 'SpaceGrotesk-SemiBold',
     fontSize: 10,
-    color: theme.colors.primary,
+    color: '#FFFFFF',
   },
 });
