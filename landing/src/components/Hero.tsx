@@ -46,8 +46,7 @@ const Hero = () => {
 
             <div className="flex flex-col sm:flex-row gap-4 mb-12">
               <a 
-                href="/memovoice.apk"
-                download="memovoice.apk"
+                href="https://github.com/EcodeJR/meetmind/releases/download/v1.0.0/memovoice.apk"
                 className="inline-flex items-center justify-center gap-2 bg-accent text-black px-8 py-4 rounded-lg font-bold text-lg hover:bg-accent/90 transition-all shadow-lg shadow-accent/30 active:scale-95 uppercase tracking-wide"
               >
                 <Download className="w-5 h-5" />
