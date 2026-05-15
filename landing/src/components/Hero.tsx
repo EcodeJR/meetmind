@@ -18,7 +18,7 @@ const Hero = () => {
   };
 
   return (
-    <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
+    <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden bg-black">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           <motion.div
@@ -26,28 +26,29 @@ const Hero = () => {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-accent text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 text-accent text-xs font-bold mb-8 uppercase tracking-widest bg-white/5">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
               </span>
-              v1.0 is now live
+              V1.0 NOW LIVE
             </div>
             
-            <h1 className="text-5xl lg:text-7xl font-bold text-primary leading-[1.1] mb-6 tracking-tight">
+            <h1 className="text-6xl lg:text-7xl font-black text-white leading-[1.1] mb-8 tracking-tight">
               Your Meetings.<br />
               <span className="text-accent">Transcribed.</span><br />
               Summarized. Done.
             </h1>
             
-            <p className="text-xl text-gray-600 mb-10 leading-relaxed max-w-xl">
+            <p className="text-xl text-white/60 mb-12 leading-relaxed max-w-xl font-light">
               Memovoice listens during your physical meetings and automatically generates transcripts, summaries and action items using AI. No bots. No Zoom required.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 mb-12">
               <a 
-                href="#download" 
-                className="inline-flex items-center justify-center gap-2 bg-primary text-white px-8 py-4 rounded-2xl font-bold text-lg hover:scale-[1.02] transition-all shadow-xl shadow-primary/20 active:scale-95"
+                href="/memovoice.apk"
+                download="memovoice.apk"
+                className="inline-flex items-center justify-center gap-2 bg-accent text-black px-8 py-4 rounded-lg font-bold text-lg hover:bg-accent/90 transition-all shadow-lg shadow-accent/30 active:scale-95 uppercase tracking-wide"
               >
                 <Download className="w-5 h-5" />
                 Download on Android
@@ -58,7 +59,7 @@ const Hero = () => {
                   <input
                     type="email"
                     placeholder="Join the waitlist..."
-                    className="w-full h-full px-5 py-4 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all text-gray-600"
+                    className="w-full h-full px-5 py-4 rounded-lg border border-white/10 bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all text-white placeholder-white/40 backdrop-blur-sm"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -67,7 +68,7 @@ const Hero = () => {
                     <motion.div 
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="absolute -bottom-8 left-0 text-sm font-medium text-green-600"
+                      className="absolute -bottom-8 left-0 text-sm font-medium text-accent"
                     >
                       You&apos;re on the list! 🎉
                     </motion.div>
@@ -75,21 +76,21 @@ const Hero = () => {
                 </div>
                 <button 
                   type="submit"
-                  className="bg-accent/10 text-accent border border-accent/20 px-6 py-4 rounded-2xl font-bold hover:bg-accent/20 transition-all active:scale-95"
+                  className="bg-white/10 text-accent border border-accent/30 px-6 py-4 rounded-lg font-bold hover:bg-accent/10 transition-all active:scale-95 backdrop-blur-sm uppercase tracking-wide"
                 >
                   Join
                 </button>
               </form>
             </div>
 
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 pt-8 border-t border-white/5">
               <div className="flex -space-x-3">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="w-10 h-10 rounded-full border-4 border-white bg-gray-200" />
+                  <div key={i} className="w-10 h-10 rounded-full border-2 border-black bg-dark-100/80" />
                 ))}
               </div>
-              <p className="text-sm text-gray-500 font-medium">
-                Trusted by <span className="text-primary font-bold">1,200+</span> professionals
+              <p className="text-sm text-white/50 font-medium">
+                Trusted by <span className="text-white font-bold">1,200+</span> professionals
               </p>
             </div>
           </motion.div>
@@ -101,16 +102,16 @@ const Hero = () => {
             className="relative perspective-1000 hidden lg:block"
           >
             {/* Phone Mockup */}
-            <div className="relative w-[320px] h-[640px] mx-auto bg-primary rounded-[48px] p-4 shadow-[0_50px_100px_-20px_rgba(15,28,63,0.3)] border-[8px] border-[#1a2b5e]">
+            <div className="relative w-[320px] h-[640px] mx-auto bg-dark-50 rounded-[48px] p-4 shadow-[0_50px_100px_-20px_rgba(91,110,245,0.2)] border-[8px] border-dark-100">
               {/* Screen */}
-              <div className="w-full h-full bg-white rounded-[32px] overflow-hidden relative flex flex-col">
+              <div className="w-full h-full bg-black rounded-[32px] overflow-hidden relative flex flex-col">
                 {/* App Header */}
-                <div className="px-6 pt-10 pb-6 border-b border-gray-50 flex justify-between items-center">
+                <div className="px-6 pt-10 pb-6 border-b border-white/5 flex justify-between items-center">
                   <div>
-                    <p className="text-[10px] font-bold text-accent tracking-widest mb-1">RECORDING</p>
-                    <h3 className="text-lg font-bold text-primary">Board Meeting</h3>
+                    <p className="text-[10px] font-bold text-accent tracking-widest mb-1 uppercase">RECORDING</p>
+                    <h3 className="text-lg font-bold text-white">Board Meeting</h3>
                   </div>
-                  <div className="w-8 h-8 rounded-full bg-gray-100" />
+                  <div className="w-8 h-8 rounded-full bg-dark-100" />
                 </div>
 
                 {/* Waveform Visualization */}
@@ -132,10 +133,10 @@ const Hero = () => {
                 </div>
 
                 {/* Transcription Preview */}
-                <div className="px-6 py-8 bg-gray-50/50 rounded-t-[32px]">
-                  <div className="flex items-start gap-3 mb-6 opacity-40">
-                    <div className="w-6 h-6 rounded bg-gray-200" />
-                    <div className="flex-1 h-3 bg-gray-200 rounded" />
+                <div className="px-6 py-8 bg-dark-100/50 rounded-t-[32px]">
+                  <div className="flex items-start gap-3 mb-6 opacity-30">
+                    <div className="w-6 h-6 rounded bg-white/10" />
+                    <div className="flex-1 h-3 bg-white/10 rounded" />
                   </div>
                   <div className="flex items-start gap-3 mb-4">
                     <div className="w-6 h-6 rounded bg-accent/20" />
