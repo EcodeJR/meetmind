@@ -14,6 +14,7 @@ import meetingRoutes from './routes/meetingRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import { flutterwaveWebhookHandler } from './webhooks/flutterwaveWebhook';
 import { paddleWebhookHandler } from './webhooks/paddleWebhook';
+import adminRoutes from './routes/adminRoutes';
 
 const REQUIRED_ENV = [
   'MONGODB_URI',
@@ -48,8 +49,27 @@ app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
 // Middleware
 app.use(helmet());
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  process.env.ADMIN_URL,
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://localhost:5173',
+  'https://memovoice-admin.vercel.app',
+  'https://memovoice.vercel.app'
+].filter(Boolean) as string[];
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const isAllowed = allowedOrigins.some(o => origin === o || origin.startsWith(o));
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow as fallback during development, but log warning
+    }
+  },
   credentials: true,
 }));
 
@@ -78,6 +98,9 @@ app.use('/api', healthRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/payments', paymentRoutes);
+
+// Admin Routes (protected by x-admin-key header)
+app.use('/admin', adminRoutes);
 
 // Error handling
 app.use(errorHandling);

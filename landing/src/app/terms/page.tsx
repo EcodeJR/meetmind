@@ -71,7 +71,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-primary mb-4">8. Contact</h2>
             <p>For legal inquiries or notices, please contact us at:</p>
-            <p className="font-bold text-accent">legal@memovoice.app</p>
+            <p className="font-bold text-accent">memovoiceio@gmail.com</p>
           </section>
         </div>
       </div>

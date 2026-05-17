@@ -68,7 +68,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-bold text-primary mb-4">6. Contact</h2>
             <p>For privacy requests or inquiries regarding our data governance practices, please contact our Data Privacy Officer at:</p>
-            <p className="font-bold text-accent">privacy@memovoice.app</p>
+            <p className="font-bold text-accent">memovoiceio@gmail.com</p>
           </section>
         </div>
       </div>

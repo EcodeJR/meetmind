@@ -38,7 +38,7 @@ export default function RefundPage() {
           <section>
             <h2 className="text-2xl font-bold text-primary mb-4">3. Request Process</h2>
             <p>
-              To request a refund review, please contact our support team at <span className="font-bold text-accent">billing@memovoice.app</span> within 7 days of the transaction. Please include your account email and the transaction ID provided by Paddle.
+              To request a refund review, please contact our support team at <span className="font-bold text-accent">memovoiceio@gmail.com</span> within 7 days of the transaction. Please include your account email and the transaction ID provided by Paddle.
             </p>
           </section>
 

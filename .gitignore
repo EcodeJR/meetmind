@@ -28,3 +28,7 @@ meetmind_build_guide.md
 SETUP_STATUS.md
 meetmind_uiux_guide
 landing_page_guide.md
+.env
+node_modules/
+memovoice_admin_system.md
+memovoice_admin_dashboard_ui/

@@ -1,0 +1,16 @@
+{
+  "/_not-found": "app/_not-found.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/api/auth/login/route": "app/api/auth/login/route.js",
+  "/page": "app/page.js",
+  "/api/email/send-broadcast/route": "app/api/email/send-broadcast/route.js",
+  "/api/email/send-single/route": "app/api/email/send-single/route.js",
+  "/api/webhook/new-user/route": "app/api/webhook/new-user/route.js",
+  "/(dashboard)/dashboard/communications/page": "app/(dashboard)/dashboard/communications/page.js",
+  "/(dashboard)/dashboard/meetings/page": "app/(dashboard)/dashboard/meetings/page.js",
+  "/(dashboard)/dashboard/subscriptions/page": "app/(dashboard)/dashboard/subscriptions/page.js",
+  "/(dashboard)/dashboard/system/page": "app/(dashboard)/dashboard/system/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/dashboard/users/page": "app/(dashboard)/dashboard/users/page.js",
+  "/(dashboard)/dashboard/users/[id]/page": "app/(dashboard)/dashboard/users/[id]/page.js"
+}
