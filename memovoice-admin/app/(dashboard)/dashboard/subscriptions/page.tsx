@@ -161,8 +161,10 @@ export default function SubscriptionsPage() {
     }
   };
 
-  const getUserInitials = (name: string) =>
-    name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const getUserInitials = (name?: string) => {
+    if (!name) return 'U';
+    return name.trim().split(/\s+/).map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
+  };
 
   return (
     <div className="space-y-8 animate-fade-in">

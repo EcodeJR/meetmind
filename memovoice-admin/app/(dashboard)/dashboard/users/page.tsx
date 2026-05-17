@@ -106,8 +106,10 @@ export default function UsersPage() {
     setDeleteConfirm(null);
   };
 
-  const getUserInitials = (name: string) =>
-    name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const getUserInitials = (name?: string) => {
+    if (!name) return 'U';
+    return name.trim().split(/\s+/).map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
+  };
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });

@@ -99,8 +99,10 @@ export default function MeetingsPage() {
   const formatDuration = (mins: number) =>
     mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins} min`;
 
-  const getUserInitials = (name: string) =>
-    name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const getUserInitials = (name?: string) => {
+    if (!name) return 'U';
+    return name.trim().split(/\s+/).map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">

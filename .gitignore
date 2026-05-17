@@ -18,6 +18,8 @@ Thumbs.db
 dist/
 build/
 .turbo/
+.next/
+
 
 # Logs
 *.log
