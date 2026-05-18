@@ -3,6 +3,7 @@ import { Schema, model, Document } from 'mongoose';
 export interface IUser extends Document {
   clerkId: string;
   email: string;
+  name?: string;
   country?: string;
   subscription: {
     plan: 'free' | 'pro';
@@ -51,20 +52,20 @@ const userSchema = new Schema<IUser>(
       default: null,
     },
     subscription: {
-      plan: { 
-        type: String, 
-        enum: ['free', 'pro'], 
-        default: 'free' 
+      plan: {
+        type: String,
+        enum: ['free', 'pro'],
+        default: 'free'
       },
-      status: { 
-        type: String, 
-        enum: ['active', 'inactive', 'cancelled', 'past_due'], 
-        default: 'inactive' 
+      status: {
+        type: String,
+        enum: ['active', 'inactive', 'cancelled', 'past_due'],
+        default: 'inactive'
       },
-      provider: { 
-        type: String, 
-        enum: ['flutterwave', 'paddle', null], 
-        default: null 
+      provider: {
+        type: String,
+        enum: ['flutterwave', 'paddle', null],
+        default: null
       },
       flutterwaveCustomerId: { type: String, default: null },
       flutterwaveSubscriptionId: { type: String, default: null },

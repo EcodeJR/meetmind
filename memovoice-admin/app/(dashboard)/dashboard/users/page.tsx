@@ -43,6 +43,7 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [stats, setStats] = useState<{ proUsers: number; freeUsers: number } | null>(null);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -74,6 +75,23 @@ export default function UsersPage() {
   useEffect(() => {
     fetchUsers();
   }, [page, search, activeFilter]);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${RAILWAY_API}/admin/stats`, {
+          headers: { 'x-admin-key': ADMIN_KEY },
+        });
+        if (res.ok) {
+          const s = await res.json();
+          setStats({ proUsers: s.proUsers || 0, freeUsers: s.freeUsers || 0 });
+        }
+      } catch (err) {
+        console.error('Failed to fetch user index stats:', err);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const handleSuspend = async (id: string) => {
     try {
@@ -166,9 +184,9 @@ export default function UsersPage() {
       {/* Stat Cards */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[
-          { label: 'Total Users', value: data.total || 12482, icon: 'group', iconBg: 'bg-primary/10', iconColor: 'text-primary', change: '+12%' },
-          { label: 'Pro Users', value: 3241, icon: 'diamond', iconBg: 'bg-primary-container', iconColor: 'text-on-primary', change: '+5%' },
-          { label: 'Free Users', value: 9241, icon: 'person_outline', iconBg: 'bg-secondary-container', iconColor: 'text-on-secondary-container', change: '-2%' },
+          { label: 'Total Users', value: data.total || 0, icon: 'group', iconBg: 'bg-primary/10', iconColor: 'text-primary', change: '+12%' },
+          { label: 'Pro Users', value: stats?.proUsers ?? 0, icon: 'diamond', iconBg: 'bg-primary-container', iconColor: 'text-on-primary', change: '+5%' },
+          { label: 'Free Users', value: stats?.freeUsers ?? 0, icon: 'person_outline', iconBg: 'bg-secondary-container', iconColor: 'text-on-secondary-container', change: '-2%' },
         ].map(({ label, value, icon, iconBg, iconColor, change }) => (
           <div key={label} className="bg-surface-container-lowest p-6 rounded-2xl soft-shadow card-hover border border-white/80">
             <div className="flex justify-between items-start mb-4">

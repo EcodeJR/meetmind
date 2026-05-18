@@ -1,6 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.up.railway.app';
+const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 const TARGET_OPTIONS = [
   { value: 'all', label: 'All Users', icon: 'group', description: 'Send to all registered users' },
@@ -61,6 +64,28 @@ export default function CommunicationsPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [sending, setSending] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [stats, setStats] = useState<{ totalUsers: number; proUsers: number; freeUsers: number } | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${RAILWAY_API}/admin/stats`, {
+          headers: { 'x-admin-key': ADMIN_KEY },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setStats({
+            totalUsers: data.totalUsers || 0,
+            proUsers: data.proUsers || 0,
+            freeUsers: data.freeUsers || 0,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch admin stats for communications:', err);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -76,10 +101,11 @@ export default function CommunicationsPage() {
   };
 
   const getRecipientCount = () => {
+    if (!stats) return 'loading...';
     switch (target) {
-      case 'all': return '12,482 users';
-      case 'pro': return '4,102 Pro users';
-      case 'free': return '8,380 Free users';
+      case 'all': return `${stats.totalUsers.toLocaleString()} users`;
+      case 'pro': return `${stats.proUsers.toLocaleString()} Pro users`;
+      case 'free': return `${stats.freeUsers.toLocaleString()} Free users`;
       case 'single': return singleEmail ? '1 user' : '—';
       default: return '—';
     }

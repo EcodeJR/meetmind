@@ -57,10 +57,11 @@ const FAILED_USERS = [
 
 export default function SubscriptionsPage() {
   const [revenue, setRevenue] = useState<RevenueData>(MOCK_REVENUE);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>(MOCK_SUBS);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [manualEmail, setManualEmail] = useState('');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [failedPaymentsList, setFailedPaymentsList] = useState<any[]>([]);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -68,19 +69,60 @@ export default function SubscriptionsPage() {
   };
 
   useEffect(() => {
-    const fetchRevenue = async () => {
+    const fetchRevenueAndSubs = async () => {
+      setLoading(true);
       try {
-        const res = await fetch(`${RAILWAY_API}/admin/revenue`, {
-          headers: { 'x-admin-key': ADMIN_KEY },
-        });
-        if (res.ok) setRevenue(await res.json());
-      } catch {
-        // Use mock data
+        const [revRes, usersRes] = await Promise.all([
+          fetch(`${RAILWAY_API}/admin/revenue`, { headers: { 'x-admin-key': ADMIN_KEY } }),
+          fetch(`${RAILWAY_API}/admin/users?limit=50`, { headers: { 'x-admin-key': ADMIN_KEY } }),
+        ]);
+
+        if (revRes.ok) {
+          setRevenue(await revRes.json());
+        }
+
+        if (usersRes.ok) {
+          const data = await usersRes.json();
+          const mappedSubs = data.users.map((u: any) => ({
+            _id: u._id,
+            name: u.name || u.email.split('@')[0],
+            email: u.email,
+            plan: u.subscription?.plan || 'free',
+            provider: u.subscription?.provider || 'N/A',
+            amount: u.subscription?.plan === 'pro' ? 12.99 : 0,
+            status: u.subscription?.status || 'inactive',
+            nextBilling: u.subscription?.currentPeriodEnd
+              ? new Date(u.subscription.currentPeriodEnd).toLocaleDateString('en-US')
+              : '—',
+          }));
+          setSubscriptions(mappedSubs);
+
+          // Get users who are in failed / past_due status
+          const failed = data.users
+            .filter((u: any) => u.subscription?.status === 'past_due' || u.subscription?.status === 'failed')
+            .map((u: any) => ({
+              id: u._id,
+              name: u.name || u.email.split('@')[0],
+              email: u.email,
+              date: u.updatedAt ? new Date(u.updatedAt).toLocaleDateString('en-US') : 'Recently',
+            }));
+          setFailedPaymentsList(failed);
+        } else {
+          throw new Error('Failed to load users');
+        }
+      } catch (err) {
+        console.error('Failed to load subscription metrics:', err);
+        // Fail gracefully back to mock data
+        setSubscriptions(MOCK_SUBS);
+        setFailedPaymentsList([
+          { id: '4', name: 'James Wilson', email: 'j.wilson@corp.net', date: '2024-01-20' },
+          { id: '5', name: 'Robert Kim', email: 'r.kim@studio.io', date: '2024-01-19' },
+        ]);
       } finally {
         setLoading(false);
       }
     };
-    fetchRevenue();
+    fetchRevenueAndSubs();
   }, []);
 
   const maxRevenue = Math.max(...revenue.chartData.map(d => d.revenue));
@@ -309,21 +351,28 @@ export default function SubscriptionsPage() {
             </div>
           </div>
           <div className="space-y-3">
-            {FAILED_USERS.map(u => (
-              <div key={u.id} className="flex items-center justify-between p-3 bg-error-container/20 rounded-xl border border-error-container">
-                <div>
-                  <p className="font-medium text-on-surface text-[13px]">{u.name}</p>
-                  <p className="text-[11px] text-outline">{u.email} · Failed {u.date}</p>
-                </div>
-                <button
-                  onClick={() => handleSendReminder(u.email)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-error text-on-error text-[12px] font-medium hover:brightness-110 transition-all"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>mail</span>
-                  Remind
-                </button>
+            {failedPaymentsList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-outline text-[13px]">
+                <span className="material-symbols-outlined mb-2" style={{ fontSize: '32px' }}>check_circle</span>
+                All payments are up to date!
               </div>
-            ))}
+            ) : (
+              failedPaymentsList.map(u => (
+                <div key={u.id} className="flex items-center justify-between p-3 bg-error-container/20 rounded-xl border border-error-container">
+                  <div>
+                    <p className="font-medium text-on-surface text-[13px]">{u.name}</p>
+                    <p className="text-[11px] text-outline">{u.email} · Failed {u.date}</p>
+                  </div>
+                  <button
+                    onClick={() => handleSendReminder(u.email)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-error text-on-error text-[12px] font-medium hover:brightness-110 transition-all"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>mail</span>
+                    Remind
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

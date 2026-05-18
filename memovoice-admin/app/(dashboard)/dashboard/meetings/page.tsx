@@ -40,6 +40,7 @@ export default function MeetingsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [viewMeeting, setViewMeeting] = useState<Meeting | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [stats, setStats] = useState<{ totalMeetings: number; completedMeetings: number; processingMeetings: number; failedMeetings: number } | null>(null);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -76,6 +77,28 @@ export default function MeetingsPage() {
   useEffect(() => {
     fetchMeetings();
   }, [page, statusFilter, searchEmail, dateFrom, dateTo]);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${RAILWAY_API}/admin/stats`, {
+          headers: { 'x-admin-key': ADMIN_KEY },
+        });
+        if (res.ok) {
+          const s = await res.json();
+          setStats({
+            totalMeetings: s.totalMeetings || 0,
+            completedMeetings: s.completedMeetings || 0,
+            processingMeetings: s.processingMeetings || 0,
+            failedMeetings: s.failedMeetings || 0,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch meeting index stats:', err);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const handleDelete = async (id: string) => {
     try {
@@ -171,10 +194,10 @@ export default function MeetingsPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Meetings', value: '2,847', icon: 'mic', color: 'text-primary', bg: 'bg-primary/10' },
-          { label: 'Completed', value: '2,641', icon: 'check_circle', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-          { label: 'Processing', value: '145', icon: 'sync', color: 'text-primary', bg: 'bg-primary/10' },
-          { label: 'Failed', value: '61', icon: 'error', color: 'text-error', bg: 'bg-error-container' },
+          { label: 'Total Meetings', value: stats ? new Intl.NumberFormat().format(stats.totalMeetings) : '...', icon: 'mic', color: 'text-primary', bg: 'bg-primary/10' },
+          { label: 'Completed', value: stats ? new Intl.NumberFormat().format(stats.completedMeetings) : '...', icon: 'check_circle', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+          { label: 'Processing', value: stats ? new Intl.NumberFormat().format(stats.processingMeetings) : '...', icon: 'sync', color: 'text-primary', bg: 'bg-primary/10' },
+          { label: 'Failed', value: stats ? new Intl.NumberFormat().format(stats.failedMeetings) : '...', icon: 'error', color: 'text-error', bg: 'bg-error-container' },
         ].map(({ label, value, icon, color, bg }) => (
           <div key={label} className="bg-surface-container-lowest p-4 rounded-2xl soft-shadow border border-white/80">
             <div className={`w-9 h-9 rounded-xl ${bg} ${color} flex items-center justify-center mb-3`}>
