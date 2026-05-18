@@ -230,14 +230,40 @@ export const FAQ = () => {
 
 export const FinalCTA = () => {
   const [email, setEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [message, setMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email) {
-      setSubmitted(true);
-      setTimeout(() => setSubmitted(false), 3000);
-      setEmail('');
+    if (!email) return;
+
+    setSubmitting(true);
+    setMessage('');
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://memovoice-backend.up.railway.app/api';
+      const res = await fetch(`${apiUrl}/waitlist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, platform: 'ios' }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSubmitted(true);
+        setMessage(data.message || "Welcome to the future of meetings! Check your inbox soon. 🎉");
+        setEmail('');
+        setTimeout(() => {
+          setSubmitted(false);
+          setMessage('');
+        }, 5000);
+      } else {
+        setMessage(data.error || 'Failed to join waitlist. Please try again.');
+      }
+    } catch (err) {
+      setMessage('Failed to connect to waitlist service.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -256,16 +282,18 @@ export const FinalCTA = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            disabled={submitting}
           />
           <button 
             type="submit"
-            className="bg-accent text-black px-8 py-4 rounded-lg font-black hover:bg-accent/90 transition-all active:scale-95 shadow-lg shadow-accent/30 uppercase tracking-wide text-sm whitespace-nowrap"
+            disabled={submitting}
+            className="bg-accent text-black px-8 py-4 rounded-lg font-black hover:bg-accent/90 transition-all active:scale-95 shadow-lg shadow-accent/30 uppercase tracking-wide text-sm whitespace-nowrap disabled:opacity-50"
           >
-            Join Waitlist
+            {submitting ? 'Joining...' : 'Join Waitlist'}
           </button>
         </form>
-        {submitted && (
-          <p className="text-accent font-bold mb-4 text-sm">Welcome to the future of meetings! Check your inbox soon. 🎉</p>
+        {message && (
+          <p className={`font-bold mb-4 text-sm ${submitted ? 'text-accent' : 'text-red-500'}`}>{message}</p>
         )}
         <p className="text-white/40 text-xs">Free to start. No credit card required.</p>
       </div>
