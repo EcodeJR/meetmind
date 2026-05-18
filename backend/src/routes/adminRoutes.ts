@@ -16,6 +16,9 @@ import {
   resolveContact,
   getAdminWaitlist,
   sendWaitlistEmail,
+  getEmailHistory,
+  sendBroadcastEmail,
+  sendSingleEmail
 } from '../controllers/adminController';
 
 const router = Router();
@@ -51,5 +54,10 @@ router.post('/contacts/:id/resolve', resolveContact);
 // iOS Waitlist
 router.get('/waitlist', getAdminWaitlist);
 router.post('/waitlist/email', sendWaitlistEmail);
+
+// Email Communications
+router.get('/email/history', getEmailHistory);
+router.post('/email/broadcast', sendBroadcastEmail);
+router.post('/email/send-single', sendSingleEmail);
 
 export default router;

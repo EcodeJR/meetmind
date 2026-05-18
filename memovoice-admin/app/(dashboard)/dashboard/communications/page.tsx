@@ -66,6 +66,9 @@ export default function CommunicationsPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [stats, setStats] = useState<{ totalUsers: number; proUsers: number; freeUsers: number } | null>(null);
 
+  const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -86,6 +89,41 @@ export default function CommunicationsPage() {
     };
     fetchStats();
   }, []);
+
+  const fetchEmailLogs = async () => {
+    setLoadingHistory(true);
+    try {
+      const res = await fetch(`${RAILWAY_API}/admin/email/history?limit=50`, {
+        headers: { 'x-admin-key': ADMIN_KEY },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data.logs) {
+          setEmailLogs(data.data.logs.map((log: any) => ({
+            id: log._id,
+            type: log.type,
+            recipients: log.recipients,
+            subject: log.subject,
+            sentBy: log.sentBy,
+            date: new Date(log.createdAt).toLocaleString('en-US', {
+              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+            }),
+            status: log.status
+          })));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch email history:', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'history') {
+      fetchEmailLogs();
+    }
+  }, [activeTab]);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -115,20 +153,22 @@ export default function CommunicationsPage() {
     setSending(true);
     setShowConfirm(false);
     try {
-      const endpoint = target === 'single' ? '/api/email/send-single' : '/api/email/send-broadcast';
+      const endpoint = target === 'single' ? `${RAILWAY_API}/admin/email/send-single` : `${RAILWAY_API}/admin/email/broadcast`;
       const payload = target === 'single'
         ? { to: singleEmail, subject, html: body }
         : { target, subject, html: body, template };
 
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-key': ADMIN_KEY
+        },
         body: JSON.stringify(payload),
       });
 
       if (res.ok) {
-        showToast('Email sent successfully!');
+        showToast('Email task dispatched successfully!');
         setSubject('');
         setBody('');
         setSingleEmail('');
@@ -137,7 +177,7 @@ export default function CommunicationsPage() {
         throw new Error();
       }
     } catch {
-      showToast('Failed to send email', 'error');
+      showToast('Failed to send email task', 'error');
     } finally {
       setSending(false);
     }
@@ -350,7 +390,15 @@ export default function CommunicationsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/50">
-                {MOCK_LOGS.map(log => (
+                {loadingHistory ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-[13px] text-outline">Loading email history...</td>
+                  </tr>
+                ) : emailLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-[13px] text-outline">No emails sent yet.</td>
+                  </tr>
+                ) : emailLogs.map(log => (
                   <tr key={log.id} className="hover:bg-surface-container-low transition-colors">
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded-full text-[11px] font-bold ${log.type === 'Broadcast' ? 'bg-primary/10 text-primary' : 'bg-secondary-fixed text-secondary'}`}>

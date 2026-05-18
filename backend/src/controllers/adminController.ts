@@ -9,6 +9,7 @@ import { Meeting } from '../models/Meeting';
 import { logger } from '../utils/logger';
 import { Contact } from '../models/Contact';
 import { Waitlist } from '../models/Waitlist';
+import { EmailLog } from '../models/EmailLog';
 import { sendCustomEmail } from '../services/emailService';
 
 // GET /admin/stats
@@ -580,6 +581,15 @@ export const sendWaitlistEmail = async (req: Request, res: Response): Promise<vo
     }
 
     const sent = await sendCustomEmail(email, subject, html);
+    
+    // Log it
+    await EmailLog.create({
+      type: 'Single',
+      recipients: email,
+      subject,
+      status: sent ? 'sent' : 'failed',
+    });
+
     if (sent) {
       res.json({ success: true, message: `Email sent to ${email} successfully` });
     } else {
@@ -587,6 +597,127 @@ export const sendWaitlistEmail = async (req: Request, res: Response): Promise<vo
     }
   } catch (error) {
     logger.error({ error }, 'Admin: sendWaitlistEmail failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// GET /admin/email/history
+export const getEmailHistory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const skip = (page - 1) * limit;
+
+    const [logs, total] = await Promise.all([
+      EmailLog.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+      EmailLog.countDocuments(),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        logs,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      },
+    });
+  } catch (error) {
+    logger.error({ error }, 'Admin: getEmailHistory failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// POST /admin/email/broadcast
+export const sendBroadcastEmail = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { target, subject, html } = req.body;
+    if (!target || !subject || !html) {
+      res.status(400).json({ error: 'Target, subject, and html are required' });
+      return;
+    }
+
+    let users = [];
+    if (target === 'all') {
+      users = await User.find({ email: { $exists: true, $ne: null } }).select('email name');
+    } else if (target === 'pro') {
+      users = await User.find({ 'subscription.plan': 'pro', 'subscription.status': 'active', email: { $exists: true, $ne: null } }).select('email name');
+    } else if (target === 'free') {
+      users = await User.find({ 'subscription.plan': 'free', email: { $exists: true, $ne: null } }).select('email name');
+    }
+
+    if (users.length === 0) {
+      res.status(400).json({ error: 'No users found for this target' });
+      return;
+    }
+    
+    // Background execution to avoid timeout
+    res.json({ success: true, message: `Broadcast started for ${users.length} users` });
+
+    (async () => {
+      let sentCount = 0;
+      let failedCount = 0;
+      
+      for (const user of users) {
+        try {
+          const userName = user.name || user.email.split('@')[0];
+          const personalizedHtml = html.replace(/{name}/g, userName);
+          const sent = await sendCustomEmail(user.email, subject, personalizedHtml);
+          if (sent) sentCount++;
+          else failedCount++;
+          
+          await new Promise(r => setTimeout(r, 100)); // 10 emails/sec max
+        } catch (err) {
+          failedCount++;
+        }
+      }
+
+      const targetLabel = target === 'all' ? 'All Users' : target === 'pro' ? 'Pro Users' : 'Free Users';
+      await EmailLog.create({
+        type: 'Broadcast',
+        recipients: `${targetLabel} (${users.length})`,
+        subject,
+        status: failedCount === users.length ? 'failed' : 'sent',
+      });
+      logger.info({ sentCount, failedCount, target }, 'Broadcast finished');
+    })();
+
+  } catch (error) {
+    logger.error({ error }, 'Admin: sendBroadcastEmail failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// POST /admin/email/send-single
+export const sendSingleEmail = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { to, subject, html } = req.body;
+    if (!to || !subject || !html) {
+      res.status(400).json({ error: 'to, subject, and html are required' });
+      return;
+    }
+
+    const userName = to.split('@')[0];
+    const personalizedHtml = html.replace(/{name}/g, userName);
+    const sent = await sendCustomEmail(to, subject, personalizedHtml);
+    
+    await EmailLog.create({
+      type: 'Single',
+      recipients: to,
+      subject,
+      status: sent ? 'sent' : 'failed',
+    });
+
+    if (sent) {
+      res.json({ success: true, message: `Email sent to ${to}` });
+    } else {
+      res.status(500).json({ error: 'Failed to send email' });
+    }
+  } catch (error) {
+    logger.error({ error }, 'Admin: sendSingleEmail failed');
     res.status(500).json({ error: 'Internal server error' });
   }
 };
