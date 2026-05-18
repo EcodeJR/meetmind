@@ -13,6 +13,10 @@ interface Meeting {
   status: string;
   createdAt: string;
   platform?: string;
+  rawTranscript?: string;
+  summary?: string;
+  actionItems?: string[];
+  keyDecisions?: string[];
 }
 
 const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.up.railway.app';
@@ -39,6 +43,7 @@ export default function MeetingsPage() {
   const [dateTo, setDateTo] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [viewMeeting, setViewMeeting] = useState<Meeting | null>(null);
+  const [activeTab, setActiveTab] = useState<'transcript' | 'summary'>('transcript');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [stats, setStats] = useState<{ totalMeetings: number; completedMeetings: number; processingMeetings: number; failedMeetings: number } | null>(null);
 
@@ -298,28 +303,99 @@ export default function MeetingsPage() {
       {/* View Transcript Modal */}
       {viewMeeting && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-surface-container-lowest rounded-2xl p-8 max-w-2xl w-full soft-shadow animate-slide-up max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-start mb-6">
+          <div className="bg-surface-container-lowest rounded-2xl p-8 max-w-2xl w-full soft-shadow animate-slide-up max-h-[85vh] flex flex-col">
+            <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-[18px] font-semibold font-geist text-on-surface">{viewMeeting.title}</h3>
-                <p className="text-[12px] text-outline mt-1">{viewMeeting.userName} · {formatDuration(viewMeeting.duration)} · <Badge variant={(viewMeeting.status as any) || 'completed'} /></p>
+                <p className="text-[12px] text-outline mt-1">{viewMeeting.userName || 'Unknown User'} · {viewMeeting.userEmail || 'No Email'} · {formatDuration(viewMeeting.duration)} · <Badge variant={(viewMeeting.status as any) || 'completed'} /></p>
               </div>
-              <button onClick={() => setViewMeeting(null)} className="p-1 text-outline hover:text-on-surface transition-colors">
+              <button onClick={() => { setViewMeeting(null); setActiveTab('transcript'); }} className="p-1 text-outline hover:text-on-surface transition-colors">
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>close</span>
               </button>
             </div>
-            <div className="bg-surface-container-low rounded-xl p-6 text-[14px] text-on-surface leading-relaxed">
-              <p className="text-outline italic">Transcript content would load here from the backend. This meeting was recorded on {formatDate(viewMeeting.createdAt)}.</p>
-              <div className="mt-4 space-y-3">
-                <div className="flex gap-3">
-                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold flex-shrink-0">U1</div>
-                  <div className="bg-surface-container rounded-xl px-4 py-2 text-[13px]">Good morning everyone, let's get started with today's agenda...</div>
-                </div>
-                <div className="flex gap-3">
-                  <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-[10px] font-bold flex-shrink-0">U2</div>
-                  <div className="bg-surface-container rounded-xl px-4 py-2 text-[13px]">Sure, I have some updates from the product team to share...</div>
-                </div>
+
+            {/* GDPR & Compliance Alert */}
+            <div className="bg-[#fff7e6] text-[#b26900] border border-[#ffe5b3] rounded-xl p-3 mb-4 text-[12px] flex gap-2.5 items-start leading-relaxed">
+              <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#d48806', flexShrink: 0 }}>security</span>
+              <div>
+                <span className="font-bold">GDPR & Privacy Compliance Lock:</span> Under Section 5 of the <span className="font-semibold underline">Terms of Service</span> and Section 5 of the <span className="font-semibold underline">Privacy Policy</span>, all raw meeting audio and transcripts are the exclusive intellectual property of the account holder. Admins must respect sovereign user boundaries.
               </div>
+            </div>
+
+            {/* Tabs Selector */}
+            <div className="flex border-b border-outline-variant mb-4 flex-shrink-0">
+              <button
+                onClick={() => setActiveTab('transcript')}
+                className={`px-4 py-2 text-[13px] font-bold border-b-2 transition-all ${activeTab === 'transcript' ? 'border-primary text-primary' : 'border-transparent text-outline hover:text-on-surface'}`}
+              >
+                Raw Transcript
+              </button>
+              <button
+                onClick={() => setActiveTab('summary')}
+                className={`px-4 py-2 text-[13px] font-bold border-b-2 transition-all ${activeTab === 'summary' ? 'border-primary text-primary' : 'border-transparent text-outline hover:text-on-surface'}`}
+              >
+                AI Summary & Insights
+              </button>
+            </div>
+
+            {/* Tab Contents */}
+            <div className="flex-1 overflow-y-auto bg-surface-container-low rounded-xl p-6 text-[14px] text-on-surface leading-relaxed min-h-[250px]">
+              {activeTab === 'transcript' ? (
+                <div>
+                  {viewMeeting.rawTranscript ? (
+                    <div className="whitespace-pre-wrap font-sans text-on-surface text-[13px]">
+                      {viewMeeting.rawTranscript}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 text-outline">
+                      <span className="material-symbols-outlined mb-2" style={{ fontSize: '32px' }}>description</span>
+                      No transcript has been generated for this meeting.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {viewMeeting.summary ? (
+                    <div>
+                      <h4 className="font-bold text-on-surface text-[14px] mb-1.5">Executive Summary</h4>
+                      <p className="text-[13px] text-on-surface-variant bg-surface-container-lowest/50 p-4 rounded-xl border border-outline-variant/30">{viewMeeting.summary}</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 text-outline">
+                      <span className="material-symbols-outlined mb-2" style={{ fontSize: '32px' }}>auto_awesome</span>
+                      No AI summary or insights available.
+                    </div>
+                  )}
+
+                  {viewMeeting.keyDecisions && viewMeeting.keyDecisions.length > 0 && (
+                    <div>
+                      <h4 className="font-bold text-on-surface text-[14px] mb-1.5 flex items-center gap-1.5 text-emerald-600">
+                        <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>verified</span>
+                        Key Decisions
+                      </h4>
+                      <ul className="list-disc pl-5 text-[13px] space-y-1 text-on-surface-variant">
+                        {viewMeeting.keyDecisions.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {viewMeeting.actionItems && viewMeeting.actionItems.length > 0 && (
+                    <div>
+                      <h4 className="font-bold text-on-surface text-[14px] mb-1.5 flex items-center gap-1.5 text-primary">
+                        <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>assignment</span>
+                        Action Items
+                      </h4>
+                      <ul className="list-disc pl-5 text-[13px] space-y-1 text-on-surface-variant">
+                        {viewMeeting.actionItems.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
