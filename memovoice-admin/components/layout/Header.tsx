@@ -19,7 +19,7 @@ function getPageTitle(pathname: string): string {
   return pageTitles[pathname] || 'Admin';
 }
 
-export default function Header() {
+export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname();
   const [currentTime, setCurrentTime] = useState('');
   const [adminInitials] = useState('MA');
@@ -39,11 +39,18 @@ export default function Header() {
   }, []);
 
   return (
-    <header className="fixed top-0 right-0 w-[calc(100%-64px)] h-[72px] bg-surface border-b border-outline-variant/40 z-40">
-      <div className="flex justify-between items-center px-8 h-full max-w-[1440px]">
-        {/* Page Title */}
-        <div className="flex items-center gap-4">
-          <h1 className="text-headline-lg font-geist font-bold text-on-surface">
+    <header className="fixed top-0 right-0 w-full md:w-[calc(100%-64px)] h-[72px] bg-surface border-b border-outline-variant/40 z-40 transition-all">
+      <div className="flex justify-between items-center px-4 md:px-8 h-full max-w-[1440px]">
+        {/* Page Title & Mobile Toggle */}
+        <div className="flex items-center gap-3 md:gap-4">
+          <button 
+            className="md:hidden p-2 -ml-2 text-outline hover:text-on-surface hover:bg-surface-container-low rounded-xl transition-colors"
+            onClick={onMenuClick}
+            title="Menu"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>menu</span>
+          </button>
+          <h1 className="text-title-lg md:text-headline-lg font-geist font-bold text-on-surface truncate">
             {getPageTitle(pathname)}
           </h1>
           <span className="hidden md:block text-label-sm text-outline bg-surface-container px-3 py-1 rounded-full">

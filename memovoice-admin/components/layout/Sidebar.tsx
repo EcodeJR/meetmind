@@ -15,7 +15,7 @@ const navItems = [
   { href: '/dashboard/system', icon: 'monitor_heart', label: 'System Health' },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -30,7 +30,21 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-[64px] flex flex-col items-center py-6 bg-[#2f3038] z-50">
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden animate-fade-in"
+          onClick={onClose}
+        />
+      )}
+
+      <aside className={`
+        fixed left-0 top-0 h-full w-[64px] flex flex-col items-center py-6 bg-[#2f3038] z-50
+        transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:translate-x-0
+      `}>
       {/* Logo mark */}
       <div className="mb-10">
         <span
@@ -88,5 +102,6 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }
