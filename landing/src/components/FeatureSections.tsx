@@ -10,19 +10,29 @@ import {
   Sparkles,
   AlertCircle,
   FileText,
-  Mic
+  Mic,
+  Hexagon,
+  Triangle,
+  Circle,
+  Square,
+  Octagon
 } from 'lucide-react';
 
 export const SocialProof = () => (
   <div className="py-12 bg-black border-y border-white/5">
     <div className="max-w-7xl mx-auto px-4 text-center">
       <p className="text-xs font-bold text-white/40 uppercase tracking-widest mb-8">Trusted by professionals in 10+ countries</p>
-      <div className="flex flex-wrap justify-center items-center gap-12 opacity-30 grayscale">
-        {/* Placeholder Company Logos */}
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-white/20 rounded-lg" />
-            <div className="w-24 h-4 bg-white/20 rounded-full" />
+      <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-40 grayscale hover:grayscale-0 transition-all duration-500">
+        {[
+          { name: "Acme Corp", icon: <Hexagon className="w-6 md:w-8 h-6 md:h-8" /> },
+          { name: "Globex", icon: <Triangle className="w-6 md:w-8 h-6 md:h-8" /> },
+          { name: "Initech", icon: <Circle className="w-6 md:w-8 h-6 md:h-8" /> },
+          { name: "Soylent", icon: <Square className="w-6 md:w-8 h-6 md:h-8" /> },
+          { name: "Massive", icon: <Octagon className="w-6 md:w-8 h-6 md:h-8" /> }
+        ].map((company) => (
+          <div key={company.name} className="flex items-center gap-2 text-white font-bold text-lg md:text-xl tracking-tight">
+            {company.icon}
+            <span>{company.name}</span>
           </div>
         ))}
       </div>
