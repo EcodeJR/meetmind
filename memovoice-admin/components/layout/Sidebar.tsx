@@ -10,6 +10,8 @@ const navItems = [
   { href: '/dashboard/meetings', icon: 'mic', label: 'Meetings' },
   { href: '/dashboard/communications', icon: 'mail', label: 'Communications' },
   { href: '/dashboard/subscriptions', icon: 'payments', label: 'Subscriptions' },
+  { href: '/dashboard/contacts', icon: 'contact_support', label: 'Contacts' },
+  { href: '/dashboard/waitlist', icon: 'hourglass_top', label: 'iOS Waitlist' },
   { href: '/dashboard/system', icon: 'monitor_heart', label: 'System Health' },
 ];
 

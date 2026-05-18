@@ -424,3 +424,27 @@ export const sendSubscriptionUpgradeEmail = async (
     return false;
   }
 };
+
+/**
+ * Send a custom email (e.g. from the admin dashboard)
+ */
+export const sendCustomEmail = async (
+  email: string,
+  subject: string,
+  html: string
+): Promise<boolean> => {
+  try {
+    const mailOptions = {
+      from: gmailUser,
+      to: email,
+      subject: subject,
+      html: html,
+    };
+
+    const result = await sendEmailWithRetry(mailOptions);
+    return result.success;
+  } catch (error) {
+    logger.error({ error, email }, 'Failed to send custom email');
+    return false;
+  }
+};

@@ -10,29 +10,36 @@
     "splash": {
       "image": "./assets/logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0F1C3F"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "bundleIdentifier": "com.memovoice.app",
+      "buildNumber": "1",
+      "supportsTablet": false,
       "infoPlist": {
+        "NSMicrophoneUsageDescription": "Memovoice needs microphone access to record your meetings.",
         "UIBackgroundModes": [
           "audio"
-        ]
+        ],
+        "UIUserNotificationSettings": true
       }
     },
     "android": {
+      "package": "com.memovoice.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0F1C3F"
       },
-      "package": "com.memovoice.app",
       "permissions": [
         "RECORD_AUDIO",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_MICROPHONE"
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
       ],
       "intentFilters": [
         {
@@ -50,25 +57,21 @@
         }
       ]
     },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/logo.png"
-    },
     "plugins": [
       "expo-router",
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow Memovoice to access your microphone for AI session recording."
+          "microphonePermission": "Memovoice needs microphone access to record your meetings."
         }
       ],
       [
         "expo-av",
         {
-          "microphonePermission": "Allow Memovoice to record background audio during meetings."
+          "microphonePermission": "Memovoice needs microphone access to record your meetings."
         }
       ],
+      "expo-notifications",
       "expo-asset",
       "expo-font"
     ],

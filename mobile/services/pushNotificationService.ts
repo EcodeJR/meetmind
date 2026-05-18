@@ -184,3 +184,70 @@ export const usePushNotifications = () => {
 
   return token;
 };
+
+// ============================================
+// NOTIFICATION SETUP
+// Android: requires notification channel setup
+// iOS: requires permission request before showing
+// Both are handled below
+// ============================================
+
+// Request notification permissions (required for iOS)
+export const setupNotifications = async () => {
+  // ============================================
+  // iOS ONLY: must request permission before 
+  // showing ANY notification
+  // Android: permission not required for local notifications
+  // ============================================
+  const Notifications = await loadNotifications();
+  if (Platform.OS === 'ios') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') {
+      console.log('Notification permission denied on iOS');
+      return;
+    }
+  }
+
+  // ============================================
+  // ANDROID ONLY: notification channel required
+  // for Android 8.0 and above
+  // iOS: channels are IGNORED on iOS
+  // ============================================
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('recording', {
+      name: 'Recording',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 0, 0, 0],
+      lightColor: '#5B6EF5',
+      lockscreenVisibility: 
+        Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: true,
+    });
+  }
+};
+
+export const showRecordingNotification = async () => {
+  const Notifications = await loadNotifications();
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: '🎙️ Memovoice Recording',
+      body: 'Meeting recording in progress. Tap to return.',
+      // ============================================
+      // sticky: true
+      // Android: notification stays until dismissed in code
+      // iOS: IGNORED - iOS doesn't support sticky notifications
+      //      iOS notification will auto-dismiss
+      // ============================================
+      sticky: true,
+      
+      // ============================================
+      // ANDROID ONLY: assigns to notification channel
+      // iOS: this value is IGNORED
+      // ============================================
+      ...(Platform.OS === 'android' && { 
+        channelId: 'recording' 
+      }),
+    },
+    trigger: null,
+  });
+};

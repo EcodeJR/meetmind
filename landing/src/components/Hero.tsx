@@ -6,14 +6,40 @@ import { Download } from 'lucide-react';
 
 const Hero = () => {
   const [email, setEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [message, setMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email) {
-      setSubmitted(true);
-      setTimeout(() => setSubmitted(false), 3000);
-      setEmail('');
+    if (!email) return;
+
+    setSubmitting(true);
+    setMessage('');
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://memovoice-backend.up.railway.app/api';
+      const res = await fetch(`${apiUrl}/waitlist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, platform: 'ios' }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSubmitted(true);
+        setMessage(data.message || "You're on the iOS waitlist! 🎉");
+        setEmail('');
+        setTimeout(() => {
+          setSubmitted(false);
+          setMessage('');
+        }, 5000);
+      } else {
+        setMessage(data.error || 'Failed to join waitlist. Please try again.');
+      }
+    } catch (err) {
+      setMessage('Failed to connect to waitlist service.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -31,7 +57,7 @@ const Hero = () => {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
               </span>
-              V1.0 NOW LIVE
+              Android App Now Live • iOS Coming Soon! 📱
             </div>
             
             <h1 className="text-6xl lg:text-7xl font-black text-white leading-[1.1] mb-8 tracking-tight">
@@ -49,35 +75,39 @@ const Hero = () => {
                 href="https://github.com/EcodeJR/meetmind/releases/download/v1.0.0/memovoice.apk"
                 className="inline-flex items-center justify-center gap-2 bg-accent text-black px-8 py-4 rounded-lg font-bold text-lg hover:bg-accent/90 transition-all shadow-lg shadow-accent/30 active:scale-95 uppercase tracking-wide"
               >
-                <Download className="w-5 h-5" />
-                Download on Android
+                <svg className="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.5 12c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5m-11 0c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5m11.55-4.8l1.8-3.1a.488.488 0 00-.18-.67c-.24-.13-.54-.05-.67.18l-1.83 3.17C15.65 6.28 13.89 6 12 6c-1.89 0-3.65.28-5.37.78L4.8 3.61c-.13-.23-.43-.31-.67-.18a.488.488 0 00-.18.67l1.8 3.1C2.92 8.78 1 11.16 1 14h22c0-2.84-1.92-5.22-4.75-6.8z"/>
+                </svg>
+                Download APK for Android
               </a>
               
               <form onSubmit={handleSubmit} className="flex-1 max-w-sm flex gap-2">
                 <div className="relative flex-1">
                   <input
                     type="email"
-                    placeholder="Join the waitlist..."
+                    placeholder="Enter email for iOS Waitlist..."
                     className="w-full h-full px-5 py-4 rounded-lg border border-white/10 bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all text-white placeholder-white/40 backdrop-blur-sm"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
+                    disabled={submitting}
                   />
-                  {submitted && (
+                  {message && (
                     <motion.div 
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="absolute -bottom-8 left-0 text-sm font-medium text-accent"
+                      className={`absolute -bottom-8 left-0 text-xs font-semibold ${submitted ? 'text-accent' : 'text-red-500'}`}
                     >
-                      You&apos;re on the list! 🎉
+                      {message}
                     </motion.div>
                   )}
                 </div>
                 <button 
                   type="submit"
-                  className="bg-white/10 text-accent border border-accent/30 px-6 py-4 rounded-lg font-bold hover:bg-accent/10 transition-all active:scale-95 backdrop-blur-sm uppercase tracking-wide"
+                  disabled={submitting}
+                  className="bg-white/10 text-accent border border-accent/30 px-6 py-4 rounded-lg font-bold hover:bg-accent/10 transition-all active:scale-95 backdrop-blur-sm uppercase tracking-wide disabled:opacity-50"
                 >
-                  Join
+                  {submitting ? 'Joining...' : 'Waitlist'}
                 </button>
               </form>
             </div>

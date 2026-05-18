@@ -1,3 +1,37 @@
+// ============================================
+// MEMOVOICE PLATFORM BUILD REFERENCE
+// ============================================
+// 
+// SWITCHING BETWEEN ANDROID AND IOS BUILDS:
+//
+// ANDROID BUILD:
+//   Command: eas build --platform android --profile preview
+//   app.json changes needed: none (android config is always active)
+//   Key values:
+//     - Audio type: 'audio/m4a'
+//     - URI prefix: keep 'file://'
+//     - Permissions: RECORD_AUDIO, FOREGROUND_SERVICE
+//     - Notification channel: 'recording'
+//
+// iOS BUILD:
+//   Command: eas build --platform ios --profile preview
+//   app.json changes needed: none (ios config is always active)
+//   Key values:
+//     - Audio type: 'audio/x-m4a'  
+//     - URI prefix: remove 'file://'
+//     - Permissions: NSMicrophoneUsageDescription in infoPlist
+//     - Must reset allowsRecordingIOS to false after recording
+//     - Must request notification permission before showing
+//
+// PRODUCTION BUILDS:
+//   Android Play Store: eas build --platform android --profile production
+//   iOS App Store:      eas build --platform ios --profile production
+//
+// BOTH PLATFORMS AT ONCE:
+//   eas build --platform all --profile preview
+//
+// ============================================
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -9,6 +43,8 @@ import {
   ActivityIndicator,
   Image,
   AppState,
+  Platform,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -17,7 +53,7 @@ import { theme } from '@/constants/theme';
 import { Audio } from 'expo-av';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import { enqueueOfflineRecording, isOnline, processOfflineMeetingQueue, uploadQueuedMeeting } from '@/services/offlineMeetingQueue';
-import { sendLocalNotification } from '@/services/pushNotificationService';
+import { sendLocalNotification, setupNotifications, showRecordingNotification } from '@/services/pushNotificationService';
 import Animated, {
   useAnimatedStyle,
   withRepeat,
@@ -263,39 +299,143 @@ export default function HomeScreen() {
       setDebugStatus('Requesting permissions...');
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status !== 'granted') {
-        Alert.alert('Permission Required', 'Microphone access is needed for transcription.');
+        // ============================================
+        // PLATFORM SPECIFIC PERMISSION MESSAGE
+        // Android: shows in system permission dialog automatically
+        // iOS: shows NSMicrophoneUsageDescription from app.json
+        //      If user denies, must go to Settings to re-enable
+        //      iOS does NOT ask twice - handle denial gracefully
+        // ============================================
+        if (Platform.OS === 'ios') {
+          Alert.alert(
+            'Microphone Permission Required',
+            'Memovoice needs microphone access to record meetings. Please enable it in Settings → Memovoice → Microphone.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Open Settings', 
+                onPress: () => Linking.openURL('app-settings:')
+                // ============================================
+                // iOS ONLY: 'app-settings:' opens app settings
+                // Android equivalent: use IntentLauncher
+                // ============================================
+              }
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Microphone Permission Required',
+            'Memovoice needs microphone access to record meetings.',
+            [{ text: 'OK' }]
+          );
+        }
         return;
       }
 
       setDebugStatus('Configuring audio session...');
+      // ============================================
+      // PLATFORM SPECIFIC AUDIO MODE
+      // iOS CRITICAL settings marked below
+      // DO NOT change iOS values or background 
+      // recording will break on iPhone
+      // ============================================
       await Audio.setAudioModeAsync({
+        // ============================================
+        // allowsRecordingIOS
+        // Android: this value is IGNORED on Android
+        // iOS: MUST be true before recording starts
+        //      MUST be set back to false when done recording
+        // Current: true (set before recording)
+        // ============================================
         allowsRecordingIOS: true,
+        
+        // ============================================
+        // playsInSilentModeIOS  
+        // Android: IGNORED on Android
+        // iOS: MUST be true or app goes silent when 
+        //      iPhone is on silent/vibrate mode
+        // Current: true (leave as is)
+        // ============================================
         playsInSilentModeIOS: true,
+        
+        // ============================================
+        // staysActiveInBackground
+        // Android: keeps recording when screen locks
+        // iOS: keeps recording when screen locks
+        // Both platforms need this TRUE for background recording
+        // Current: true (leave as is)
+        // ============================================
         staysActiveInBackground: true,
+        
+        // ============================================
+        // shouldDuckAndroid
+        // Android: lowers other app audio during recording
+        // iOS: IGNORED on iOS
+        // Current: true
+        // ============================================
         shouldDuckAndroid: true,
+        
+        // ============================================
+        // playThroughEarpieceAndroid
+        // Android: false = plays through speaker (correct)
+        // iOS: IGNORED on iOS
+        // Current: false (leave as is)
+        // ============================================
         playThroughEarpieceAndroid: false,
       });
 
       setDebugStatus('Initializing high-fidelity recorder...');
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        {
-          ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-          android: {
-            ...Audio.RecordingOptionsPresets.HIGH_QUALITY.android,
-            extension: '.m4a',
-            outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-            audioEncoder: Audio.AndroidAudioEncoder.AAC,
-          },
-          ios: {
-            ...Audio.RecordingOptionsPresets.HIGH_QUALITY.ios,
-            extension: '.m4a',
-            outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-            audioQuality: Audio.IOSAudioQuality.HIGH,
-            sampleRate: 44100,
-            numberOfChannels: 1,
-            bitRate: 128000,
-          },
+      // ============================================
+      // PLATFORM SPECIFIC RECORDING OPTIONS
+      // Both platforms are configured below
+      // The RecordingOptions object handles both automatically
+      // DO NOT change unless you need different quality settings
+      // ============================================
+      const RECORDING_OPTIONS: Audio.RecordingOptions = {
+        // Android recording settings
+        android: {
+          // ============================================
+          // ANDROID AUDIO FORMAT
+          // extension: '.m4a' (DO NOT change - most compatible)
+          // outputFormat: MPEG_4 (DO NOT change)
+          // audioEncoder: AAC (DO NOT change)
+          // ============================================
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
         },
+        
+        // iOS recording settings
+        ios: {
+          // ============================================
+          // iOS AUDIO FORMAT
+          // extension: '.m4a' (DO NOT change - required for Groq Whisper)
+          // outputFormat: MPEG4AAC (DO NOT change - iOS specific)
+          // audioQuality: Audio.IOSAudioQuality.HIGH (change to MEDIUM to reduce file size)
+          // ============================================
+          extension: '.m4a',
+          outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        
+        // Web settings (not used in production)
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        }
+      };
+
+      const { recording: newRecording } = await Audio.Recording.createAsync(
+        RECORDING_OPTIONS,
         (status) => {
           if (status.metering !== undefined) {
             // Convert dB to 0-1 scale (roughly -60 to 0)
@@ -315,8 +455,14 @@ export default function HomeScreen() {
       setDuration(0);
       setIsRecording(true);
       setDebugStatus('RECORDING ACTIVE');
-      sendLocalNotification('Recording Started', meetingTitle || 'Your meeting is now being recorded');
-      await sendLocalNotification('🎙️ Recording in progress', 'Tap to return to Memovoice');
+      // ============================================
+      // NOTIFICATION SETUP
+      // Android: requires notification channel setup
+      // iOS: requires permission request before showing
+      // Both are handled below
+      // ============================================
+      await setupNotifications();
+      await showRecordingNotification();
     } catch (err) {
       console.error('Failed to start recording', err);
       Alert.alert('Hardware Error', 'Could not initialize the microphone.');
@@ -341,9 +487,17 @@ export default function HomeScreen() {
         console.warn('[RECOVERY] stopAndUnloadAsync failed; attempting partial recovery', error);
       }
 
+      // ============================================
+      // RESET AUDIO MODE AFTER RECORDING
+      // Critical for iOS: must reset allowsRecordingIOS
+      // to false after recording or audio playback 
+      // will be affected for the rest of the session
+      // ============================================
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecordingIOS: false,   // iOS: reset after recording
         staysActiveInBackground: false,
+        playsInSilentModeIOS: true,  // iOS: keep true for playback
+        shouldDuckAndroid: false,
       });
       const uri = recording.getURI();
       console.log('[DEBUG] Recording stored at:', uri);

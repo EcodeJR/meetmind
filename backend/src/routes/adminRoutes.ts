@@ -12,6 +12,10 @@ import {
   getAdminRevenue,
   getSystemHealth,
   notifyNewUser,
+  getAdminContacts,
+  resolveContact,
+  getAdminWaitlist,
+  sendWaitlistEmail,
 } from '../controllers/adminController';
 
 const router = Router();
@@ -39,5 +43,13 @@ router.get('/system', getSystemHealth);
 
 // Internal notification trigger
 router.post('/notify-new-user', notifyNewUser);
+
+// User Feedback & Contacts
+router.get('/contacts', getAdminContacts);
+router.post('/contacts/:id/resolve', resolveContact);
+
+// iOS Waitlist
+router.get('/waitlist', getAdminWaitlist);
+router.post('/waitlist/email', sendWaitlistEmail);
 
 export default router;

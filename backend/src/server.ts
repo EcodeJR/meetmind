@@ -15,6 +15,7 @@ import paymentRoutes from './routes/paymentRoutes';
 import { flutterwaveWebhookHandler } from './webhooks/flutterwaveWebhook';
 import { paddleWebhookHandler } from './webhooks/paddleWebhook';
 import adminRoutes from './routes/adminRoutes';
+import publicRoutes from './routes/publicRoutes';
 
 const REQUIRED_ENV = [
   'MONGODB_URI',
@@ -98,6 +99,7 @@ app.use('/api', healthRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api', publicRoutes);
 
 // Admin Routes (protected by x-admin-key header)
 app.use('/admin', adminRoutes);

@@ -3,6 +3,7 @@ import Navbar from '@/components/Navbar';
 import Hero from '@/components/Hero';
 import { SocialProof, Problem, Features } from '@/components/FeatureSections';
 import { HowItWorks, Pricing, Testimonials, FAQ, FinalCTA, Footer } from '@/components/BrandSections';
+import ContactSection from '@/components/ContactSection';
 
 export const metadata = {
   title: 'Memovoice — AI Meeting Transcription App',
@@ -29,6 +30,7 @@ export default function Home() {
       <Pricing />
       <Testimonials />
       <FAQ />
+      <ContactSection />
       <FinalCTA />
       <Footer />
       

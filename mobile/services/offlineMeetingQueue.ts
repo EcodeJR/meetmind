@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import apiClient from './api';
 import { sendLocalNotification } from './pushNotificationService';
@@ -212,11 +213,27 @@ const deleteLocalAudioFile = async (localUri: string): Promise<void> => {
 
 export const uploadQueuedMeeting = async (item: OfflineMeetingQueueItem): Promise<ProcessedMeetingResult> => {
   const formData = new FormData();
+  // ============================================
+  // PLATFORM SPECIFIC FILE TYPE
+  // Android uri: file:///storage/emulated/0/...
+  // iOS uri:     file:///var/mobile/Containers/...
+  // Both use .m4a extension
+  // type value:
+  //   Android: 'audio/m4a'
+  //   iOS:     'audio/x-m4a' (iOS requires x- prefix)
+  // Current: handled automatically below with Platform.OS
+  // ============================================
   // @ts-ignore - React Native FormData file descriptor shape
   formData.append('audio', {
-    uri: item.localUri,
+    uri: Platform.OS === 'ios' 
+      ? item.localUri.replace('file://', '') 
+      // iOS: remove file:// prefix for FormData upload
+      // Android: keep file:// prefix for FormData upload
+      : item.localUri,
+    type: Platform.OS === 'ios' 
+      ? 'audio/x-m4a'  // iOS MIME type
+      : 'audio/m4a',   // Android MIME type
     name: `recording-${item.id}.m4a`,
-    type: 'audio/m4a',
   });
   formData.append('title', item.title);
   formData.append('durationSeconds', String(item.durationSeconds));

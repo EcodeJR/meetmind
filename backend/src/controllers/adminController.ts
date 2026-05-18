@@ -7,6 +7,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { User } from '../models/User';
 import { Meeting } from '../models/Meeting';
 import { logger } from '../utils/logger';
+import { Contact } from '../models/Contact';
+import { Waitlist } from '../models/Waitlist';
+import { sendCustomEmail } from '../services/emailService';
 
 // GET /admin/stats
 export const getAdminStats = async (_req: Request, res: Response): Promise<void> => {
@@ -488,5 +491,102 @@ export const notifyNewUser = async (req: Request, res: Response): Promise<void> 
     logger.error({ error }, 'Admin: notifyNewUser failed (non-critical)');
     // Return success anyway - this is non-critical
     res.json({ success: false, message: 'Notification deferred' });
+  }
+};
+
+// GET /admin/contacts
+export const getAdminContacts = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    const [contacts, total] = await Promise.all([
+      Contact.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Contact.countDocuments(),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        contacts,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      },
+    });
+  } catch (error) {
+    logger.error({ error }, 'Admin: getAdminContacts failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// POST /admin/contacts/:id/resolve
+export const resolveContact = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const contact = await Contact.findByIdAndUpdate(id, { status: 'resolved' }, { new: true });
+    if (!contact) {
+      res.status(404).json({ error: 'Contact submission not found' });
+      return;
+    }
+    res.json({ success: true, message: 'Contact message resolved successfully', data: contact });
+  } catch (error) {
+    logger.error({ error }, 'Admin: resolveContact failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// GET /admin/waitlist
+export const getAdminWaitlist = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const skip = (page - 1) * limit;
+
+    const [waitlist, total] = await Promise.all([
+      Waitlist.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Waitlist.countDocuments(),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        waitlist,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      },
+    });
+  } catch (error) {
+    logger.error({ error }, 'Admin: getAdminWaitlist failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// POST /admin/waitlist/email
+export const sendWaitlistEmail = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, subject, html } = req.body;
+    if (!email || !subject || !html) {
+      res.status(400).json({ error: 'Email, subject, and html content are required' });
+      return;
+    }
+
+    const sent = await sendCustomEmail(email, subject, html);
+    if (sent) {
+      res.json({ success: true, message: `Email sent to ${email} successfully` });
+    } else {
+      res.status(500).json({ error: 'Failed to send email' });
+    }
+  } catch (error) {
+    logger.error({ error }, 'Admin: sendWaitlistEmail failed');
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
