@@ -90,15 +90,16 @@ export default function ContactsPage() {
     setSendingEmail(true);
 
     try {
-      // Send custom email using our waitlist custom email endpoint
-      const res = await fetch(`${RAILWAY_API}/admin/waitlist/email`, {
+      // Send custom email using our Vercel email API
+      const res = await fetch('/api/email/send-single', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': ADMIN_KEY,
         },
+        credentials: 'include',
         body: JSON.stringify({
-          email: replyModal.contact.email,
+          to: replyModal.contact.email,
+          name: replyModal.contact.name,
           subject: emailSubject,
           html: `
             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
