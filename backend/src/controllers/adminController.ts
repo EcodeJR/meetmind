@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
+import mongoose from 'mongoose';
+import { v2 as cloudinary } from 'cloudinary';
 import { User } from '../models/User';
 import { Meeting } from '../models/Meeting';
 import { logger } from '../utils/logger';
@@ -347,8 +349,7 @@ export const getAdminRevenue = async (_req: Request, res: Response): Promise<voi
 // GET /admin/system
 export const getSystemHealth = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const { connection } = await import('mongoose');
-    const mongoStatus = connection.readyState === 1 ? 'connected' : 'disconnected';
+    const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
 
     // Check Groq
     let groqStatus: 'active' | 'error' = 'error';
@@ -361,6 +362,32 @@ export const getSystemHealth = async (_req: Request, res: Response): Promise<voi
     try {
       if (process.env.GEMINI_API_KEY) geminiStatus = 'active';
     } catch { geminiStatus = 'error'; }
+
+    // Check Cloudinary storage dynamically using Cloudinary SDK Admin API
+    let cloudinaryStatus = 'active';
+    let cloudinaryStorageUsed = '0.0 GB / 25 GB';
+    try {
+      cloudinary.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+      });
+
+      const usage = await cloudinary.api.usage();
+      if (usage && usage.storage) {
+        const usedBytes = usage.storage.usage || 0;
+        const limitBytes = usage.storage.limit || 26843545600; // 25 GB default
+        
+        // Convert to GB with 3 decimal precision
+        const usedGB = Math.round((usedBytes / (1024 * 1024 * 1024)) * 1000) / 1000;
+        const limitGB = Math.round((limitBytes / (1024 * 1024 * 1024)) * 10) / 10;
+        
+        cloudinaryStorageUsed = `${usedGB} GB / ${limitGB} GB`;
+      }
+    } catch (err) {
+      logger.error({ err }, 'Admin: Failed to fetch Cloudinary usage metrics');
+      cloudinaryStatus = 'error';
+    }
 
     // Avg processing time from completed meetings
     const recentMeetings = await Meeting.find({ status: 'completed', processingStartedAt: { $exists: true }, processingCompletedAt: { $exists: true } })
@@ -405,7 +432,7 @@ export const getSystemHealth = async (_req: Request, res: Response): Promise<voi
       mongodb: mongoStatus,
       groq: groqStatus,
       gemini: geminiStatus,
-      cloudinary: { status: 'active', storageUsed: '1.2 GB / 100 GB' },
+      cloudinary: { status: cloudinaryStatus, storageUsed: cloudinaryStorageUsed },
       avgProcessingTime,
       avgSummaryTime: 6.2,
       successRate,

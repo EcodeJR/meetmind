@@ -45,6 +45,19 @@ const MOCK_HEALTH: SystemHealth = {
   ],
 };
 
+const INITIAL_HEALTH: SystemHealth = {
+  mongodb: 'disconnected',
+  groq: 'error',
+  gemini: 'error',
+  cloudinary: { status: 'inactive', storageUsed: '0 GB / 100 GB' },
+  railwayBackend: 'offline',
+  avgProcessingTime: 0,
+  avgSummaryTime: 0,
+  successRate: 0,
+  failedJobsToday: 0,
+  recentErrors: [],
+};
+
 const severityStyle: Record<string, string> = {
   low: 'bg-surface-container text-on-surface-variant',
   medium: 'bg-[#ffdcc6] text-[#914800]',
@@ -53,11 +66,26 @@ const severityStyle: Record<string, string> = {
 };
 
 export default function SystemHealthPage() {
-  const [health, setHealth] = useState<SystemHealth>(MOCK_HEALTH);
+  const [health, setHealth] = useState<SystemHealth>(INITIAL_HEALTH);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [countdown, setCountdown] = useState(30);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  const getCloudinaryPercentage = () => {
+    try {
+      const parts = health.cloudinary.storageUsed.split('/');
+      if (parts.length === 2) {
+        const used = parseFloat(parts[0].replace(/[^\d.]/g, ''));
+        const total = parseFloat(parts[1].replace(/[^\d.]/g, ''));
+        if (!isNaN(used) && !isNaN(total) && total > 0) {
+          return Math.round((used / total) * 100 * 10) / 10;
+        }
+      }
+    } catch {}
+    return 0;
+  };
+  const cloudinaryPercentage = getCloudinaryPercentage();
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -66,19 +94,35 @@ export default function SystemHealthPage() {
 
   const fetchHealth = useCallback(async () => {
     try {
-      const [systemRes, healthPing] = await Promise.all([
-        fetch(`${RAILWAY_API}/admin/system`, { headers: { 'x-admin-key': ADMIN_KEY } }),
-        fetch(`${RAILWAY_API}/`, { signal: AbortSignal.timeout(5000) }),
-      ]);
+      const res = await fetch(`${RAILWAY_API}/admin/system`, {
+        headers: { 'x-admin-key': ADMIN_KEY },
+      });
 
-      if (systemRes.ok) {
-        const data = await systemRes.json();
-        setHealth({ ...data, railwayBackend: healthPing.ok ? 'online' : 'offline' });
+      if (res.ok) {
+        const data = await res.json();
+        setHealth({
+          ...data,
+          railwayBackend: 'online',
+        });
       } else {
-        setHealth(prev => ({ ...prev, railwayBackend: healthPing.ok ? 'online' : 'offline' }));
+        // Backend replied but with an error status (e.g. 401)
+        setHealth(prev => ({
+          ...prev,
+          railwayBackend: 'online',
+          mongodb: 'disconnected',
+          groq: 'error',
+          gemini: 'error',
+        }));
       }
-    } catch {
-      setHealth(prev => ({ ...prev, railwayBackend: 'offline' }));
+    } catch (err) {
+      console.error('Failed to fetch system health:', err);
+      setHealth(prev => ({
+        ...prev,
+        railwayBackend: 'offline',
+        mongodb: 'disconnected',
+        groq: 'error',
+        gemini: 'error',
+      }));
     } finally {
       setLoading(false);
       setLastRefresh(new Date());
@@ -187,10 +231,10 @@ export default function SystemHealthPage() {
           <div className="h-2 bg-surface-container rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-primary to-primary-container rounded-full transition-all duration-1000"
-              style={{ width: '12.4%' }}
+              style={{ width: `${cloudinaryPercentage}%` }}
             />
           </div>
-          <p className="text-[11px] text-outline mt-1">12.4% of 100 GB used</p>
+          <p className="text-[11px] text-outline mt-1">{cloudinaryPercentage}% of {health.cloudinary.storageUsed.split('/')[1] || '25 GB'} used</p>
         </div>
       </div>
 
@@ -242,21 +286,30 @@ export default function SystemHealthPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/50">
-              {health.recentErrors.map(err => (
-                <tr key={err.id} className="hover:bg-surface-container-low transition-colors">
-                  <td className="px-6 py-4 text-[12px] text-outline font-mono whitespace-nowrap">{err.timestamp}</td>
-                  <td className="px-6 py-4 text-[13px] text-on-surface max-w-xs truncate" title={err.error}>{err.error}</td>
-                  <td className="px-6 py-4">
-                    <code className="text-[11px] bg-surface-container px-2 py-1 rounded font-mono text-primary">{err.endpoint}</code>
-                  </td>
-                  <td className="px-6 py-4 text-[13px] text-outline">{err.user || '—'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase ${severityStyle[err.severity]}`}>
-                      {err.severity}
-                    </span>
+              {health.recentErrors.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center text-outline text-[13px]">
+                    <span className="material-symbols-outlined mb-2 block" style={{ fontSize: '32px', color: '#10b981' }}>verified</span>
+                    No recent errors! Everything is running perfectly.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                health.recentErrors.map(err => (
+                  <tr key={err.id} className="hover:bg-surface-container-low transition-colors">
+                    <td className="px-6 py-4 text-[12px] text-outline font-mono whitespace-nowrap">{err.timestamp}</td>
+                    <td className="px-6 py-4 text-[13px] text-on-surface max-w-xs truncate" title={err.error}>{err.error}</td>
+                    <td className="px-6 py-4">
+                      <code className="text-[11px] bg-surface-container px-2 py-1 rounded font-mono text-primary">{err.endpoint}</code>
+                    </td>
+                    <td className="px-6 py-4 text-[13px] text-outline">{err.user || '—'}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase ${severityStyle[err.severity]}`}>
+                        {err.severity}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
