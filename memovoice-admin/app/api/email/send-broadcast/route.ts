@@ -81,6 +81,31 @@ export async function POST(req: NextRequest) {
         await delay(200); // Rate limiting: max 5 emails/second to remain highly compliant
       }
       console.log(`Broadcast complete: ${sent} sent, ${failed} failed out of ${users.length} total`);
+      
+      // Log to DB
+      try {
+        const db = await connectDB();
+        const EmailLog = db.models.EmailLog || (await import('mongoose')).model(
+          'EmailLog',
+          new (await import('mongoose')).Schema({ 
+            type: String, 
+            recipients: String, 
+            subject: String, 
+            sentBy: String, 
+            status: String 
+          }, { timestamps: true })
+        );
+        
+        await EmailLog.create({
+          type: 'Broadcast',
+          recipients: `${target === 'all' ? 'All' : target === 'pro' ? 'Pro' : 'Free'} Users (${users.length})`,
+          subject: emailSubject,
+          sentBy: 'Admin',
+          status: failed === users.length ? 'failed' : 'sent'
+        });
+      } catch (e) {
+        console.error('Failed to save EmailLog:', e);
+      }
     })();
 
     return NextResponse.json(responsePayload, { status: 202 });

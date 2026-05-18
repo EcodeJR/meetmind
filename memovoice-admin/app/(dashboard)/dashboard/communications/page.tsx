@@ -153,17 +153,17 @@ export default function CommunicationsPage() {
     setSending(true);
     setShowConfirm(false);
     try {
-      const endpoint = target === 'single' ? `${RAILWAY_API}/admin/email/send-single` : `${RAILWAY_API}/admin/email/broadcast`;
+      const endpoint = target === 'single' ? '/api/email/send-single' : '/api/email/send-broadcast';
       const payload = target === 'single'
-        ? { to: singleEmail, subject, html: body }
+        ? { to: singleEmail, subject, html: body, name: singleEmail.split('@')[0] }
         : { target, subject, html: body, template };
 
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
-          'x-admin-key': ADMIN_KEY
+          'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
