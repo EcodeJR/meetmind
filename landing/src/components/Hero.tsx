@@ -59,13 +59,13 @@ const Hero = () => {
               </span>
               Android App Now Live • iOS Coming Soon! 📱
             </div>
-            
+
             <h1 className="text-6xl lg:text-7xl font-black text-white leading-[1.1] mb-8 tracking-tight">
               Your Meetings.<br />
               <span className="text-accent">Transcribed.</span><br />
               Summarized. Done.
             </h1>
-            
+
             <p className="text-xl text-white/60 mb-12 leading-relaxed max-w-xl font-light">
               Memovoice listens during your physical meetings and automatically generates transcripts, summaries and action items using AI. No bots. No Zoom required.
             </p>
@@ -73,23 +73,23 @@ const Hero = () => {
             {/* Download Buttons Section */}
             <div className="flex flex-col sm:flex-row gap-4 mb-8">
               {/* Android Download Button */}
-              <a 
+              <a
                 href="https://github.com/EcodeJR/meetmind/releases/download/v1.0.0/memovoice.apk"
                 className="inline-flex items-center justify-center gap-3 bg-accent text-black px-8 py-4 rounded-xl font-bold text-base hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 active:scale-98 uppercase tracking-wider w-full sm:w-auto"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17.5 12c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5m-11 0c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5m11.55-4.8l1.8-3.1a.488.488 0 00-.18-.67c-.24-.13-.54-.05-.67.18l-1.83 3.17C15.65 6.28 13.89 6 12 6c-1.89 0-3.65.28-5.37.78L4.8 3.61c-.13-.23-.43-.31-.67-.18a.488.488 0 00-.18.67l1.8 3.1C2.92 8.78 1 11.16 1 14h22c0-2.84-1.92-5.22-4.75-6.8z"/>
+                  <path d="M17.5 12c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5m-11 0c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5m11.55-4.8l1.8-3.1a.488.488 0 00-.18-.67c-.24-.13-.54-.05-.67.18l-1.83 3.17C15.65 6.28 13.89 6 12 6c-1.89 0-3.65.28-5.37.78L4.8 3.61c-.13-.23-.43-.31-.67-.18a.488.488 0 00-.18.67l1.8 3.1C2.92 8.78 1 11.16 1 14h22c0-2.84-1.92-5.22-4.75-6.8z" />
                 </svg>
                 Download for Android
               </a>
 
               {/* iOS Inactive Download Button */}
-              <div 
+              <div
                 className="inline-flex items-center justify-center gap-3 bg-white/5 border border-white/10 text-white/40 px-8 py-4 rounded-xl font-bold text-base cursor-not-allowed uppercase tracking-wider w-full sm:w-auto relative group overflow-hidden"
                 title="iOS App Coming Soon!"
               >
                 <svg className="w-5 h-5 opacity-40" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.17c.66-.81 1.11-1.93.99-3.06-1 .04-2.2.67-2.92 1.5-.62.72-1.16 1.87-1.01 2.98 1.1.09 2.24-.59 2.94-1.42z"/>
+                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.17c.66-.81 1.11-1.93.99-3.06-1 .04-2.2.67-2.92 1.5-.62.72-1.16 1.87-1.01 2.98 1.1.09 2.24-.59 2.94-1.42z" />
                 </svg>
                 <span>Download for iOS</span>
                 <span className="absolute top-1 right-2 bg-accent/10 border border-accent/20 text-accent font-black tracking-widest text-[8px] px-1.5 py-0.5 rounded uppercase">Soon</span>
@@ -117,7 +117,7 @@ const Hero = () => {
                     disabled={submitting}
                   />
                   {message && (
-                    <motion.div 
+                    <motion.div
                       initial={{ opacity: 0, y: 5 }}
                       animate={{ opacity: 1, y: 0 }}
                       className={`absolute -bottom-6 left-0 text-[10px] font-bold ${submitted ? 'text-accent' : 'text-red-500'}`}
@@ -126,7 +126,7 @@ const Hero = () => {
                     </motion.div>
                   )}
                 </div>
-                <button 
+                <button
                   type="submit"
                   disabled={submitting}
                   className="bg-accent text-black px-6 py-4 rounded-xl font-bold hover:bg-accent/90 transition-all active:scale-98 text-sm uppercase tracking-wider disabled:opacity-50 whitespace-nowrap"
@@ -138,8 +138,13 @@ const Hero = () => {
 
             <div className="flex items-center gap-6 pt-8 border-t border-white/5">
               <div className="flex -space-x-3">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="w-10 h-10 rounded-full border-2 border-black bg-dark-100/80" />
+                {[32, 44, 55, 68].map((id) => (
+                  <img 
+                    key={id}
+                    src={`https://randomuser.me/api/portraits/men/${id}.jpg`}
+                    alt="Professional"
+                    className="w-10 h-10 rounded-full border-2 border-black object-cover bg-dark-100"
+                  />
                 ))}
               </div>
               <p className="text-sm text-white/50 font-medium">
