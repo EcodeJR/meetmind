@@ -99,14 +99,15 @@ export default function WaitlistPage() {
     for (let i = 0; i < targets.length; i++) {
       const targetEmail = targets[i];
       try {
-        const res = await fetch(`${RAILWAY_API}/admin/waitlist/email`, {
+        const res = await fetch('/api/email/send-single', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-admin-key': ADMIN_KEY,
           },
+          credentials: 'include',
           body: JSON.stringify({
-            email: targetEmail,
+            to: targetEmail,
+            name: targetEmail.split('@')[0],
             subject: emailSubject,
             html: `
               <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
