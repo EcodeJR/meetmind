@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import axios from 'axios';
 import mongoose from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';
+import Groq from 'groq-sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { User } from '../models/User';
 import { Meeting } from '../models/Meeting';
 import { logger } from '../utils/logger';
@@ -351,17 +353,35 @@ export const getSystemHealth = async (_req: Request, res: Response): Promise<voi
   try {
     const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
 
-    // Check Groq
+    // Check Groq dynamically with a live credentials verification call
     let groqStatus: 'active' | 'error' = 'error';
     try {
-      if (process.env.GROQ_API_KEY) groqStatus = 'active';
-    } catch { groqStatus = 'error'; }
+      if (process.env.GROQ_API_KEY) {
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        await groq.models.list();
+        groqStatus = 'active';
+      }
+    } catch (err) {
+      logger.error({ err }, 'Admin: Groq API key is invalid or request failed');
+      groqStatus = 'error';
+    }
 
-    // Check Gemini
+    // Check Gemini dynamically with a live credentials verification call
     let geminiStatus: 'active' | 'error' = 'error';
     try {
-      if (process.env.GEMINI_API_KEY) geminiStatus = 'active';
-    } catch { geminiStatus = 'error'; }
+      if (process.env.GEMINI_API_KEY) {
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+        await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
+          generationConfig: { maxOutputTokens: 1 }
+        });
+        geminiStatus = 'active';
+      }
+    } catch (err) {
+      logger.error({ err }, 'Admin: Gemini API key is invalid or request failed');
+      geminiStatus = 'error';
+    }
 
     // Check Cloudinary storage dynamically using Cloudinary SDK Admin API
     let cloudinaryStatus = 'active';
@@ -377,11 +397,11 @@ export const getSystemHealth = async (_req: Request, res: Response): Promise<voi
       if (usage && usage.storage) {
         const usedBytes = usage.storage.usage || 0;
         const limitBytes = usage.storage.limit || 26843545600; // 25 GB default
-        
+
         // Convert to GB with 3 decimal precision
         const usedGB = Math.round((usedBytes / (1024 * 1024 * 1024)) * 1000) / 1000;
         const limitGB = Math.round((limitBytes / (1024 * 1024 * 1024)) * 10) / 10;
-        
+
         cloudinaryStorageUsed = `${usedGB} GB / ${limitGB} GB`;
       }
     } catch (err) {
