@@ -61,6 +61,7 @@ export default function MeetingDetailScreen() {
   const { id } = useLocalSearchParams();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPro, setIsPro] = useState(false);
   const [processingElapsed, setProcessingElapsed] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
@@ -86,6 +87,20 @@ export default function MeetingDetailScreen() {
   useEffect(() => {
     fetchMeeting();
   }, [id]);
+
+  useEffect(() => {
+    const loadSubscription = async () => {
+      try {
+        const response = await apiClient.get('/users/me');
+        const user = response.data.data?.user || response.data.user;
+        setIsPro(user?.subscription?.plan === 'pro' && user?.subscription?.status === 'active');
+      } catch {
+        setIsPro(false);
+      }
+    };
+
+    loadSubscription();
+  }, []);
 
   const isProcessing = Boolean(
     meeting && (
@@ -125,6 +140,19 @@ export default function MeetingDetailScreen() {
 
   const handleShare = async () => {
     if (!meeting) return;
+
+    if (!isPro) {
+      Alert.alert(
+        'Pro Feature',
+        'Export to PDF and email is available on Pro. Upgrade to unlock full transcript export and action items.',
+        [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => router.push('/settings/upgrade') },
+        ]
+      );
+      return;
+    }
+
     try {
       await Share.share({
         message: `${meeting.title}\n\nSummary: ${meeting.summary}\n\nAction Items:\n${meeting.actionItems?.join('\n')}`,
@@ -267,7 +295,7 @@ export default function MeetingDetailScreen() {
             <View style={styles.actionRow}>
               <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
                 <Ionicons name="share-outline" size={20} color={theme.colors.secondary} />
-                <Text style={styles.actionButtonText}>Export Intelligence</Text>
+                <Text style={styles.actionButtonText}>{isPro ? 'Export Intelligence' : 'Upgrade to Export'}</Text>
               </TouchableOpacity>
             </View>
 

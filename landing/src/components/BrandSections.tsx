@@ -92,12 +92,16 @@ export const Pricing = () => (
           </div>
           
           <ul className="space-y-4 mb-10">
-            {['5 meetings per month', 'Basic AI summary', '7 day transcript history'].map((item, i) => (
+            {['5 meetings per month', 'Basic summary only', '7 day history'].map((item, i) => (
               <li key={i} className="flex items-center gap-3 text-white/70 text-sm">
                 <Check className="w-5 h-5 text-accent flex-shrink-0" />
                 {item}
               </li>
             ))}
+            <li className="flex items-center gap-3 text-white/40 text-sm">
+              <Minus className="w-5 h-5 text-white/20 flex-shrink-0" />
+              No action items or export
+            </li>
           </ul>
 
           <Link href="#download" className="block text-center py-4 rounded-lg border border-white/10 text-white font-bold hover:bg-white/5 transition-all uppercase tracking-wide text-sm">
@@ -118,10 +122,10 @@ export const Pricing = () => (
           <ul className="space-y-4 mb-10">
             {[
               'Unlimited meetings', 
-              'Full AI transcripts', 
+              'Full transcripts', 
               'Action item extraction', 
               'Export to PDF and email',
-              'Priority processing'
+              'Unlimited history'
             ].map((item, i) => (
               <li key={i} className="flex items-center gap-3 text-white/70 font-medium text-sm">
                 <Check className="w-5 h-5 text-accent flex-shrink-0" />

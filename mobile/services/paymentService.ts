@@ -17,6 +17,19 @@ export const paymentService = {
   },
 
   /**
+   * Fetches pricing and feature details for the upgrade screen
+   */
+  getPlanDetails: async () => {
+    try {
+      const response = await apiClient.get('/payments/plan-details');
+      return response.data.data?.plan;
+    } catch (error) {
+      console.error('Failed to get plan details:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Fetches the current subscription status
    * @returns { plan, status, provider, currentPeriodEnd }
    */

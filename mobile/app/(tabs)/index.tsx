@@ -568,6 +568,34 @@ export default function HomeScreen() {
       console.error('[STOP-RECORDING] Error code:', error?.code);
       console.error('[STOP-RECORDING] Error response status:', error?.response?.status);
       console.error('[STOP-RECORDING] Error response data:', error?.response?.data);
+
+      const limitReached = error?.response?.data?.code === 'MEETING_LIMIT_REACHED';
+      if (limitReached) {
+        try {
+          const uri = recording?.getURI();
+          if (uri) {
+            const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration);
+            console.log('[STOP-RECORDING] Free limit reached; saved recording offline:', offlineItem.id);
+          }
+        } catch (saveError) {
+          console.error('[STOP-RECORDING] Could not save limited recording offline:', saveError);
+        }
+
+        setProcessingStage('queued');
+        setDebugStatus('Free limit reached. Upgrade to process this meeting.');
+        Alert.alert(
+          'Free Limit Reached',
+          'You\'ve used 5 of 5 free meetings this month. Upgrade to Pro for unlimited meetings, full transcripts, exports and action items.',
+          [
+            { text: 'Later', style: 'cancel' },
+            { text: 'Upgrade Now', onPress: () => router.push('/settings/upgrade') },
+          ]
+        );
+        setMeetingTitle('');
+        setDuration(0);
+        setRecording(null);
+        return;
+      }
       
       // Fallback: if online upload failed (e.g., auth error after sign-out), save locally
       try {

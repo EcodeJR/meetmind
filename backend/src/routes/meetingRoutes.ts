@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { authMiddleware } from '../middleware/auth';
 import { apiRateLimiter, uploadRateLimiter } from '../middleware/rateLimiter';
+import { checkMeetingLimit } from '../middleware/subscriptionMiddleware';
 import {
   createMeeting,
   processMeeting,
@@ -54,8 +55,8 @@ const upload = multer({
 router.use(authMiddleware);
 router.use(apiRateLimiter);
 
-router.post('/', createMeeting);
-router.post('/process', uploadRateLimiter, upload.single('audio'), processMeeting);
+router.post('/', checkMeetingLimit, createMeeting);
+router.post('/process', checkMeetingLimit, uploadRateLimiter, upload.single('audio'), processMeeting);
 router.get('/', getMeetings);
 router.get('/search', searchMeetings);
 router.get('/:id', getMeetingById);

@@ -16,12 +16,18 @@ import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 
-const FEATURES = [
-  'Unlimited Intelligent Minutes',
-  'Priority Triple-Fallback AI',
-  'Advanced Strategic Alerts',
-  'Unlimited Storage Governance',
-  'Custom Linguistic Lexicons',
+const FREE_FEATURES = [
+  '5 meetings per month',
+  'Basic summary only',
+  '7 day history',
+];
+
+const PRO_FEATURES = [
+  'Unlimited meetings',
+  'Full transcripts',
+  'Action item extraction',
+  'Export to PDF and email',
+  'Unlimited history',
 ];
 
 export default function SubscriptionScreen() {
@@ -29,10 +35,12 @@ export default function SubscriptionScreen() {
   const [fetchingStatus, setFetchingStatus] = useState(true);
   const [subscription, setSubscription] = useState<any>(null);
   const [country, setCountry] = useState<string | null>(null);
+  const [planDetails, setPlanDetails] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
     loadUserStatus();
+    loadPlanDetails();
   }, []);
 
   const loadUserStatus = async () => {
@@ -45,6 +53,15 @@ export default function SubscriptionScreen() {
       console.error('Failed to load user status', error);
     } finally {
       setFetchingStatus(false);
+    }
+  };
+
+  const loadPlanDetails = async () => {
+    try {
+      const plan = await paymentService.getPlanDetails();
+      setPlanDetails(plan);
+    } catch (error) {
+      console.error('Failed to load plan details', error);
     }
   };
 
@@ -90,9 +107,26 @@ export default function SubscriptionScreen() {
   };
 
   const isPro = subscription?.plan === 'pro' && subscription?.status === 'active';
-  const isNigerian = country === 'NG';
+  const isNigerian = country === 'NG' || planDetails?.provider === 'flutterwave';
   const currencySymbol = isNigerian ? '₦' : '$';
-  const priceAmount = isNigerian ? '9,000' : '12';
+  const priceAmount = planDetails ? planDetails.amountLabel.replace(/^[$₦]/, '') : (isNigerian ? '9,000' : '12');
+  const proFeatures = planDetails?.pro
+    ? [
+        `${planDetails.pro.meetingsPerMonth} meetings`,
+        planDetails.pro.summary,
+        'Action item extraction',
+        'Export to PDF and email',
+        planDetails.pro.history,
+      ]
+    : PRO_FEATURES;
+  const freeFeatures = planDetails?.free
+    ? [
+        `${planDetails.free.meetingsPerMonth} meetings per month`,
+        planDetails.free.summary,
+        planDetails.free.history,
+      ]
+    : FREE_FEATURES;
+  const pricingLabel = planDetails?.upgradeCopy || (isNigerian ? '₦9,000/month for users in Nigeria' : '$12/month for users outside Nigeria');
 
   if (fetchingStatus) {
     return (
@@ -116,6 +150,20 @@ export default function SubscriptionScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.freeCard}>
+          <Text style={styles.freeLabel}>Free Plan</Text>
+          <Text style={styles.freeHeadline}>Start free, then upgrade when you need more.</Text>
+          <View style={styles.featuresList}>
+            {freeFeatures.map((feature, index) => (
+              <View key={index} style={styles.featureItem}>
+                <Ionicons name="checkmark-circle" size={20} color={theme.colors.onSurfaceVariant} />
+                <Text style={styles.freeFeatureText}>{feature}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.freeNote}>No action items, no exports, and only 5 meetings each month.</Text>
+        </View>
+
         <View style={styles.pricingCard}>
           <Text style={styles.planName}>Monthly Subscription</Text>
           <View style={styles.priceRow}>
@@ -123,9 +171,10 @@ export default function SubscriptionScreen() {
             <Text style={styles.price}>{priceAmount}</Text>
             <Text style={styles.billing}>/ month</Text>
           </View>
+          <Text style={styles.pricingLabel}>{pricingLabel}</Text>
           
           <View style={styles.featuresList}>
-            {FEATURES.map((feature, index) => (
+            {proFeatures.map((feature, index) => (
               <View key={index} style={styles.featureItem}>
                 <Ionicons name="checkmark-circle" size={20} color={theme.colors.accent} />
                 <Text style={styles.featureText}>{feature}</Text>
@@ -206,6 +255,29 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xl,
+    gap: theme.spacing.lg,
+  },
+  freeCard: {
+    backgroundColor: theme.colors.surfaceContainerLow,
+    borderRadius: theme.borderRadius.xl,
+    padding: theme.spacing.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+  },
+  freeLabel: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 12,
+    color: theme.colors.onSurfaceVariant,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginBottom: theme.spacing.sm,
+  },
+  freeHeadline: {
+    fontFamily: 'Manrope-Bold',
+    fontSize: 22,
+    color: theme.colors.primary,
+    letterSpacing: -0.3,
+    marginBottom: theme.spacing.lg,
   },
   pricingCard: {
     backgroundColor: theme.colors.surfaceContainerLowest,
@@ -248,6 +320,13 @@ const styles = StyleSheet.create({
     color: theme.colors.onSurfaceVariant,
     marginLeft: 4,
   },
+  pricingLabel: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 13,
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: theme.spacing.lg,
+    lineHeight: 18,
+  },
   featuresList: {
     gap: theme.spacing.md,
     marginBottom: theme.spacing.xl,
@@ -261,6 +340,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     fontSize: 15,
     color: theme.colors.onSurface,
+  },
+  freeFeatureText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 15,
+    color: theme.colors.onSurfaceVariant,
+  },
+  freeNote: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    color: theme.colors.onSurfaceVariant,
+    lineHeight: 18,
+    marginTop: theme.spacing.sm,
   },
   button: {
     backgroundColor: theme.colors.primary,
