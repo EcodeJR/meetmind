@@ -20,7 +20,7 @@ interface PaginatedWaitlist {
   };
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.up.railway.app';
+const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 export default function WaitlistPage() {
@@ -400,3 +400,4 @@ export default function WaitlistPage() {
     </div>
   );
 }
+

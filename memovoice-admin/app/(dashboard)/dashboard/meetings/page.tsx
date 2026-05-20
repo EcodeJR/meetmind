@@ -19,7 +19,7 @@ interface Meeting {
   keyDecisions?: string[];
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.up.railway.app';
+const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 const STATUS_FILTERS = ['All', 'Completed', 'Processing', 'Failed'];
@@ -420,3 +420,4 @@ export default function MeetingsPage() {
     </div>
   );
 }
+

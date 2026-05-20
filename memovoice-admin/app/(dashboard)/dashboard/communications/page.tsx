@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.up.railway.app';
+const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 const TARGET_OPTIONS = [
@@ -469,3 +469,4 @@ export default function CommunicationsPage() {
     </div>
   );
 }
+

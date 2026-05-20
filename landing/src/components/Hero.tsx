@@ -17,7 +17,7 @@ const Hero = () => {
     setSubmitting(true);
     setMessage('');
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://memovoice-backend.up.railway.app/api';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://memovoice-backend.onrender.com/api';
       const res = await fetch(`${apiUrl}/waitlist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -224,3 +224,4 @@ const Hero = () => {
 };
 
 export default Hero;
+
