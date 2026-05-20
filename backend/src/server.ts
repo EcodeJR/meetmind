@@ -68,7 +68,7 @@ const allowedOrigins = [
 ].filter(Boolean) as string[];
 
 app.use(cors({
-  origin: (origin, callback) => {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (!origin) return callback(null, true);
     const isAllowed = allowedOrigins.some(o => origin === o || origin.startsWith(o));
     if (isAllowed) {

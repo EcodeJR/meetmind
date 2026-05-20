@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 export interface AuthRequest extends Request {
   userId?: string;
   clerkId?: string;
+  file?: any;
 }
 
 export const authMiddleware = async (
