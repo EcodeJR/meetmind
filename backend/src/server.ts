@@ -46,6 +46,12 @@ app.set('trust proxy', 1);
 
 // Standard Health Check - Mounted before any limiters or parsers
 app.get('/', (_req, res) => res.json({ status: 'Memovoice API Operational' }));
+app.get('/ping', (_req, res) => {
+  res.status(200).json({ 
+    status: 'alive', 
+    timestamp: new Date().toISOString() 
+  });
+});
 app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
 // Middleware
