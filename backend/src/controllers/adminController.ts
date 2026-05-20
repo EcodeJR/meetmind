@@ -3,7 +3,7 @@ import axios from 'axios';
 import mongoose from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';
 import Groq from 'groq-sdk';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+// Removed unused GoogleGenerativeAI import
 import { User } from '../models/User';
 import { Meeting } from '../models/Meeting';
 import { logger } from '../utils/logger';
@@ -374,16 +374,17 @@ export const getSystemHealth = async (_req: Request, res: Response): Promise<voi
     let geminiStatus: 'active' | 'error' = 'error';
     try {
       if (process.env.GEMINI_API_KEY) {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-        await model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
-          generationConfig: { maxOutputTokens: 1 }
-        });
-        geminiStatus = 'active';
+        // Fetch the list of models to validate the API key without using any generation tokens
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`);
+        if (response.ok) {
+          geminiStatus = 'active';
+        } else {
+          logger.error(`Admin: Gemini API returned status ${response.status}`);
+          geminiStatus = 'error';
+        }
       }
     } catch (err) {
-      logger.error({ err }, 'Admin: Gemini API key is invalid or request failed');
+      logger.error({ err }, 'Admin: Gemini API request failed');
       geminiStatus = 'error';
     }
 
