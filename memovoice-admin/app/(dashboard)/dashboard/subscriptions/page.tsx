@@ -23,7 +23,7 @@ interface Subscription {
   nextBilling: string;
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
+const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 const MOCK_REVENUE: RevenueData = {
@@ -139,7 +139,7 @@ export default function SubscriptionsPage() {
       });
       if (!searchRes.ok) throw new Error('Search failed');
       const searchData = await searchRes.json();
-      
+
       const user = searchData.users?.[0];
       if (!user || user.email.toLowerCase() !== manualEmail.toLowerCase()) {
         showToast('User with this email not found', 'error');
@@ -159,7 +159,7 @@ export default function SubscriptionsPage() {
       if (updateRes.ok) {
         showToast(`Pro access granted to ${user.name || manualEmail}`);
         setManualEmail('');
-        
+
         // Refresh active subscriptions count locally if possible
         setRevenue(prev => ({
           ...prev,

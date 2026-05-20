@@ -7,7 +7,7 @@ interface SystemHealth {
   groq: 'active' | 'error';
   gemini: 'active' | 'error';
   cloudinary: { status: string; storageUsed: string };
-  railwayBackend: 'online' | 'offline';
+  renderBackend: 'online' | 'offline';
   avgProcessingTime: number;
   avgSummaryTime: number;
   successRate: number;
@@ -24,7 +24,7 @@ interface ErrorLog {
   severity: 'low' | 'medium' | 'high' | 'critical';
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
+const RENDER_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 const MOCK_HEALTH: SystemHealth = {
@@ -32,7 +32,7 @@ const MOCK_HEALTH: SystemHealth = {
   groq: 'active',
   gemini: 'active',
   cloudinary: { status: 'active', storageUsed: '12.4 GB / 100 GB' },
-  railwayBackend: 'online',
+  renderBackend: 'online',
   avgProcessingTime: 18.4,
   avgSummaryTime: 6.2,
   successRate: 97.8,
@@ -50,7 +50,7 @@ const INITIAL_HEALTH: SystemHealth = {
   groq: 'error',
   gemini: 'error',
   cloudinary: { status: 'inactive', storageUsed: '0 GB / 100 GB' },
-  railwayBackend: 'offline',
+  renderBackend: 'offline',
   avgProcessingTime: 0,
   avgSummaryTime: 0,
   successRate: 0,
@@ -82,7 +82,7 @@ export default function SystemHealthPage() {
           return Math.round((used / total) * 100 * 10) / 10;
         }
       }
-    } catch {}
+    } catch { }
     return 0;
   };
   const cloudinaryPercentage = getCloudinaryPercentage();
@@ -94,7 +94,7 @@ export default function SystemHealthPage() {
 
   const fetchHealth = useCallback(async () => {
     try {
-      const res = await fetch(`${RAILWAY_API}/admin/system`, {
+      const res = await fetch(`${RENDER_API}/admin/system`, {
         headers: { 'x-admin-key': ADMIN_KEY },
       });
 
@@ -102,13 +102,13 @@ export default function SystemHealthPage() {
         const data = await res.json();
         setHealth({
           ...data,
-          railwayBackend: 'online',
+          renderBackend: 'online',
         });
       } else {
         // Backend replied but with an error status (e.g. 401)
         setHealth(prev => ({
           ...prev,
-          railwayBackend: 'online',
+          renderBackend: 'online',
           mongodb: 'disconnected',
           groq: 'error',
           gemini: 'error',
@@ -118,7 +118,7 @@ export default function SystemHealthPage() {
       console.error('Failed to fetch system health:', err);
       setHealth(prev => ({
         ...prev,
-        railwayBackend: 'offline',
+        renderBackend: 'offline',
         mongodb: 'disconnected',
         groq: 'error',
         gemini: 'error',
@@ -152,7 +152,7 @@ export default function SystemHealthPage() {
   };
 
   const serviceCards = [
-    { name: 'Railway Backend', status: health.railwayBackend, icon: 'cloud', description: 'Main API server' },
+    { name: 'Render Backend', status: health.renderBackend, icon: 'cloud', description: 'Main API server' },
     { name: 'MongoDB Atlas', status: health.mongodb, icon: 'database', description: 'Primary database' },
     { name: 'Groq API', status: health.groq, icon: 'psychology', description: 'Transcription AI' },
     { name: 'Gemini API', status: health.gemini, icon: 'auto_awesome', description: 'Summarization AI' },

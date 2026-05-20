@@ -25,7 +25,7 @@ interface Meeting {
   createdAt: string;
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
+const RENDER_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 const MOCK_USER: UserDetail = {
@@ -61,7 +61,7 @@ export default function UserDetailPage() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await fetch(`${RAILWAY_API}/admin/users/${id}`, {
+        const res = await fetch(`${RENDER_API}/admin/users/${id}`, {
           headers: { 'x-admin-key': ADMIN_KEY },
         });
         if (res.ok) {
@@ -81,7 +81,7 @@ export default function UserDetailPage() {
 
   const handleUpgradePlan = async (plan: string) => {
     try {
-      const res = await fetch(`${RAILWAY_API}/admin/users/${id}/plan`, {
+      const res = await fetch(`${RENDER_API}/admin/users/${id}/plan`, {
         method: 'PATCH',
         headers: { 'x-admin-key': ADMIN_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan, status: 'active' }),
@@ -97,7 +97,7 @@ export default function UserDetailPage() {
 
   const handleSuspend = async () => {
     try {
-      const res = await fetch(`${RAILWAY_API}/admin/users/${id}/suspend`, {
+      const res = await fetch(`${RENDER_API}/admin/users/${id}/suspend`, {
         method: 'PATCH',
         headers: { 'x-admin-key': ADMIN_KEY },
       });
@@ -109,7 +109,7 @@ export default function UserDetailPage() {
 
   const handleDelete = async () => {
     try {
-      const res = await fetch(`${RAILWAY_API}/admin/users/${id}`, {
+      const res = await fetch(`${RENDER_API}/admin/users/${id}`, {
         method: 'DELETE',
         headers: { 'x-admin-key': ADMIN_KEY },
       });

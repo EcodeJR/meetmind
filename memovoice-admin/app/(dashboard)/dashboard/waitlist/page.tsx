@@ -20,7 +20,7 @@ interface PaginatedWaitlist {
   };
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
+const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 export default function WaitlistPage() {
@@ -153,9 +153,8 @@ export default function WaitlistPage() {
     <div className="flex-1 bg-[#1e1f24] min-h-screen p-8 text-[#dfe0ff]">
       {/* Toast Alert */}
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-5 py-3 rounded-lg shadow-xl border backdrop-blur-md transition-all ${
-          toast.type === 'error' ? 'bg-[#3b0f0f] border-[#ffb4ab] text-[#ffdad6]' : 'bg-[#153b15] border-[#a0f0a0] text-[#e0ffe0]'
-        }`}>
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-5 py-3 rounded-lg shadow-xl border backdrop-blur-md transition-all ${toast.type === 'error' ? 'bg-[#3b0f0f] border-[#ffb4ab] text-[#ffdad6]' : 'bg-[#153b15] border-[#a0f0a0] text-[#e0ffe0]'
+          }`}>
           <span className="material-symbols-outlined">{toast.type === 'error' ? 'error' : 'check_circle'}</span>
           <span className="text-sm font-semibold">{toast.msg}</span>
         </div>

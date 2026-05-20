@@ -19,7 +19,7 @@ interface Meeting {
   keyDecisions?: string[];
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
+const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 const STATUS_FILTERS = ['All', 'Completed', 'Processing', 'Failed'];
@@ -183,11 +183,10 @@ export default function MeetingsPage() {
               <button
                 key={f}
                 onClick={() => { setStatusFilter(f); setPage(1); }}
-                className={`flex-1 text-center py-1.5 rounded-lg text-[12px] font-semibold transition-all ${
-                  statusFilter === f
+                className={`flex-1 text-center py-1.5 rounded-lg text-[12px] font-semibold transition-all ${statusFilter === f
                     ? 'bg-surface-container-lowest text-primary shadow-sm'
                     : 'text-on-surface-variant hover:bg-surface-container-highest'
-                }`}
+                  }`}
               >
                 {f}
               </button>

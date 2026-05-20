@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
+const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 const TARGET_OPTIONS = [
@@ -160,7 +160,7 @@ export default function CommunicationsPage() {
 
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json'
         },
         credentials: 'include',
@@ -201,11 +201,10 @@ export default function CommunicationsPage() {
           <button
             key={key}
             onClick={() => setActiveTab(key as 'compose' | 'history')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-[14px] font-medium transition-all ${
-              activeTab === key
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-[14px] font-medium transition-all ${activeTab === key
                 ? 'bg-surface-container-lowest text-primary shadow-sm'
                 : 'text-on-surface-variant hover:text-on-surface'
-            }`}
+              }`}
           >
             <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{icon}</span>
             {label}
@@ -225,11 +224,10 @@ export default function CommunicationsPage() {
                   <button
                     key={value}
                     onClick={() => setTarget(value)}
-                    className={`p-4 rounded-xl border-2 text-left transition-all ${
-                      target === value
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${target === value
                         ? 'border-primary bg-primary/5'
                         : 'border-outline-variant hover:border-primary/30 hover:bg-surface-container-low'
-                    }`}
+                      }`}
                   >
                     <div className={`flex items-center gap-2 mb-1 ${target === value ? 'text-primary' : 'text-on-surface-variant'}`}>
                       <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{icon}</span>

@@ -22,7 +22,7 @@ interface PaginatedUsers {
   pages: number;
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
+const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 const filters = ['All', 'Pro', 'Free', 'Suspended'];
@@ -169,11 +169,10 @@ export default function UsersPage() {
             <button
               key={f}
               onClick={() => { setActiveFilter(f); setPage(1); }}
-              className={`flex-1 text-center py-2 px-3 rounded-lg text-[12px] font-semibold transition-all ${
-                activeFilter === f
+              className={`flex-1 text-center py-2 px-3 rounded-lg text-[12px] font-semibold transition-all ${activeFilter === f
                   ? 'bg-surface-container-lowest text-primary shadow-sm'
                   : 'text-on-surface-variant hover:bg-surface-container-highest'
-              }`}
+                }`}
             >
               {f}
             </button>

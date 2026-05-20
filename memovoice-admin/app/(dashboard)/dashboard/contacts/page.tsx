@@ -24,7 +24,7 @@ interface PaginatedContacts {
   };
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
+const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 export default function ContactsPage() {
@@ -155,9 +155,8 @@ export default function ContactsPage() {
     <div className="flex-1 bg-[#1e1f24] min-h-screen p-8 text-[#dfe0ff]">
       {/* Toast Alert */}
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-5 py-3 rounded-lg shadow-xl border backdrop-blur-md transition-all ${
-          toast.type === 'error' ? 'bg-[#3b0f0f] border-[#ffb4ab] text-[#ffdad6]' : 'bg-[#153b15] border-[#a0f0a0] text-[#e0ffe0]'
-        }`}>
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-5 py-3 rounded-lg shadow-xl border backdrop-blur-md transition-all ${toast.type === 'error' ? 'bg-[#3b0f0f] border-[#ffb4ab] text-[#ffdad6]' : 'bg-[#153b15] border-[#a0f0a0] text-[#e0ffe0]'
+          }`}>
           <span className="material-symbols-outlined">{toast.type === 'error' ? 'error' : 'check_circle'}</span>
           <span className="text-sm font-semibold">{toast.msg}</span>
         </div>
@@ -179,25 +178,22 @@ export default function ContactsPage() {
       <div className="flex border-b border-white/5 mb-8">
         <button
           onClick={() => setActiveTab('all')}
-          className={`px-6 py-3 font-semibold text-sm border-b-2 transition-all ${
-            activeTab === 'all' ? 'border-[#dfe0ff] text-white' : 'border-transparent text-[#757686] hover:text-[#dfe0ff]'
-          }`}
+          className={`px-6 py-3 font-semibold text-sm border-b-2 transition-all ${activeTab === 'all' ? 'border-[#dfe0ff] text-white' : 'border-transparent text-[#757686] hover:text-[#dfe0ff]'
+            }`}
         >
           All Messages
         </button>
         <button
           onClick={() => setActiveTab('pending')}
-          className={`px-6 py-3 font-semibold text-sm border-b-2 transition-all ${
-            activeTab === 'pending' ? 'border-[#ba1a1a] text-[#ffdad6]' : 'border-transparent text-[#757686] hover:text-[#dfe0ff]'
-          }`}
+          className={`px-6 py-3 font-semibold text-sm border-b-2 transition-all ${activeTab === 'pending' ? 'border-[#ba1a1a] text-[#ffdad6]' : 'border-transparent text-[#757686] hover:text-[#dfe0ff]'
+            }`}
         >
           Pending
         </button>
         <button
           onClick={() => setActiveTab('resolved')}
-          className={`px-6 py-3 font-semibold text-sm border-b-2 transition-all ${
-            activeTab === 'resolved' ? 'border-[#78db86] text-[#e0ffe0]' : 'border-transparent text-[#757686] hover:text-[#dfe0ff]'
-          }`}
+          className={`px-6 py-3 font-semibold text-sm border-b-2 transition-all ${activeTab === 'resolved' ? 'border-[#78db86] text-[#e0ffe0]' : 'border-transparent text-[#757686] hover:text-[#dfe0ff]'
+            }`}
         >
           Resolved
         </button>

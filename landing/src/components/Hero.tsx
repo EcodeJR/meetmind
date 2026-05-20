@@ -17,7 +17,7 @@ const Hero = () => {
     setSubmitting(true);
     setMessage('');
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://memovoice-backend.onrender.com/api';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://memovoice.onrender.com/api';
       const res = await fetch(`${apiUrl}/waitlist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -139,7 +139,7 @@ const Hero = () => {
             <div className="flex items-center gap-6 pt-8 border-t border-white/5">
               <div className="flex -space-x-3">
                 {[32, 44, 55, 68].map((id) => (
-                  <img 
+                  <img
                     key={id}
                     src={`https://randomuser.me/api/portraits/men/${id}.jpg`}
                     alt="Professional"

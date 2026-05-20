@@ -34,7 +34,7 @@ interface RecentMeeting {
   platform?: string;
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
+const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
 const adminHeaders = { 'x-admin-key': ADMIN_KEY };
@@ -251,9 +251,8 @@ export default function OverviewPage() {
             {[40, 55, 75, 60, 85, 45, 65, 50, 95, 30, 70, 55, 80, 90].map((h, i) => (
               <div
                 key={i}
-                className={`flex-1 rounded-t-lg transition-colors cursor-pointer ${
-                  h >= 85 ? 'bg-primary' : 'bg-primary/20 hover:bg-primary'
-                }`}
+                className={`flex-1 rounded-t-lg transition-colors cursor-pointer ${h >= 85 ? 'bg-primary' : 'bg-primary/20 hover:bg-primary'
+                  }`}
                 style={{ height: `${h}%` }}
                 title={`Day ${i + 1}: ${h} meetings`}
               />

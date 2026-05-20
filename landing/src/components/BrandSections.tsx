@@ -2,13 +2,13 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   Mic,
-  Users, 
-  FileCheck, 
-  Check, 
-  Plus, 
-  Minus, 
+  Users,
+  FileCheck,
+  Check,
+  Plus,
+  Minus,
   Mail,
   Linkedin,
   Twitter,
@@ -29,7 +29,7 @@ export const HowItWorks = () => (
       <div className="relative">
         {/* Connection Line */}
         <div className="hidden lg:block absolute top-1/2 left-0 w-full h-0.5 bg-white/5 -translate-y-1/2 z-0" />
-        
+
         <div className="grid lg:grid-cols-3 gap-12 relative z-10">
           {[
             {
@@ -90,7 +90,7 @@ export const Pricing = () => (
             <span className="text-5xl font-black text-white">$0</span>
             <span className="text-white/40 font-light">/month</span>
           </div>
-          
+
           <ul className="space-y-4 mb-10">
             {['5 meetings per month', 'Basic summary only', '7 day history'].map((item, i) => (
               <li key={i} className="flex items-center gap-3 text-white/70 text-sm">
@@ -112,18 +112,18 @@ export const Pricing = () => (
         {/* Pro Plan */}
         <div className="p-8 rounded-lg bg-dark-50 border-2 border-accent hover:shadow-xl hover:shadow-accent/20 transition-all duration-300 relative overflow-hidden">
           <div className="absolute top-4 right-4 bg-accent text-black px-3 py-1 rounded text-xs font-black tracking-widest uppercase">Most Popular</div>
-          
+
           <p className="text-xs font-bold text-accent mb-4 uppercase tracking-widest">Pro Plan</p>
           <div className="flex items-baseline gap-1 mb-8">
             <span className="text-5xl font-black text-white">$12</span>
             <span className="text-white/40 font-light">/month</span>
           </div>
-          
+
           <ul className="space-y-4 mb-10">
             {[
-              'Unlimited meetings', 
-              'Full transcripts', 
-              'Action item extraction', 
+              'Unlimited meetings',
+              'Full transcripts',
+              'Action item extraction',
               'Export to PDF and email',
               'Unlimited history'
             ].map((item, i) => (
@@ -206,7 +206,7 @@ export const FAQ = () => {
       <div className="space-y-3">
         {faqs.map((faq, i) => (
           <div key={i} className="border border-white/5 rounded-lg bg-dark-50 overflow-hidden hover:border-white/10 transition-all">
-            <button 
+            <button
               onClick={() => setOpenIndex(openIndex === i ? null : i)}
               className="w-full p-6 text-left flex justify-between items-center hover:bg-dark-100/50 transition-colors"
             >
@@ -245,7 +245,7 @@ export const FinalCTA = () => {
     setSubmitting(true);
     setMessage('');
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://memovoice-backend.onrender.com/api';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://memovoice.onrender.com/api';
       const res = await fetch(`${apiUrl}/waitlist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -277,7 +277,7 @@ export const FinalCTA = () => {
         <p className="text-xs font-bold text-accent uppercase tracking-widest mb-6">GET EARLY ACCESS</p>
         <h2 className="text-5xl lg:text-6xl font-black text-white mb-6 tracking-tight leading-tight">Start remembering every meeting</h2>
         <p className="text-white/50 text-lg mb-12 max-w-2xl mx-auto leading-relaxed">Join thousands of professionals using Memovoice to scale their institutional intelligence.</p>
-        
+
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto mb-6">
           <input
             type="email"
@@ -288,7 +288,7 @@ export const FinalCTA = () => {
             required
             disabled={submitting}
           />
-          <button 
+          <button
             type="submit"
             disabled={submitting}
             className="bg-accent text-black px-8 py-4 rounded-lg font-black hover:bg-accent/90 transition-all active:scale-95 shadow-lg shadow-accent/30 uppercase tracking-wide text-sm whitespace-nowrap disabled:opacity-50"
@@ -322,7 +322,7 @@ export const Footer = () => (
             <a href="https://x.com/memovoice182704" target="_blank" rel="noopener noreferrer" title="Follow us on X" className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-accent hover:border-accent/50 hover:bg-accent/5 transition-all cursor-pointer">
               <Twitter className="w-5 h-5" />
             </a>
-            
+
             {/* LinkedIn - Coming Soon */}
             <div className="relative">
               <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 cursor-not-allowed opacity-50" title="LinkedIn - Coming Soon">
@@ -330,7 +330,7 @@ export const Footer = () => (
               </div>
               {/* <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-sm border border-white/20 rounded px-2 py-1 whitespace-nowrap text-xs text-white/60 font-medium">Coming Soon</div> */}
             </div>
-            
+
             {/* Instagram - Coming Soon */}
             <div className="relative">
               <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 cursor-not-allowed opacity-50" title="Instagram - Coming Soon">
@@ -340,7 +340,7 @@ export const Footer = () => (
             </div>
           </div>
         </div>
-        
+
         <div>
           <h4 className="font-bold text-white mb-6 text-sm uppercase tracking-wide">Product</h4>
           <ul className="space-y-4 text-white/50 text-xs">
