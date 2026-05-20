@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+// @ts-ignore
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';

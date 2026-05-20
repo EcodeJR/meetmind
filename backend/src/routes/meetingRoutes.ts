@@ -1,4 +1,5 @@
 import { Router } from 'express';
+// @ts-ignore
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -28,10 +29,10 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Configure multer for audio uploads
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
+  destination: (_req: any, _file: any, cb: any) => {
     cb(null, uploadsDir);
   },
-  filename: (_req, file, cb) => {
+  filename: (_req: any, file: any, cb: any) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   },
@@ -42,7 +43,7 @@ const upload = multer({
   limits: {
     fileSize: Number(process.env.MAX_AUDIO_UPLOAD_MB || 50) * 1024 * 1024,
   },
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (_req: any, file: any, cb: any) => {
     if (!file.mimetype || !file.mimetype.startsWith('audio/')) {
       cb(new Error('Only audio files are allowed'));
       return;
