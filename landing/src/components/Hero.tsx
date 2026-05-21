@@ -179,14 +179,14 @@ const Hero = () => {
                   className={`${panel.tone} rounded-[28px] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.08)]`}
                 >
                   <div className="rounded-[22px] overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
-  <Image 
-    src={imageMap[panel.label]} 
-    alt={panel.title} 
-    width={640} 
-    height={420} 
-    className="w-full h-[180px] sm:h-[220px] md:h-[260px] lg:h-[300px] xl:h-[340px] 2xl:h-[380px] object-contain transition-all duration-300" 
-  />
-</div>
+                    <Image 
+                      src={imageMap[panel.label]} 
+                      alt={panel.title} 
+                      width={640} 
+                      height={420} 
+                      className="w-full h-[180px] sm:h-[220px] md:h-[260px] lg:h-[300px] xl:h-[340px] 2xl:h-[380px] object-contain transition-all duration-300" 
+                    />
+                  </div>
                   <div className="mt-4 flex items-end justify-between gap-4">
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-[0.25em] opacity-70">{panel.label}</p>
