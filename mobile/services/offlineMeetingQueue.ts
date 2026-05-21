@@ -10,11 +10,7 @@ const RECENT_UPLOADS_KEY = 'offline_recent_uploads_v1';
 const SYNCING_IDS_KEY = 'offline_syncing_ids_v1';
 const OFFLINE_AUDIO_DIR = new FileSystem.Directory(FileSystem.Paths.document, 'offline-meetings');
 const SYNCING_ID_TTL_MS = 1000 * 60 * 15;
-let processQueuePromise: Promise<{
-  processedCount: number;
-  remainingCount: number;
-  latestMeeting: ProcessedMeetingResult['meeting'] | null;
-}> | null = null;
+const FREE_MEETING_LIMIT = 5;
 
 export type OfflineMeetingQueueItem = {
   id: string;
@@ -35,6 +31,16 @@ export type ProcessedMeetingResult = {
   };
   raw?: unknown;
 };
+
+type QueueSyncResult = {
+  processedCount: number;
+  remainingCount: number;
+  latestMeeting: ProcessedMeetingResult['meeting'] | null;
+  blockedByPlan?: boolean;
+  blockedReason?: string;
+};
+
+let processQueuePromise: Promise<QueueSyncResult> | null = null;
 
 const readQueue = async (): Promise<OfflineMeetingQueueItem[]> => {
   try {
@@ -181,8 +187,25 @@ export const enqueueOfflineRecording = async (
 
 export const removeOfflineMeeting = async (id: string): Promise<void> => {
   const queue = await readQueue();
+  const removedItem = queue.find(item => item.id === id);
   const remaining = queue.filter(item => item.id !== id);
   await writeQueue(remaining);
+
+  if (removedItem) {
+    await deleteLocalAudioFile(removedItem.localUri);
+  }
+
+  const uploads = await readRecentUploads();
+  const filteredUploads = uploads.filter(entry => entry.offlineId !== id);
+  if (filteredUploads.length !== uploads.length) {
+    await writeRecentUploads(filteredUploads);
+  }
+
+  const syncingEntries = await readSyncingEntries();
+  const filteredSyncingEntries = syncingEntries.filter(entry => entry.id !== id);
+  if (filteredSyncingEntries.length !== syncingEntries.length) {
+    await writeSyncingEntries(filteredSyncingEntries);
+  }
 };
 
 export const updateOfflineMeeting = async (
@@ -307,11 +330,7 @@ const addRecentUpload = async (offlineId: string, remoteId: string) => {
   }
 };
 
-export const processOfflineMeetingQueue = async (): Promise<{
-  processedCount: number;
-  remainingCount: number;
-  latestMeeting: ProcessedMeetingResult['meeting'] | null;
-}> => {
+export const processOfflineMeetingQueue = async (): Promise<QueueSyncResult> => {
   if (processQueuePromise) {
     console.log('[QUEUE] Processing already in progress; reusing active sync run');
     return processQueuePromise;
@@ -323,8 +342,37 @@ export const processOfflineMeetingQueue = async (): Promise<{
       return { processedCount: 0, remainingCount: await getOfflineMeetingCount(), latestMeeting: null };
     }
 
+      let remainingFreeSlots: number | null = null;
+      try {
+        const userResponse = await apiClient.get('/users/me');
+        const user = userResponse.data?.data?.user || userResponse.data?.user;
+        const usageThisMonth = Number(userResponse.data?.data?.usage?.meetingsThisMonth ?? userResponse.data?.usage?.meetingsThisMonth ?? 0);
+
+        if (user?.subscription?.plan === 'free') {
+          remainingFreeSlots = Math.max(0, FREE_MEETING_LIMIT - usageThisMonth);
+
+          if (remainingFreeSlots <= 0) {
+            console.log('[QUEUE] Free plan limit reached; skipping queued uploads');
+            return {
+              processedCount: 0,
+              remainingCount: await getOfflineMeetingCount(),
+              latestMeeting: null,
+              blockedByPlan: true,
+              blockedReason: 'MEETING_LIMIT_REACHED',
+            };
+          }
+        }
+      } catch (userError) {
+        console.warn('[QUEUE] Could not load user profile before queue sync; proceeding optimistically:', userError);
+      }
+
     const queue = await readQueue();
     console.log('[QUEUE] Processing queue with', queue.length, 'item(s)');
+
+    const itemsToProcess = remainingFreeSlots === null
+      ? queue
+      : queue.slice(0, remainingFreeSlots);
+    const blockedItems = remainingFreeSlots === null ? [] : queue.slice(itemsToProcess.length);
 
     const queueIds = queue.map(item => item.id);
     await markSyncingIds(queueIds);
@@ -332,7 +380,7 @@ export const processOfflineMeetingQueue = async (): Promise<{
     let processedCount = 0;
     let latestMeeting: ProcessedMeetingResult['meeting'] | null = null;
     try {
-      for (const item of queue) {
+      for (const item of itemsToProcess) {
         console.log('[QUEUE] Processing item:', item.id);
         await updateOfflineMeeting(item.id, { status: 'processing', error: undefined });
         await sendLocalNotification('Transcription Started', `${item.title} is being transcribed now.`);
@@ -370,6 +418,15 @@ export const processOfflineMeetingQueue = async (): Promise<{
           
           console.log('[QUEUE] Breaking after first error - will retry next time');
           break;
+        }
+      }
+
+      if (blockedItems.length > 0) {
+        for (const item of blockedItems) {
+          await updateOfflineMeeting(item.id, {
+            status: 'failed',
+            error: 'Monthly meeting limit reached',
+          });
         }
       }
     } finally {

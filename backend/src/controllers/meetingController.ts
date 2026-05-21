@@ -63,9 +63,11 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
 
     await meeting.save();
 
-    // Increment meeting count
-    user.meetingCount = (user.meetingCount || 0) + 1;
-    await user.save();
+    if (initialStatus === 'completed') {
+      // Count only completed meetings toward usage limits
+      user.meetingCount = (user.meetingCount || 0) + 1;
+      await user.save();
+    }
 
     logger.info({ clerkId, meetingId: meeting._id }, 'Meeting created via direct POST');
     console.log(`[DEBUGGER] Meeting created directly: ${meeting._id}`);
@@ -205,6 +207,10 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         processingMeeting.status = 'completed';
         processingMeeting.processingCompletedAt = new Date();
         await processingMeeting.save();
+
+        // Count the meeting only after successful processing completes
+        user.meetingCount = (user.meetingCount || 0) + 1;
+        await user.save();
 
         // Send success notifications
         if (canSendPush && user.expoPushToken) {

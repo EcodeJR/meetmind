@@ -24,6 +24,7 @@ import {
   getOfflineMeetingQueue,
   getSyncingOfflineMeetingIds,
   processOfflineMeetingQueue,
+  removeOfflineMeeting,
 } from '@/services/offlineMeetingQueue';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -202,7 +203,14 @@ export default function HistoryScreen() {
     try {
       setQueueSyncing(true);
       const result = await processOfflineMeetingQueue();
-      Alert.alert('Upload complete', `${result.processedCount} recording${result.processedCount === 1 ? '' : 's'} uploaded.`);
+      if (result.blockedByPlan) {
+        Alert.alert(
+          'Free Limit Reached',
+          'You have used 5 free meetings this month. Upgrade to Pro to upload queued recordings and unlock full transcripts, action items, and exports.'
+        );
+      } else {
+        Alert.alert('Upload complete', `${result.processedCount} recording${result.processedCount === 1 ? '' : 's'} uploaded.`);
+      }
       await loadMeetings(searchQuery);
     } catch (error: any) {
       console.error('[HISTORY] Manual queued upload failed:', error);
@@ -211,6 +219,30 @@ export default function HistoryScreen() {
       setQueueSyncing(false);
     }
   };
+
+  const handleRemoveLocalRecording = useCallback((item: Meeting) => {
+    Alert.alert(
+      'Remove local recording?',
+      'This deletes the saved recording from this device. It will not be uploaded or transcribed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const offlineId = item._id.replace('offline-', '');
+              await removeOfflineMeeting(offlineId);
+              await loadMeetings(searchQuery);
+            } catch (error) {
+              console.error('[HISTORY] Failed to remove local recording:', error);
+              Alert.alert('Could not remove recording', 'Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }, [loadMeetings, searchQuery]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -364,12 +396,24 @@ export default function HistoryScreen() {
                     <Text style={styles.tagText}>INTELLIGENCE</Text>
                   </View>
                 </View>
-                {isSearching && (
-                  <View style={styles.matchingBadge}>
-                    <Text style={styles.matchingText}>MATCH FOUND</Text>
-                  </View>
-                )}
-                <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
+                <View style={styles.cardActions}>
+                  {item.source === 'offline' && item.status !== 'processing' && (
+                    <TouchableOpacity
+                      style={styles.removeButton}
+                      onPress={() => handleRemoveLocalRecording(item)}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="trash-outline" size={14} color={theme.colors.error} />
+                      <Text style={styles.removeButtonText}>Remove local</Text>
+                    </TouchableOpacity>
+                  )}
+                  {isSearching && (
+                    <View style={styles.matchingBadge}>
+                      <Text style={styles.matchingText}>MATCH FOUND</Text>
+                    </View>
+                  )}
+                  <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
+                </View>
               </View>
             </TouchableOpacity>
           )}
@@ -577,6 +621,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.xs,
   },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
   tag: {
     backgroundColor: theme.colors.surfaceContainerLow,
     paddingHorizontal: 6,
@@ -599,6 +648,23 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceGrotesk-SemiBold',
     fontSize: 8,
     color: theme.colors.onSecondaryContainer,
+  },
+  removeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: theme.colors.errorContainer,
+    borderWidth: 1,
+    borderColor: theme.colors.error,
+  },
+  removeButtonText: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 9,
+    color: theme.colors.error,
+    letterSpacing: 0.4,
   },
   processingRow: {
     flexDirection: 'row',

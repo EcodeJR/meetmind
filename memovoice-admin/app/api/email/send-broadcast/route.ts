@@ -54,61 +54,55 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No users found for the given target' }, { status: 404 });
     }
 
-    // Start sending process (background loop)
-    // We return a 202 Accepted response immediately so Vercel function doesn't time out the user's dashboard view
-    // (Note: For large broadcasts, a background worker is ideal, but here we perform rate-limited parallel delivery)
-    
-    // We return immediately to the frontend
-    const responsePayload = {
-      success: true,
-      message: `Broadcast started to ${users.length} ${target} users`,
-      total: users.length,
-    };
+    let sent = 0;
+    let failed = 0;
 
-    // Run the sending loop asynchronously without blocking the response
-    (async () => {
-      let sent = 0;
-      let failed = 0;
-      for (const user of users) {
-        try {
-          const personalizedHtml = emailHtml.replace(/\{name\}/g, user.name || 'there');
-          await sendEmail(user.email, emailSubject, personalizedHtml);
-          sent++;
-        } catch (err) {
-          console.error(`Failed to send to ${user.email}:`, err);
-          failed++;
-        }
-        await delay(200); // Rate limiting: max 5 emails/second to remain highly compliant
-      }
-      console.log(`Broadcast complete: ${sent} sent, ${failed} failed out of ${users.length} total`);
-      
-      // Log to DB
+    for (const user of users) {
       try {
-        const db = await connectDB();
-        const EmailLog = db.models.EmailLog || (await import('mongoose')).model(
-          'EmailLog',
-          new (await import('mongoose')).Schema({ 
-            type: String, 
-            recipients: String, 
-            subject: String, 
-            sentBy: String, 
-            status: String 
-          }, { timestamps: true })
-        );
-        
-        await EmailLog.create({
-          type: 'Broadcast',
-          recipients: `${target === 'all' ? 'All' : target === 'pro' ? 'Pro' : 'Free'} Users (${users.length})`,
-          subject: emailSubject,
-          sentBy: 'Admin',
-          status: failed === users.length ? 'failed' : 'sent'
-        });
-      } catch (e) {
-        console.error('Failed to save EmailLog:', e);
+        const personalizedHtml = emailHtml.replace(/\{name\}/g, user.name || 'there');
+        await sendEmail(user.email, emailSubject, personalizedHtml);
+        sent++;
+      } catch (err) {
+        console.error(`Failed to send to ${user.email}:`, err);
+        failed++;
       }
-    })();
 
-    return NextResponse.json(responsePayload, { status: 202 });
+      await delay(200);
+    }
+
+    console.log(`Broadcast complete: ${sent} sent, ${failed} failed out of ${users.length} total`);
+
+    try {
+      const db = await connectDB();
+      const EmailLog = db.models.EmailLog || (await import('mongoose')).model(
+        'EmailLog',
+        new (await import('mongoose')).Schema({
+          type: String,
+          recipients: String,
+          subject: String,
+          sentBy: String,
+          status: String,
+        }, { timestamps: true })
+      );
+
+      await EmailLog.create({
+        type: 'Broadcast',
+        recipients: `${target === 'all' ? 'All' : target === 'pro' ? 'Pro' : 'Free'} Users (${users.length})`,
+        subject: emailSubject,
+        sentBy: 'Admin',
+        status: failed === users.length ? 'failed' : 'sent',
+      });
+    } catch (e) {
+      console.error('Failed to save EmailLog:', e);
+    }
+
+    return NextResponse.json({
+      success: failed < users.length,
+      message: `Broadcast finished for ${users.length} users`,
+      total: users.length,
+      sent,
+      failed,
+    }, { status: failed === users.length ? 500 : 200 });
   } catch (error: any) {
     return NextResponse.json({ error: 'Invalid payload or server error', details: error.message }, { status: 500 });
   }

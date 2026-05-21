@@ -99,7 +99,25 @@ export const getUser = async (req: AuthRequest, res: Response) => {
       return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
     }
 
-    return sendSuccess(res, { user });
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const meetingsThisMonth = await Meeting.countDocuments({
+      userId: user._id,
+      status: 'completed',
+      createdAt: { $gte: startOfMonth },
+    });
+
+    return sendSuccess(res, {
+      user,
+      usage: {
+        meetingsThisMonth,
+        remainingFreeMeetings: user.subscription.plan === 'free'
+          ? Math.max(0, 5 - meetingsThisMonth)
+          : null,
+      },
+    });
   } catch (error) {
     logger.error({ error }, 'Error fetching user');
     return sendError(res, 'FETCH_ERROR', 'Failed to fetch user', 500);

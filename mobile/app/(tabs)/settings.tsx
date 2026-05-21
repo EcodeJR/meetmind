@@ -288,26 +288,35 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <View style={styles.footerButtons}>
-          <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={() => {
-              Alert.alert('Dissolve Session', 'Are you sure you want to sign out?', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Sign out', style: 'destructive', onPress: handleSignOut },
-              ]);
-            }}
-          >
-            <Text style={styles.signOutText}>Sign out from Network</Text>
-          </TouchableOpacity>
+        {isSignedIn && (
+          <View style={styles.footerButtons}>
+            <TouchableOpacity
+              style={styles.signOutButton}
+              onPress={() => router.push('/settings/contact-us')}
+            >
+              <Text style={styles.signOutText}>Contact Us</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.deleteAccountButton}
-            onPress={handleDeleteAccount}
-          >
-            <Text style={styles.deleteAccountText}>Dissolve Account</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={styles.signOutButton}
+              onPress={() => {
+                Alert.alert('Dissolve Session', 'Are you sure you want to sign out?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Sign out', style: 'destructive', onPress: handleSignOut },
+                ]);
+              }}
+            >
+              <Text style={styles.signOutText}>Sign out from Network</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.deleteAccountButton}
+              onPress={handleDeleteAccount}
+            >
+              <Text style={styles.deleteAccountText}>Dissolve Account</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Memovoice v1.0.0 — Established 2026</Text>

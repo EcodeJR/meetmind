@@ -53,6 +53,7 @@ export const checkMeetingLimit = async (req: AuthRequest, res: Response, next: N
 
     const meetingsThisMonth = await Meeting.countDocuments({
       userId: user._id,
+      status: 'completed',
       createdAt: { $gte: getMonthStart() },
     });
 

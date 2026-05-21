@@ -51,7 +51,7 @@ function RootLayoutNav() {
   const router = useRouter();
   const hasSynced = useRef(false);
   const hasPromptedForOfflineSync = useRef(false);
-  const hasPromptedAttachOnSignIn = useRef(false);
+  const hasAttemptedQueuedSync = useRef(false);
   const hasRedirectedToOnboarding = useRef(false);
 
   const [fontsLoaded, fontError] = useFonts({
@@ -139,7 +139,7 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (!isSignedIn) {
-      hasPromptedAttachOnSignIn.current = false;
+      hasAttemptedQueuedSync.current = false;
     }
   }, [isSignedIn]);
 
@@ -200,11 +200,11 @@ function RootLayoutNav() {
   }, [isSignedIn, router]);
 
   useEffect(() => {
-    if (!isSignedIn || hasPromptedAttachOnSignIn.current) {
+    if (!isSignedIn || hasAttemptedQueuedSync.current) {
       return;
     }
 
-    const promptAttachAndProcessQueue = async () => {
+    const syncQueuedRecordings = async () => {
       try {
         const queueCount = await getOfflineMeetingCount();
         if (!queueCount) {
@@ -216,48 +216,32 @@ function RootLayoutNav() {
           return;
         }
 
-        hasPromptedAttachOnSignIn.current = true;
+        hasAttemptedQueuedSync.current = true;
+        const result = await processOfflineMeetingQueue();
 
-        Alert.alert(
-          'Attach saved recordings?',
-          `You have ${queueCount} recording${queueCount === 1 ? '' : 's'} saved locally. Attach and upload them to this account now?`,
-          [
-            {
-              text: 'Later',
-              style: 'cancel',
-            },
-            {
-              text: 'Attach now',
-              onPress: async () => {
-                try {
-                  const result = await processOfflineMeetingQueue();
-                  if (result.processedCount > 0) {
-                    Alert.alert('Upload started', `${result.processedCount} recording${result.processedCount === 1 ? '' : 's'} attached and processed.`);
-                  }
-                } catch (error) {
-                  console.warn('[OFFLINE] Explicit attach flow failed:', error);
-                  Alert.alert('Upload failed', 'Could not upload queued recordings right now. Please try again from History or Settings.');
-                }
-              },
-            },
-          ]
-        );
+        if (result.blockedByPlan) {
+          Alert.alert(
+            'Free Limit Reached',
+            'You have used 5 free meetings this month. Upgrade to Pro to process saved recordings, unlock full transcripts, action items, and exports.',
+            [{ text: 'OK' }]
+          );
+        }
       } catch (error) {
-        console.warn('[OFFLINE] Failed to prompt attach-on-signin:', error);
+        console.warn('[OFFLINE] Failed to sync queued recordings:', error);
       }
     };
 
-    promptAttachAndProcessQueue();
+    syncQueuedRecordings();
 
     const unsubscribeNetInfo = NetInfo.addEventListener(state => {
       if (state.isConnected && state.isInternetReachable !== false) {
-        promptAttachAndProcessQueue();
+        syncQueuedRecordings();
       }
     });
 
     const appStateSubscription = AppState.addEventListener('change', nextState => {
       if (nextState === 'active') {
-        promptAttachAndProcessQueue();
+        syncQueuedRecordings();
       }
     });
 
