@@ -15,14 +15,16 @@ import {
   Triangle,
   Circle,
   Square,
-  Octagon
+  Octagon,
+  ArrowRight
 } from 'lucide-react';
+import Image from 'next/image';
 
 export const SocialProof = () => (
-  <div className="py-12 bg-black border-y border-white/5">
+  <div className="py-12 bg-white border-y border-black/10">
     <div className="max-w-7xl mx-auto px-4 text-center">
-      <p className="text-xs font-bold text-white/40 uppercase tracking-widest mb-8">Trusted by professionals in 10+ countries</p>
-      <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-40 grayscale hover:grayscale-0 transition-all duration-500">
+      <p className="text-xs font-bold text-black/45 uppercase tracking-[0.3em] mb-8">Trusted by professionals in 10+ countries</p>
+      <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-35 grayscale hover:grayscale-0 transition-all duration-500 text-black">
         {[
           { name: "Acme Corp", icon: <Hexagon className="w-6 md:w-8 h-6 md:h-8" /> },
           { name: "Globex", icon: <Triangle className="w-6 md:w-8 h-6 md:h-8" /> },
@@ -30,7 +32,7 @@ export const SocialProof = () => (
           { name: "Soylent", icon: <Square className="w-6 md:w-8 h-6 md:h-8" /> },
           { name: "Massive", icon: <Octagon className="w-6 md:w-8 h-6 md:h-8" /> }
         ].map((company) => (
-          <div key={company.name} className="flex items-center gap-2 text-white font-bold text-lg md:text-xl tracking-tight">
+          <div key={company.name} className="flex items-center gap-2 font-bold text-lg md:text-xl tracking-tight">
             {company.icon}
             <span>{company.name}</span>
           </div>
@@ -41,12 +43,12 @@ export const SocialProof = () => (
 );
 
 export const Problem = () => (
-  <section className="py-24 bg-black">
+  <section className="py-24 bg-white">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="text-center mb-16">
-        <p className="text-xs font-bold text-accent uppercase tracking-widest mb-4">THE CHALLENGE</p>
-        <h2 className="text-4xl lg:text-5xl font-black text-white mb-6 tracking-tight">Manual notes don&apos;t cut it anymore</h2>
-        <p className="text-white/50 max-w-2xl mx-auto text-lg leading-relaxed">Focus on the conversation, not the transcription. Memovoice bridges the memory gap in professional settings.</p>
+        <p className="text-xs font-bold text-black uppercase tracking-[0.3em] mb-4">THE CHALLENGE</p>
+        <h2 className="text-4xl lg:text-5xl font-black text-black mb-6 tracking-[-0.05em]">Manual notes don&apos;t cut it anymore</h2>
+        <p className="text-black/60 max-w-2xl mx-auto text-lg leading-relaxed">Focus on the conversation, not the transcription. Memovoice bridges the memory gap in professional settings.</p>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
@@ -70,13 +72,13 @@ export const Problem = () => (
           <motion.div
             key={i}
             whileHover={{ y: -5 }}
-            className="p-6 rounded-lg bg-dark-50 border border-white/5 hover:border-white/10 transition-all"
+            className="p-6 rounded-3xl bg-white border border-black/10 hover:border-black/25 transition-all shadow-[0_10px_30px_rgba(0,0,0,0.03)]"
           >
-            <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center mb-6">
+            <div className="w-10 h-10 rounded-full bg-black/5 flex items-center justify-center mb-6 text-black">
               {item.icon}
             </div>
-            <h3 className="text-lg font-bold text-white mb-3">{item.title}</h3>
-            <p className="text-white/50 leading-relaxed text-sm">{item.desc}</p>
+            <h3 className="text-lg font-bold text-black mb-3 tracking-tight">{item.title}</h3>
+            <p className="text-black/60 leading-relaxed text-sm">{item.desc}</p>
           </motion.div>
         ))}
       </div>
@@ -85,15 +87,44 @@ export const Problem = () => (
 );
 
 export const Features = () => (
-  <section id="features" className="py-24 bg-black">
+  <section id="features" className="py-24 bg-white">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="text-center mb-20">
-        <p className="text-xs font-bold text-accent uppercase tracking-widest mb-4">CAPABILITIES</p>
-        <h2 className="text-4xl lg:text-5xl font-black text-white mb-6 tracking-tight">Everything you need from every meeting</h2>
-        <p className="text-white/50 max-w-2xl mx-auto text-lg leading-relaxed">Sophisticated AI intelligence wrapped in a minimalist mobile interface.</p>
+        <p className="text-xs font-bold text-black uppercase tracking-[0.3em] mb-4">CAPABILITIES</p>
+        <h2 className="text-4xl lg:text-5xl font-black text-black mb-6 tracking-[-0.05em]">Everything you need from every meeting</h2>
+        <p className="text-black/60 max-w-2xl mx-auto text-lg leading-relaxed">Sophisticated AI intelligence wrapped in a minimalist mobile interface.</p>
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-8 items-start mb-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="rounded-[32px] border border-black/10 p-4 bg-white shadow-[0_18px_50px_rgba(0,0,0,0.04)]"
+        >
+          <div className="grid gap-4">
+            {[
+              { title: 'Recording frame', subtitle: 'Background capture without the visual noise.', image: '/images/Phone-recording-screen-one.jpg' },
+              { title: 'Transcript frame', subtitle: 'Readable output with clean hierarchy.', image: '/images/Phone-meeting-summary.jpg' },
+              { title: 'Summary frame', subtitle: 'Images replace video placeholders for a calmer page.', image: '/images/Phone-meeting-key-notes.jpg' },
+            ].map((frame, index) => (
+              <div key={frame.title} className="rounded-[24px] overflow-hidden border border-black/10 bg-white">
+                <Image src={frame.image} alt={frame.title} width={900} height={560} className="w-full h-48 object-cover" />
+                <div className="p-4 flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.25em] text-black/45 font-bold">0{index + 1}</p>
+                    <h3 className="text-lg font-bold text-black tracking-tight mt-1">{frame.title}</h3>
+                    <p className="text-sm text-black/60 mt-2 leading-relaxed">{frame.subtitle}</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-black/40 flex-shrink-0" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+
+        <div className="grid md:grid-cols-2 gap-6">
         {[
           {
             title: "One-Tap Recording",
@@ -132,15 +163,16 @@ export const Features = () => (
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: i * 0.1 }}
-            className="group p-6 rounded-lg bg-dark-50 border border-white/5 hover:border-accent/50 hover:bg-dark-100 transition-all duration-300"
+            className="group p-6 rounded-[28px] bg-white border border-black/10 hover:border-black/25 transition-all duration-300 shadow-[0_12px_34px_rgba(0,0,0,0.03)]"
           >
-            <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center mb-6 group-hover:bg-accent group-hover:text-black transition-all duration-300 text-accent">
+            <div className="w-12 h-12 rounded-full bg-black/5 flex items-center justify-center mb-6 group-hover:bg-black group-hover:text-white transition-all duration-300 text-black">
               {feat.icon}
             </div>
-            <h3 className="text-lg font-bold text-white mb-3">{feat.title}</h3>
-            <p className="text-white/50 leading-relaxed text-sm">{feat.desc}</p>
+            <h3 className="text-lg font-bold text-black mb-3 tracking-tight">{feat.title}</h3>
+            <p className="text-black/60 leading-relaxed text-sm">{feat.desc}</p>
           </motion.div>
         ))}
+        </div>
       </div>
     </div>
   </section>

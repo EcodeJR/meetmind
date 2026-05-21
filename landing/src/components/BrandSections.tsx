@@ -18,17 +18,17 @@ import Link from 'next/link';
 import Image from 'next/image';
 
 export const HowItWorks = () => (
-  <section id="how-it-works" className="py-24 bg-black text-white overflow-hidden">
+  <section id="how-it-works" className="py-24 bg-white text-black overflow-hidden">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="text-center mb-20">
         <p className="text-xs font-bold text-accent uppercase tracking-widest mb-4">THE PROCESS</p>
-        <h2 className="text-4xl lg:text-5xl font-black mb-6 tracking-tight">Three steps to never forget a meeting again</h2>
-        <p className="text-white/50 max-w-2xl mx-auto text-lg leading-relaxed">Sophisticated intelligence, simplified for professionals.</p>
+        <h2 className="text-4xl lg:text-5xl font-black mb-6 tracking-[-0.05em]">Three steps to never forget a meeting again</h2>
+        <p className="text-black/60 max-w-2xl mx-auto text-lg leading-relaxed">Sophisticated intelligence, simplified for professionals.</p>
       </div>
 
       <div className="relative">
         {/* Connection Line */}
-        <div className="hidden lg:block absolute top-1/2 left-0 w-full h-0.5 bg-white/5 -translate-y-1/2 z-0" />
+        <div className="hidden lg:block absolute top-1/2 left-0 w-full h-0.5 bg-black/10 -translate-y-1/2 z-0" />
 
         <div className="grid lg:grid-cols-3 gap-12 relative z-10">
           {[
@@ -59,12 +59,12 @@ export const HowItWorks = () => (
               transition={{ delay: i * 0.2 }}
               className="flex flex-col items-center text-center group"
             >
-              <div className="w-20 h-20 rounded-full bg-accent/10 flex items-center justify-center mb-8 border border-accent/30 text-accent group-hover:bg-accent group-hover:text-black group-hover:border-accent transition-all duration-500">
+              <div className="w-20 h-20 rounded-full bg-black/5 flex items-center justify-center mb-8 border border-black/10 text-black group-hover:bg-black group-hover:text-white group-hover:border-black transition-all duration-500">
                 {item.icon}
               </div>
-              <span className="text-accent font-bold text-xs tracking-widest mb-4 uppercase">STEP {item.step}</span>
-              <h3 className="text-2xl font-black mb-4 leading-tight">{item.title}</h3>
-              <p className="text-white/50 leading-relaxed max-w-xs text-sm">{item.desc}</p>
+              <span className="text-black font-bold text-xs tracking-[0.3em] mb-4 uppercase">STEP {item.step}</span>
+              <h3 className="text-2xl font-black mb-4 leading-tight tracking-tight">{item.title}</h3>
+              <p className="text-black/60 leading-relaxed max-w-xs text-sm">{item.desc}</p>
             </motion.div>
           ))}
         </div>
@@ -74,46 +74,46 @@ export const HowItWorks = () => (
 );
 
 export const Pricing = () => (
-  <section id="pricing" className="py-32 bg-black">
+  <section id="pricing" className="py-32 bg-white">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="text-center mb-20">
         <p className="text-xs font-bold text-accent uppercase tracking-widest mb-4">PRICING</p>
-        <h2 className="text-4xl lg:text-5xl font-black text-white mb-6 tracking-tight">Simple, transparent pricing</h2>
-        <p className="text-white/50 text-lg leading-relaxed">Scalable intelligence for individuals and organizations.</p>
+        <h2 className="text-4xl lg:text-5xl font-black text-black mb-6 tracking-[-0.05em]">Simple, transparent pricing</h2>
+        <p className="text-black/60 text-lg leading-relaxed">Scalable intelligence for individuals and organizations.</p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
         {/* Free Plan */}
-        <div className="p-8 rounded-lg bg-dark-50 border border-white/5 hover:border-white/10 transition-all duration-300">
-          <p className="text-xs font-bold text-white/40 mb-4 uppercase tracking-widest">Free Plan</p>
+        <div className="p-8 rounded-[28px] bg-white border border-black/10 hover:border-black/25 transition-all duration-300 shadow-[0_12px_34px_rgba(0,0,0,0.03)]">
+          <p className="text-xs font-bold text-black/40 mb-4 uppercase tracking-[0.3em]">Free Plan</p>
           <div className="flex items-baseline gap-1 mb-8">
-            <span className="text-5xl font-black text-white">$0</span>
-            <span className="text-white/40 font-light">/month</span>
+            <span className="text-5xl font-black text-black">$0</span>
+            <span className="text-black/40 font-light">/month</span>
           </div>
 
           <ul className="space-y-4 mb-10">
             {['5 meetings per month', 'Basic summary only', '7 day history'].map((item, i) => (
-              <li key={i} className="flex items-center gap-3 text-white/70 text-sm">
-                <Check className="w-5 h-5 text-accent flex-shrink-0" />
+              <li key={i} className="flex items-center gap-3 text-black/70 text-sm">
+                <Check className="w-5 h-5 text-black flex-shrink-0" />
                 {item}
               </li>
             ))}
-            <li className="flex items-center gap-3 text-white/40 text-sm">
-              <Minus className="w-5 h-5 text-white/20 flex-shrink-0" />
+            <li className="flex items-center gap-3 text-black/40 text-sm">
+              <Minus className="w-5 h-5 text-black/20 flex-shrink-0" />
               No action items or export
             </li>
           </ul>
 
-          <Link href="#download" className="block text-center py-4 rounded-lg border border-white/10 text-white font-bold hover:bg-white/5 transition-all uppercase tracking-wide text-sm">
+          <Link href="#download" className="block text-center py-4 rounded-full border border-black/10 text-black font-bold hover:bg-black hover:text-white transition-all uppercase tracking-[0.2em] text-sm">
             Get Started Free
           </Link>
         </div>
 
         {/* Pro Plan */}
-        <div className="p-8 rounded-lg bg-dark-50 border-2 border-accent hover:shadow-xl hover:shadow-accent/20 transition-all duration-300 relative overflow-hidden">
-          <div className="absolute top-4 right-4 bg-accent text-black px-3 py-1 rounded text-xs font-black tracking-widest uppercase">Most Popular</div>
+        <div className="p-8 rounded-[28px] bg-black border border-black transition-all duration-300 relative overflow-hidden shadow-[0_18px_50px_rgba(0,0,0,0.1)]">
+          <div className="absolute top-4 right-4 bg-white text-black px-3 py-1 rounded-full text-xs font-black tracking-[0.2em] uppercase">Most Popular</div>
 
-          <p className="text-xs font-bold text-accent mb-4 uppercase tracking-widest">Pro Plan</p>
+          <p className="text-xs font-bold text-white mb-4 uppercase tracking-[0.3em]">Pro Plan</p>
           <div className="flex items-baseline gap-1 mb-8">
             <span className="text-5xl font-black text-white">$12</span>
             <span className="text-white/40 font-light">/month</span>
@@ -127,14 +127,14 @@ export const Pricing = () => (
               'Export to PDF and email',
               'Unlimited history'
             ].map((item, i) => (
-              <li key={i} className="flex items-center gap-3 text-white/70 font-medium text-sm">
-                <Check className="w-5 h-5 text-accent flex-shrink-0" />
+              <li key={i} className="flex items-center gap-3 text-white/75 font-medium text-sm">
+                <Check className="w-5 h-5 text-white flex-shrink-0" />
                 {item}
               </li>
             ))}
           </ul>
 
-          <Link href="#download" className="block text-center py-4 rounded-lg bg-accent text-black font-black hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 uppercase tracking-wide text-sm">
+          <Link href="#download" className="block text-center py-4 rounded-full bg-white text-black font-black hover:bg-white/90 transition-all uppercase tracking-[0.2em] text-sm">
             Start Pro
           </Link>
         </div>
@@ -144,11 +144,11 @@ export const Pricing = () => (
 );
 
 export const Testimonials = () => (
-  <section className="py-24 bg-black">
+  <section className="py-24 bg-white">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="text-center mb-16">
         <p className="text-xs font-bold text-accent uppercase tracking-widest mb-4">TESTIMONIALS</p>
-        <h2 className="text-4xl lg:text-5xl font-black text-white mb-4 tracking-tight">What professionals are saying</h2>
+        <h2 className="text-4xl lg:text-5xl font-black text-black mb-4 tracking-[-0.05em]">What professionals are saying</h2>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
@@ -169,15 +169,15 @@ export const Testimonials = () => (
             quote: "Action item extraction is a lifesaver. My team knows exactly what to do the moment the meeting ends. It's seamless."
           }
         ].map((t, i) => (
-          <div key={i} className="p-6 rounded-lg bg-dark-50 border border-white/5 hover:border-white/10 transition-all">
+          <div key={i} className="p-6 rounded-[28px] bg-white border border-black/10 hover:border-black/25 transition-all shadow-[0_10px_30px_rgba(0,0,0,0.03)]">
             <div className="flex items-center gap-4 mb-6">
-              <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10" />
+              <div className="w-12 h-12 rounded-full bg-black/5 border border-black/10" />
               <div>
-                <p className="font-bold text-white text-sm">{t.name}</p>
-                <p className="text-xs text-white/40">{t.role}</p>
+                <p className="font-bold text-black text-sm">{t.name}</p>
+                <p className="text-xs text-black/40">{t.role}</p>
               </div>
             </div>
-            <p className="text-white/60 italic leading-relaxed text-sm">&quot;{t.quote}&quot;</p>
+            <p className="text-black/60 italic leading-relaxed text-sm">&quot;{t.quote}&quot;</p>
           </div>
         ))}
       </div>
@@ -198,20 +198,20 @@ export const FAQ = () => {
   ];
 
   return (
-    <section className="py-24 max-w-3xl mx-auto px-4 bg-black">
+    <section className="py-24 max-w-3xl mx-auto px-4 bg-white">
       <div className="text-center mb-16">
         <p className="text-xs font-bold text-accent uppercase tracking-widest mb-4">FAQ</p>
-        <h2 className="text-4xl lg:text-5xl font-black text-white mb-4 tracking-tight">Frequently asked questions</h2>
+        <h2 className="text-4xl lg:text-5xl font-black text-black mb-4 tracking-[-0.05em]">Frequently asked questions</h2>
       </div>
       <div className="space-y-3">
         {faqs.map((faq, i) => (
-          <div key={i} className="border border-white/5 rounded-lg bg-dark-50 overflow-hidden hover:border-white/10 transition-all">
+          <div key={i} className="border border-black/10 rounded-[24px] bg-white overflow-hidden hover:border-black/25 transition-all">
             <button
               onClick={() => setOpenIndex(openIndex === i ? null : i)}
-              className="w-full p-6 text-left flex justify-between items-center hover:bg-dark-100/50 transition-colors"
+              className="w-full p-6 text-left flex justify-between items-center hover:bg-black/[0.03] transition-colors"
             >
-              <span className="font-bold text-white text-sm">{faq.q}</span>
-              {openIndex === i ? <Minus className="w-5 h-5 text-accent flex-shrink-0" /> : <Plus className="w-5 h-5 text-white/30 flex-shrink-0" />}
+              <span className="font-bold text-black text-sm">{faq.q}</span>
+              {openIndex === i ? <Minus className="w-5 h-5 text-black flex-shrink-0" /> : <Plus className="w-5 h-5 text-black/30 flex-shrink-0" />}
             </button>
             <AnimatePresence>
               {openIndex === i && (
@@ -219,7 +219,7 @@ export const FAQ = () => {
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  className="px-6 pb-6 text-white/60 leading-relaxed text-sm border-t border-white/5"
+                  className="px-6 pb-6 text-black/60 leading-relaxed text-sm border-t border-black/10"
                 >
                   {faq.a}
                 </motion.div>
@@ -272,17 +272,17 @@ export const FinalCTA = () => {
   };
 
   return (
-    <section id="waitlist" className="py-32 bg-dark-50 text-center border-t border-white/5">
+    <section id="waitlist" className="py-32 bg-white text-center border-t border-black/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <p className="text-xs font-bold text-accent uppercase tracking-widest mb-6">GET EARLY ACCESS</p>
-        <h2 className="text-5xl lg:text-6xl font-black text-white mb-6 tracking-tight leading-tight">Start remembering every meeting</h2>
-        <p className="text-white/50 text-lg mb-12 max-w-2xl mx-auto leading-relaxed">Join thousands of professionals using Memovoice to scale their institutional intelligence.</p>
+        <h2 className="text-5xl lg:text-6xl font-black text-black mb-6 tracking-[-0.06em] leading-tight">Start remembering every meeting</h2>
+        <p className="text-black/60 text-lg mb-12 max-w-2xl mx-auto leading-relaxed">Join thousands of professionals using Memovoice to scale their institutional intelligence.</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto mb-6">
           <input
             type="email"
             placeholder="Enter your professional email"
-            className="flex-1 px-6 py-4 rounded-lg bg-black border border-white/10 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all text-white placeholder-white/30 text-sm"
+            className="flex-1 px-6 py-4 rounded-full bg-white border border-black/10 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black transition-all text-black placeholder-black/30 text-sm"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -291,41 +291,41 @@ export const FinalCTA = () => {
           <button
             type="submit"
             disabled={submitting}
-            className="bg-accent text-black px-8 py-4 rounded-lg font-black hover:bg-accent/90 transition-all active:scale-95 shadow-lg shadow-accent/30 uppercase tracking-wide text-sm whitespace-nowrap disabled:opacity-50"
+            className="bg-black text-white px-8 py-4 rounded-full font-black hover:bg-black/90 transition-all active:scale-95 uppercase tracking-[0.2em] text-sm whitespace-nowrap disabled:opacity-50"
           >
             {submitting ? 'Joining...' : 'Join Waitlist'}
           </button>
         </form>
         {message && (
-          <p className={`font-bold mb-4 text-sm ${submitted ? 'text-accent' : 'text-red-500'}`}>{message}</p>
+          <p className={`font-bold mb-4 text-sm ${submitted ? 'text-black' : 'text-black/60'}`}>{message}</p>
         )}
-        <p className="text-white/40 text-xs">Free to start. No credit card required.</p>
+        <p className="text-black/40 text-xs">Free to start. No credit card required.</p>
       </div>
     </section>
   );
 };
 
 export const Footer = () => (
-  <footer className="py-20 bg-black border-t border-white/5">
+  <footer className="py-20 bg-white border-t border-black/10">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="grid md:grid-cols-4 gap-12 mb-16">
         <div className="col-span-2">
           <div className="flex items-center gap-3 mb-6">
             <Image src="/logo.jpeg" alt="Memovoice" width={32} height={32} className="h-8 w-auto" />
-            <span className="text-xl font-black text-white tracking-tight uppercase">Memovoice</span>
+            <span className="text-xl font-black text-black tracking-tight uppercase">Memovoice</span>
           </div>
-          <p className="text-white/50 max-w-sm mb-8 leading-relaxed text-sm">
+          <p className="text-black/60 max-w-sm mb-8 leading-relaxed text-sm">
             Institutional-grade audio recording and AI synthesis for modern professionals. Capture, transcribe, and summarize every physical interaction with precision.
           </p>
           <div className="flex gap-4">
             {/* Twitter */}
-            <a href="https://x.com/memovoice182704" target="_blank" rel="noopener noreferrer" title="Follow us on X" className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-accent hover:border-accent/50 hover:bg-accent/5 transition-all cursor-pointer">
+            <a href="https://x.com/memovoice182704" target="_blank" rel="noopener noreferrer" title="Follow us on X" className="w-10 h-10 rounded-full bg-white border border-black/10 flex items-center justify-center text-black/50 hover:text-black hover:border-black/30 hover:bg-black/[0.03] transition-all cursor-pointer">
               <Twitter className="w-5 h-5" />
             </a>
 
             {/* LinkedIn - Coming Soon */}
             <div className="relative">
-              <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 cursor-not-allowed opacity-50" title="LinkedIn - Coming Soon">
+              <div className="w-10 h-10 rounded-full bg-white border border-black/10 flex items-center justify-center text-black/25 cursor-not-allowed opacity-50" title="LinkedIn - Coming Soon">
                 <Linkedin className="w-5 h-5" />
               </div>
               {/* <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-sm border border-white/20 rounded px-2 py-1 whitespace-nowrap text-xs text-white/60 font-medium">Coming Soon</div> */}
@@ -333,7 +333,7 @@ export const Footer = () => (
 
             {/* Instagram - Coming Soon */}
             <div className="relative">
-              <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 cursor-not-allowed opacity-50" title="Instagram - Coming Soon">
+              <div className="w-10 h-10 rounded-full bg-white border border-black/10 flex items-center justify-center text-black/25 cursor-not-allowed opacity-50" title="Instagram - Coming Soon">
                 <Instagram className="w-5 h-5" />
               </div>
               {/* <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-sm border border-white/20 rounded px-2 py-1 whitespace-nowrap text-xs text-white/60 font-medium">Coming Soon</div> */}
@@ -342,30 +342,30 @@ export const Footer = () => (
         </div>
 
         <div>
-          <h4 className="font-bold text-white mb-6 text-sm uppercase tracking-wide">Product</h4>
-          <ul className="space-y-4 text-white/50 text-xs">
-            <li><Link href="/#features" className="hover:text-accent transition-colors uppercase tracking-wide font-medium">Features</Link></li>
-            <li><Link href="/pricing" className="hover:text-accent transition-colors uppercase tracking-wide font-medium">Pricing</Link></li>
-            <li><Link href="/privacy" className="hover:text-accent transition-colors uppercase tracking-wide font-medium">Privacy Policy</Link></li>
-            <li><Link href="/terms" className="hover:text-accent transition-colors uppercase tracking-wide font-medium">Terms of Service</Link></li>
-            <li><Link href="/refunds" className="hover:text-accent transition-colors uppercase tracking-wide font-medium">Refund Policy</Link></li>
+          <h4 className="font-bold text-black mb-6 text-sm uppercase tracking-[0.2em]">Product</h4>
+          <ul className="space-y-4 text-black/55 text-xs">
+            <li><Link href="/#features" className="hover:text-black transition-colors uppercase tracking-[0.2em] font-medium">Features</Link></li>
+            <li><Link href="/pricing" className="hover:text-black transition-colors uppercase tracking-[0.2em] font-medium">Pricing</Link></li>
+            <li><Link href="/privacy" className="hover:text-black transition-colors uppercase tracking-[0.2em] font-medium">Privacy Policy</Link></li>
+            <li><Link href="/terms" className="hover:text-black transition-colors uppercase tracking-[0.2em] font-medium">Terms of Service</Link></li>
+            <li><Link href="/refunds" className="hover:text-black transition-colors uppercase tracking-[0.2em] font-medium">Refund Policy</Link></li>
           </ul>
         </div>
 
         <div>
-          <h4 className="font-bold text-white mb-6 text-sm uppercase tracking-wide">Contact</h4>
-          <ul className="space-y-4 text-white/50 text-xs">
+          <h4 className="font-bold text-black mb-6 text-sm uppercase tracking-[0.2em]">Contact</h4>
+          <ul className="space-y-4 text-black/55 text-xs">
             <li className="flex items-center gap-2">
               <Mail className="w-4 h-4" />
-              <a href="mailto:hello@memovoice.app" className="hover:text-accent transition-colors uppercase tracking-wide font-medium">memovoiceio@gmail.com</a>
+              <a href="mailto:hello@memovoice.app" className="hover:text-black transition-colors uppercase tracking-[0.2em] font-medium">memovoiceio@gmail.com</a>
             </li>
           </ul>
         </div>
       </div>
 
-      <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4">
-        <p className="text-xs text-white/30">© 2026 Memovoice. All rights reserved.</p>
-        <p className="text-xs text-white/30">Standardizing institutional memory since 2026.</p>
+      <div className="pt-8 border-t border-black/10 flex flex-col md:flex-row justify-between items-center gap-4">
+        <p className="text-xs text-black/35">© 2026 Memovoice. All rights reserved.</p>
+        <p className="text-xs text-black/35">Standardizing institutional memory since 2026.</p>
       </div>
     </div>
   </footer>

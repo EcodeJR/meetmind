@@ -20,7 +20,7 @@ export const metadata = {
 
 export default function Home() {
   return (
-    <main className="min-h-screen selection:bg-accent/30">
+    <main className="min-h-screen bg-white text-black selection:bg-black/10 selection:text-black">
       <Navbar />
       <Hero />
       <SocialProof />

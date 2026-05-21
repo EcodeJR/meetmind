@@ -53,9 +53,8 @@ const ContactSection = () => {
   };
 
   return (
-    <section id="contact" className="py-24 relative overflow-hidden bg-black border-t border-white/5">
-      {/* Decorative Glow */}
-      <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-[350px] h-[350px] bg-accent/5 rounded-full blur-3xl -z-10" />
+    <section id="contact" className="py-24 relative overflow-hidden bg-white border-t border-black/10">
+      <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-[350px] h-[350px] bg-black/[0.03] rounded-full blur-3xl -z-10" />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center mb-16">
@@ -65,13 +64,13 @@ const ContactSection = () => {
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
           >
-            <span className="text-accent text-xs font-bold tracking-widest uppercase border border-accent/20 px-3 py-1.5 rounded-full bg-accent/5">
+            <span className="text-black text-xs font-bold tracking-[0.3em] uppercase border border-black/10 px-3 py-1.5 rounded-full bg-white">
               Get In Touch
             </span>
-            <h2 className="text-4xl lg:text-5xl font-black text-white mt-4 tracking-tight">
-              Have Questions? <span className="text-accent">Contact Us</span>
+            <h2 className="text-4xl lg:text-5xl font-black text-black mt-4 tracking-[-0.05em]">
+              Have Questions? <span className="text-black/60">Contact Us</span>
             </h2>
-            <p className="text-lg text-white/50 mt-4 max-w-xl mx-auto font-light leading-relaxed">
+            <p className="text-lg text-black/60 mt-4 max-w-xl mx-auto font-light leading-relaxed">
               We&apos;d love to hear from you. Fill out the form below and our team will get back to you within 24 hours.
             </p>
           </motion.div>
@@ -82,19 +81,19 @@ const ContactSection = () => {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6, delay: 0.1 }}
-          className="bg-white/[0.02] border border-white/10 rounded-2xl p-8 sm:p-12 backdrop-blur-md shadow-2xl"
+          className="bg-white border border-black/10 rounded-[32px] p-8 sm:p-12 shadow-[0_24px_80px_rgba(0,0,0,0.06)]"
         >
           {submitted ? (
             <div className="text-center py-12">
               <motion.div
                 initial={{ scale: 0.5, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="w-16 h-16 bg-accent/10 border border-accent/30 rounded-full flex items-center justify-center mx-auto mb-6 text-accent"
+                className="w-16 h-16 bg-black/5 border border-black/10 rounded-full flex items-center justify-center mx-auto mb-6 text-black"
               >
                 <Send className="w-8 h-8" />
               </motion.div>
-              <h3 className="text-2xl font-bold text-white mb-2">Message Sent!</h3>
-              <p className="text-white/60">
+              <h3 className="text-2xl font-bold text-black mb-2">Message Sent!</h3>
+              <p className="text-black/60">
                 Thank you for contacting Memovoice. We have received your request and will follow up shortly.
               </p>
             </div>
@@ -102,11 +101,11 @@ const ContactSection = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid sm:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-semibold text-white/70 mb-2">
-                    Name <span className="text-accent">*</span>
+                  <label className="block text-sm font-semibold text-black/75 mb-2 uppercase tracking-[0.2em]">
+                    Name <span className="text-black">*</span>
                   </label>
                   <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-white/30">
+                    <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-black/30">
                       <User className="w-5 h-5" />
                     </span>
                     <input
@@ -117,17 +116,17 @@ const ContactSection = () => {
                       value={formData.name}
                       onChange={handleChange}
                       disabled={submitting}
-                      className="w-full pl-11 pr-4 py-3 rounded-lg border border-white/10 bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all text-white placeholder-white/30"
+                      className="w-full pl-11 pr-4 py-3 rounded-full border border-black/10 bg-white focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black transition-all text-black placeholder-black/35"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-white/70 mb-2">
-                    Email <span className="text-accent">*</span>
+                  <label className="block text-sm font-semibold text-black/75 mb-2 uppercase tracking-[0.2em]">
+                    Email <span className="text-black">*</span>
                   </label>
                   <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-white/30">
+                    <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-black/30">
                       <Mail className="w-5 h-5" />
                     </span>
                     <input
@@ -138,16 +137,16 @@ const ContactSection = () => {
                       value={formData.email}
                       onChange={handleChange}
                       disabled={submitting}
-                      className="w-full pl-11 pr-4 py-3 rounded-lg border border-white/10 bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all text-white placeholder-white/30"
+                      className="w-full pl-11 pr-4 py-3 rounded-full border border-black/10 bg-white focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black transition-all text-black placeholder-black/35"
                     />
                   </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-white/70 mb-2">Subject</label>
+                <label className="block text-sm font-semibold text-black/75 mb-2 uppercase tracking-[0.2em]">Subject</label>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-white/30">
+                  <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-black/30">
                     <MessageSquare className="w-5 h-5" />
                   </span>
                   <input
@@ -157,14 +156,14 @@ const ContactSection = () => {
                     value={formData.subject}
                     onChange={handleChange}
                     disabled={submitting}
-                    className="w-full pl-11 pr-4 py-3 rounded-lg border border-white/10 bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all text-white placeholder-white/30"
+                    className="w-full pl-11 pr-4 py-3 rounded-full border border-black/10 bg-white focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black transition-all text-black placeholder-black/35"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-white/70 mb-2">
-                  Message <span className="text-accent">*</span>
+                <label className="block text-sm font-semibold text-black/75 mb-2 uppercase tracking-[0.2em]">
+                  Message <span className="text-black">*</span>
                 </label>
                 <textarea
                   name="message"
@@ -174,16 +173,16 @@ const ContactSection = () => {
                   value={formData.message}
                   onChange={handleChange}
                   disabled={submitting}
-                  className="w-full px-4 py-3 rounded-lg border border-white/10 bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all text-white placeholder-white/30 resize-none"
+                  className="w-full px-4 py-3 rounded-[24px] border border-black/10 bg-white focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black transition-all text-black placeholder-black/35 resize-none"
                 />
               </div>
 
-              {errorMsg && <p className="text-sm font-semibold text-red-500">{errorMsg}</p>}
+              {errorMsg && <p className="text-sm font-semibold text-black/70">{errorMsg}</p>}
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-accent text-black py-4 rounded-lg font-bold hover:bg-accent/90 transition-all flex items-center justify-center gap-2 active:scale-98 uppercase tracking-wide disabled:opacity-50"
+                className="w-full bg-black text-white py-4 rounded-full font-bold hover:bg-black/90 transition-all flex items-center justify-center gap-2 active:scale-95 uppercase tracking-[0.2em] disabled:opacity-50"
               >
                 {submitting ? (
                   <>Sending Message...</>
