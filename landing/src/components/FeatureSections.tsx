@@ -56,17 +56,17 @@ export const Problem = () => (
           {
             title: "You forget 90% of what was discussed",
             desc: "Human memory is fallible. Critical details discussed in the room are often lost within the first 24 hours.",
-            icon: <AlertCircle className="w-6 h-6 text-white/40" />
+            icon: <AlertCircle className="w-6 h-60" />
           },
           {
             title: "Action items get lost after the meeting",
             desc: "Without an automated system, follow-ups depend on manual entry, leading to missed deadlines and forgotten tasks.",
-            icon: <Target className="w-6 h-6 text-white/40" />
+            icon: <Target className="w-6 h-6" />
           },
           {
             title: "Writing notes means missing the conversation",
             desc: "Active listening is impossible when you're head-down typing. Engagement drops when note-taking begins.",
-            icon: <MessageSquare className="w-6 h-6 text-white/40" />
+            icon: <MessageSquare className="w-6 h-6" />
           }
         ].map((item, i) => (
           <motion.div
@@ -110,7 +110,9 @@ export const Features = () => (
               { title: 'Summary frame', subtitle: 'Images replace video placeholders for a calmer page.', image: '/images/Phone-meeting-key-notes.jpg' },
             ].map((frame, index) => (
               <div key={frame.title} className="rounded-[24px] overflow-hidden border border-black/10 bg-white">
-                <Image src={frame.image} alt={frame.title} width={900} height={560} className="w-full h-48 object-cover" />
+                <div className="h-48 flex items-center justify-center bg-black/80">
+                  <Image src={frame.image} alt={frame.title} width={900} height={560} className="w-full h-full object-contain" />
+                </div>
                 <div className="p-4 flex items-end justify-between gap-4">
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.25em] text-black/45 font-bold">0{index + 1}</p>
