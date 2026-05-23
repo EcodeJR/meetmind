@@ -10,11 +10,47 @@ import { uploadAudioToCloudinary, deleteAudioFromCloudinary } from '../services/
 import { sendMeetingProcessedEmail, sendMeetingFailedEmail } from '../services/emailService';
 import { sendTranscriptionStartedNotification, sendMeetingProcessedNotification, sendMeetingFailedNotification } from '../services/pushNotificationService';
 import fs from 'fs';
+import { FREE_PLAN_LIMITS } from '../utils/constants';
+import { releaseMonthlyMeetingSlot } from '../middleware/subscriptionMiddleware';
+
+const isProUser = (user: any): boolean => {
+  return Boolean(user && user.subscription?.plan === 'pro' && user.subscription?.status === 'active');
+};
+
+const getAccessibleHistoryFilter = (user: any) => {
+  if (isProUser(user)) {
+    return {};
+  }
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - FREE_PLAN_LIMITS.transcriptRetentionDays);
+  return { createdAt: { $gte: cutoff } };
+};
+
+const sanitizeMeetingForPlan = (meeting: any, proUser: boolean) => {
+  const plainMeeting = typeof meeting?.toObject === 'function' ? meeting.toObject() : meeting;
+
+  if (proUser) {
+    return plainMeeting;
+  }
+
+  const { rawTranscript, actionItems, keyDecisions, ...rest } = plainMeeting;
+  return {
+    ...rest,
+    rawTranscript: '',
+    actionItems: [],
+    keyDecisions: [],
+  };
+};
 
 // Create a new meeting
 export const createMeeting = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const clerkId = req.clerkId;
+    if (!clerkId) {
+      sendError(res, 'AUTH_ERROR', 'Authentication required', 401);
+      return;
+    }
     const { title, rawTranscript, duration } = req.body;
 
     if (!title) {
@@ -44,15 +80,17 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
       await user.save();
     }
 
+    const proUser = isProUser(user);
+
     // Create meeting
-    const initialStatus = rawTranscript || req.body.summary ? 'completed' : 'processing';
+    const initialStatus = proUser && (rawTranscript || req.body.summary) ? 'completed' : 'processing';
     const meeting = new Meeting({
       userId: user._id,
       title,
-      rawTranscript: rawTranscript || '',
-      summary: req.body.summary || '',
-      actionItems: req.body.actionItems || [],
-      keyDecisions: req.body.keyDecisions || [],
+      rawTranscript: proUser ? rawTranscript || '' : '',
+      summary: proUser ? req.body.summary || '' : '',
+      actionItems: proUser ? req.body.actionItems || [] : [],
+      keyDecisions: proUser ? req.body.keyDecisions || [] : [],
       durationSeconds: duration || 0,
       audioUrl: req.body.audioUrl || '',
       tags: req.body.tags || [],
@@ -67,6 +105,8 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
       // Count only completed meetings toward usage limits
       user.meetingCount = (user.meetingCount || 0) + 1;
       await user.save();
+    } else if (!proUser && req.meetingUsageMonthKey) {
+      await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey);
     }
 
     logger.info({ clerkId, meetingId: meeting._id }, 'Meeting created via direct POST');
@@ -85,6 +125,11 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
   const clerkId = req.clerkId;
   
   try {
+    if (!clerkId) {
+      sendError(res, 'AUTH_ERROR', 'Authentication required', 401);
+      return;
+    }
+
     const { title, durationSeconds } = req.body;
 
     console.log(`[DEBUGGER] Starting processMeeting for user: ${clerkId}`);
@@ -116,6 +161,9 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       if (localPath && fs.existsSync(localPath)) {
         fs.unlinkSync(localPath);
       }
+      if (req.meetingUsageMonthKey) {
+        await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => {});
+      }
       sendError(res, 'UPLOAD_ERROR', 'Failed to upload audio file', 500);
       return;
     }
@@ -140,6 +188,9 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       if (cloudinaryPublicId) {
         await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
       }
+      if (req.meetingUsageMonthKey) {
+        await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => {});
+      }
       sendError(res, 'USER_NOT_FOUND', 'User record not found. Please sync user first.');
       return;
     }
@@ -163,8 +214,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
     });
 
     await processingMeeting.save();
-    // Update user counters now so history reflects the new item
-    user.meetingCount = (user.meetingCount || 0) + 1;
+    // Update user storage now so history reflects the new item; meetingCount increments on completion only
     user.storageUsedMB = (user.storageUsedMB || 0) + fileSizeMB;
     await user.save();
 
@@ -234,6 +284,9 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         processingMeeting.processingError = String(bgError.message || bgError);
         processingMeeting.processingCompletedAt = new Date();
         await processingMeeting.save().catch(() => {});
+        if (req.meetingUsageMonthKey) {
+          await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => {});
+        }
 
         // Send failure notifications
         if (user) {
@@ -270,6 +323,9 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         ).catch(() => {});
       }
     }
+    if (req.meetingUsageMonthKey) {
+      await releaseMonthlyMeetingSlot(clerkId!, req.meetingUsageMonthKey).catch(() => {});
+    }
     
     // Cleanup Cloudinary if we uploaded but something failed afterwards
     if (cloudinaryPublicId) {
@@ -305,14 +361,17 @@ export const getMeetings = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const meetings = await Meeting.find({ userId: user._id })
+    const historyFilter = getAccessibleHistoryFilter(user);
+    const proUser = isProUser(user);
+
+    const meetings = await Meeting.find({ userId: user._id, ...historyFilter })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
 
-    const total = await Meeting.countDocuments({ userId: user._id });
+    const total = await Meeting.countDocuments({ userId: user._id, ...historyFilter });
 
-    sendSuccess(res, { meetings, total, page, limit });
+    sendSuccess(res, { meetings: meetings.map((meeting) => sanitizeMeetingForPlan(meeting, proUser)), total, page, limit });
   } catch (error) {
     logger.error({ error }, 'Error fetching meetings');
     sendError(res, 'FETCH_ERROR', 'Failed to fetch meetings', 500);
@@ -330,14 +389,17 @@ export const getMeetingById = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const meeting = await Meeting.findOne({ _id: id, userId: user._id });
+    const historyFilter = getAccessibleHistoryFilter(user);
+    const proUser = isProUser(user);
+
+    const meeting = await Meeting.findOne({ _id: id, userId: user._id, ...historyFilter });
 
     if (!meeting) {
       sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
       return;
     }
 
-    sendSuccess(res, { meeting });
+    sendSuccess(res, { meeting: sanitizeMeetingForPlan(meeting, proUser) });
   } catch (error) {
     logger.error({ error }, 'Error fetching meeting');
     sendError(res, 'FETCH_ERROR', 'Failed to fetch meeting', 500);
@@ -356,8 +418,10 @@ export const updateMeeting = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    const historyFilter = getAccessibleHistoryFilter(user);
+
     const meeting = await Meeting.findOneAndUpdate(
-      { _id: id, userId: user._id },
+      { _id: id, userId: user._id, ...historyFilter },
       { title, tags, summary },
       { returnDocument: 'after' }
     );
@@ -385,7 +449,9 @@ export const deleteMeeting = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const meeting = await Meeting.findOneAndDelete({ _id: id, userId: user._id });
+    const historyFilter = getAccessibleHistoryFilter(user);
+
+    const meeting = await Meeting.findOneAndDelete({ _id: id, userId: user._id, ...historyFilter });
 
     if (!meeting) {
       sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
@@ -426,12 +492,14 @@ export const searchMeetings = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    const historyFilter = getAccessibleHistoryFilter(user);
+
     const meetings = await Meeting.find(
-      { userId: user._id, $text: { $search: q } },
+      { userId: user._id, ...historyFilter, $text: { $search: q } },
       { score: { $meta: 'textScore' } }
     ).sort({ score: { $meta: 'textScore' } });
 
-    sendSuccess(res, { meetings });
+    sendSuccess(res, { meetings: meetings.map((meeting) => sanitizeMeetingForPlan(meeting, isProUser(user))) });
   } catch (error) {
     logger.error({ error }, 'Error searching meetings');
     sendError(res, 'SEARCH_ERROR', 'Failed to search meetings', 500);

@@ -17,6 +17,7 @@ import { flutterwaveWebhookHandler } from './webhooks/flutterwaveWebhook';
 import { paddleWebhookHandler } from './webhooks/paddleWebhook';
 import adminRoutes from './routes/adminRoutes';
 import publicRoutes from './routes/publicRoutes';
+import { startRetentionCleanupScheduler } from './services/retentionService';
 
 const REQUIRED_ENV = [
   'MONGODB_URI',
@@ -139,6 +140,7 @@ const start = async () => {
       try {
         await connectDB();
         logger.info('Institutional Database Connected');
+        startRetentionCleanupScheduler();
       } catch (dbErr) {
         logger.error({ error: dbErr }, 'Database Connection Deferred Failure');
       }

@@ -17,6 +17,8 @@ export interface IUser extends Document {
     cancelAtPeriodEnd: boolean;
   };
   meetingCount: number;
+  monthlyMeetingUsage: number;
+  monthlyMeetingUsagePeriodKey: string | null;
   storageUsedMB: number;
   onboardingCompleted: boolean;
   profileImage?: string;
@@ -77,6 +79,14 @@ const userSchema = new Schema<IUser>(
     meetingCount: {
       type: Number,
       default: 0,
+    },
+    monthlyMeetingUsage: {
+      type: Number,
+      default: 0,
+    },
+    monthlyMeetingUsagePeriodKey: {
+      type: String,
+      default: null,
     },
     storageUsedMB: {
       type: Number,

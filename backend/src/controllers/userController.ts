@@ -7,6 +7,7 @@ import { deleteAudioFromCloudinary } from '../services/cloudinaryService';
 import { sendWelcomeEmail } from '../services/emailService';
 import { logger } from '../utils/logger';
 import axios from 'axios';
+import { FREE_PLAN_LIMITS } from '../utils/constants';
 
 const detectCountryFromRequest = async (req: AuthRequest): Promise<string | null> => {
   const countryHeader = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'];
@@ -62,6 +63,9 @@ export const syncClerkUser = async (req: AuthRequest, res: Response) => {
         clerkId,
         email,
         country: detectedCountry,
+        preferences: {
+          autoDeleteDays: FREE_PLAN_LIMITS.transcriptRetentionDays,
+        },
         subscription: {
           plan: 'free',
           status: 'inactive'
@@ -109,13 +113,22 @@ export const getUser = async (req: AuthRequest, res: Response) => {
       createdAt: { $gte: startOfMonth },
     });
 
+    const userData = typeof user.toObject === 'function' ? user.toObject() : user;
+    if (userData.subscription?.plan === 'free') {
+      userData.preferences = {
+        ...userData.preferences,
+        autoDeleteDays: FREE_PLAN_LIMITS.transcriptRetentionDays,
+      };
+    }
+
     return sendSuccess(res, {
-      user,
+      user: userData,
       usage: {
         meetingsThisMonth,
         remainingFreeMeetings: user.subscription.plan === 'free'
-          ? Math.max(0, 5 - meetingsThisMonth)
+          ? Math.max(0, FREE_PLAN_LIMITS.meetingsPerMonth - meetingsThisMonth)
           : null,
+        historyWindowDays: user.subscription.plan === 'free' ? FREE_PLAN_LIMITS.transcriptRetentionDays : null,
       },
     });
   } catch (error) {
@@ -132,9 +145,23 @@ export const updateUserPreferences = async (req: AuthRequest, res: Response) => 
       return sendError(res, 'MISSING_DATA', 'Preferences object is required');
     }
 
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+    }
+
+    const isPro = user.subscription.plan === 'pro' && user.subscription.status === 'active';
+
     // Convert nested preferences object into dot notation for MongoDB $set
     const updateQuery: any = {};
     for (const key in preferences) {
+      if (key === 'autoDeleteDays') {
+        updateQuery['preferences.autoDeleteDays'] = isPro
+          ? Number(preferences.autoDeleteDays)
+          : FREE_PLAN_LIMITS.transcriptRetentionDays;
+        continue;
+      }
+
       if (typeof preferences[key] === 'object' && preferences[key] !== null) {
         for (const nestedKey in preferences[key]) {
           updateQuery[`preferences.${key}.${nestedKey}`] = preferences[key][nestedKey];
@@ -144,18 +171,18 @@ export const updateUserPreferences = async (req: AuthRequest, res: Response) => 
       }
     }
 
-    const user = await User.findOneAndUpdate(
+    const updatedUser = await User.findOneAndUpdate(
       { clerkId },
       { $set: updateQuery },
       { returnDocument: 'after' }
     );
 
-    if (!user) {
+    if (!updatedUser) {
       return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
     }
 
     logger.info({ clerkId }, 'User preferences updated');
-    return sendSuccess(res, { user });
+    return sendSuccess(res, { user: updatedUser });
   } catch (error) {
     logger.error({ error }, 'Error updating preferences');
     return sendError(res, 'UPDATE_ERROR', 'Failed to update preferences', 500);

@@ -7,6 +7,7 @@ export interface AuthRequest extends Request {
   userId?: string;
   clerkId?: string;
   file?: any;
+  meetingUsageMonthKey?: string;
 }
 
 export const authMiddleware = async (

@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { BlurView } from 'expo-blur';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -109,6 +110,7 @@ export default function MeetingDetailScreen() {
       (meeting.status !== 'completed' && meeting.status !== 'failed' && (!meeting.rawTranscript || !meeting.summary))
     )
   );
+  const isLockedForFreeUser = !isPro;
 
   useEffect(() => {
     if (!isProcessing) {
@@ -396,7 +398,7 @@ export default function MeetingDetailScreen() {
           </View>
 
           {/* Action Items Section */}
-          {meeting.actionItems && meeting.actionItems.length > 0 && (
+          {isPro && meeting.actionItems && meeting.actionItems.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>ACTION ITEMS</Text>
               <View style={styles.listContainer}>
@@ -413,7 +415,7 @@ export default function MeetingDetailScreen() {
           )}
 
           {/* Key Decisions Section */}
-          {meeting.keyDecisions && meeting.keyDecisions.length > 0 && (
+          {isPro && meeting.keyDecisions && meeting.keyDecisions.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>KEY DECISIONS</Text>
               <View style={styles.decisionsContainer}>
@@ -430,8 +432,19 @@ export default function MeetingDetailScreen() {
           {/* Full Transcript Section */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>FULL TRANSCRIPT</Text>
-            <View style={styles.transcriptContainer}>
-              {meeting.rawTranscript ? (
+            <View style={[styles.transcriptContainer, isLockedForFreeUser && styles.lockedSectionContainer]}>
+              {isLockedForFreeUser ? (
+                <View style={styles.lockedPreviewCard}>
+                  <BlurView intensity={24} tint="light" style={StyleSheet.absoluteFill} />
+                  <View style={styles.lockedPreviewContent}>
+                    <Ionicons name="lock-closed" size={20} color={theme.colors.primary} />
+                    <Text style={styles.lockedPreviewTitle}>Pro feature locked</Text>
+                    <Text style={styles.lockedPreviewText}>
+                      Upgrade to Pro to view the full transcript, action items, key decisions, and export options.
+                    </Text>
+                  </View>
+                </View>
+              ) : meeting.rawTranscript ? (
                 <View style={styles.transcriptBlock}>
                    <Text style={styles.speakerLabel}>PRIMARY SPEAKER</Text>
                    <Text style={styles.transcriptText}>{meeting.rawTranscript}</Text>
@@ -706,6 +719,35 @@ const styles = StyleSheet.create({
   },
   transcriptContainer: {
     paddingBottom: theme.spacing.xl,
+  },
+  lockedSectionContainer: {
+    position: 'relative',
+  },
+  lockedPreviewCard: {
+    minHeight: 180,
+    borderRadius: theme.borderRadius.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+    backgroundColor: 'rgba(255,255,255,0.65)',
+    justifyContent: 'center',
+  },
+  lockedPreviewContent: {
+    padding: theme.spacing.lg,
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  lockedPreviewTitle: {
+    fontFamily: 'Manrope-Bold',
+    fontSize: 18,
+    color: theme.colors.primary,
+  },
+  lockedPreviewText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    lineHeight: 22,
+    color: theme.colors.onSurfaceVariant,
+    textAlign: 'center',
   },
   transcriptBlock: {
     marginBottom: theme.spacing.lg,

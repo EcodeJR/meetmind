@@ -26,6 +26,7 @@ export default function StorageSettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [userStats, setUserStats] = useState({ meetingCount: 0, storageUsedMB: 0 });
+  const [isPro, setIsPro] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -36,6 +37,7 @@ export default function StorageSettingsScreen() {
     try {
       const response = await apiClient.get('/users/me');
       const user = response.data.data?.user || response.data.user;
+      setIsPro(user?.subscription?.plan === 'pro' && user?.subscription?.status === 'active');
       setRetentionDays(user.preferences?.autoDeleteDays || 0);
       setUserStats({
         meetingCount: user.meetingCount || 0,
@@ -128,24 +130,30 @@ export default function StorageSettingsScreen() {
         </View>
 
         <View style={styles.card}>
-          {RETENTION_POLICIES.map((policy, index) => (
-            <React.Fragment key={policy.days}>
-              <TouchableOpacity 
-                style={styles.row}
-                onPress={() => handleSelectPolicy(policy.days)}
-                disabled={saving}
-              >
-                <View style={styles.info}>
-                  <Text style={styles.label}>{policy.label}</Text>
-                  <Text style={styles.description}>{policy.description}</Text>
-                </View>
-                {retentionDays === policy.days && (
-                  <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />
-                )}
-              </TouchableOpacity>
-              {index < RETENTION_POLICIES.length - 1 && <View style={styles.separator} />}
-            </React.Fragment>
-          ))}
+          {RETENTION_POLICIES.map((policy, index) => {
+            const locked = !isPro && policy.days !== 7;
+            return (
+              <React.Fragment key={policy.days}>
+                <TouchableOpacity 
+                  style={[styles.row, locked ? { opacity: 0.6, backgroundColor: '#fafafa' } : null]}
+                  onPress={() => !locked && handleSelectPolicy(policy.days)}
+                  disabled={saving || locked}
+                >
+                  <View style={styles.info}>
+                    <Text style={styles.label}>{policy.label}</Text>
+                    <Text style={styles.description}>{policy.description}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {locked && <Text style={{ color: theme.colors.outline, fontSize: 12 }}>Pro</Text>}
+                    {retentionDays === policy.days && (
+                      <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+                {index < RETENTION_POLICIES.length - 1 && <View style={styles.separator} />}
+              </React.Fragment>
+            );
+          })}
         </View>
 
         <View style={styles.sectionHeader}>

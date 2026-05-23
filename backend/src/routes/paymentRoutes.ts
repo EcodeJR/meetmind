@@ -3,6 +3,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validateRequest';
 import { User } from '../models/User';
 import { sendSuccess, sendError } from '../utils/responses';
+import { FREE_PLAN_LIMITS } from '../utils/constants';
 import axios from 'axios';
 import {
   getPaymentProvider,
@@ -58,9 +59,9 @@ const getPricingPayload = (country?: string | null): PricingPayload => {
     amount,
     amountLabel: isNigerian ? `₦${amount.toLocaleString('en-NG')}` : `$${amount.toLocaleString('en-US')}`,
     free: {
-      meetingsPerMonth: 5,
+      meetingsPerMonth: FREE_PLAN_LIMITS.meetingsPerMonth,
       summary: 'Basic summary only',
-      history: '7 day history',
+      history: `${FREE_PLAN_LIMITS.transcriptRetentionDays} day history`,
       export: false,
       actionItems: false,
     },
