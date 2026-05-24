@@ -3,6 +3,7 @@ import { requireAdminAuth } from '../middleware/adminAuth';
 import {
   getAdminStats,
   getAdminMetrics,
+  getAdminDebug,
   getAdminUsers,
   getAdminUserById,
   updateUserPlan,
@@ -30,6 +31,7 @@ router.use(requireAdminAuth);
 // Stats & Overview
 router.get('/stats', getAdminStats);
 router.get('/metrics', getAdminMetrics);
+router.get('/debug', getAdminDebug);
 
 // Users
 router.get('/users', getAdminUsers);

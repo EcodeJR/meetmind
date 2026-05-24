@@ -508,6 +508,45 @@ export const getAdminMetrics = async (req: Request, res: Response): Promise<void
   }
 };
 
+// GET /admin/debug
+export const getAdminDebug = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    // Counts of meetings by status
+    const [total, pending, processing, completed, failed] = await Promise.all([
+      Meeting.countDocuments(),
+      Meeting.countDocuments({ status: 'pending' }),
+      Meeting.countDocuments({ status: 'processing' }),
+      Meeting.countDocuments({ status: 'completed' }),
+      Meeting.countDocuments({ status: 'failed' }),
+    ]);
+
+    // Failed meetings in last 7 days
+    const since = new Date();
+    since.setDate(since.getDate() - 7);
+    const recentFailed = await Meeting.find({ status: 'failed', createdAt: { $gte: since } })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .populate('userId', 'email')
+      .lean();
+
+    const failedSamples = recentFailed.map((m: any) => ({
+      id: m._id.toString(),
+      createdAt: m.createdAt,
+      user: m.userId?.email || null,
+      processingError: m.processingError || null,
+      status: m.status,
+    }));
+
+    res.json({
+      meetings: { total, pending, processing, completed, failed },
+      recentFailed: failedSamples,
+    });
+  } catch (error) {
+    logger.error({ error }, 'Admin: getAdminDebug failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // POST /admin/notify-new-user
 export const notifyNewUser = async (req: Request, res: Response): Promise<void> => {
   try {
