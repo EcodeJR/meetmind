@@ -12,12 +12,12 @@ export default function PricingPage() {
     <main className="min-h-screen bg-white">
       <Navbar />
       <div className="pt-32 pb-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-16">
+        {/* <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-16">
           <h1 className="text-4xl lg:text-6xl font-black text-black mb-6 tracking-[-0.06em]">Simple, transparent pricing</h1>
           <p className="text-black/60 text-xl max-w-2xl mx-auto">
             Scale your institutional intelligence with plans designed for individuals and professional teams.
           </p>
-        </div>
+        </div> */}
         <Pricing />
         
         {/* Additional Pricing Context */}
