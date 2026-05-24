@@ -54,6 +54,7 @@ export default function OverviewPage() {
   const [meetingSeries, setMeetingSeries] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [debugData, setDebugData] = useState<any | null>(null);
 
   const fetchData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -79,6 +80,13 @@ export default function OverviewPage() {
         setChartLabels(data.labels || []);
         setUserSeries(data.users || []);
         setMeetingSeries(data.meetings || []);
+      }
+      // fetch debug info
+      try {
+        const debugRes = await fetch(`${RAILWAY_API}/admin/debug`, { headers: adminHeaders });
+        if (debugRes.ok) setDebugData(await debugRes.json());
+      } catch (e) {
+        console.debug('admin debug fetch failed', e);
       }
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
@@ -384,6 +392,74 @@ export default function OverviewPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Admin Debug Panel */}
+      <div className="bg-surface-container-lowest p-6 rounded-2xl soft-shadow border border-surface-container">
+        <div className="flex justify-between items-center mb-4">
+          <h4 className="text-[18px] font-semibold font-geist text-on-surface">Admin Debug</h4>
+          <p className="text-[12px] text-outline">Quick diagnostics from /admin/debug</p>
+        </div>
+        {debugData ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="p-3 bg-surface-container rounded-lg text-center">
+                <div className="text-outline text-[12px]">Total</div>
+                <div className="text-[18px] font-bold">{debugData.meetings?.total ?? '-'}</div>
+              </div>
+              <div className="p-3 bg-surface-container rounded-lg text-center">
+                <div className="text-outline text-[12px]">Pending</div>
+                <div className="text-[18px] font-bold">{debugData.meetings?.pending ?? '-'}</div>
+              </div>
+              <div className="p-3 bg-surface-container rounded-lg text-center">
+                <div className="text-outline text-[12px]">Processing</div>
+                <div className="text-[18px] font-bold">{debugData.meetings?.processing ?? '-'}</div>
+              </div>
+              <div className="p-3 bg-surface-container rounded-lg text-center">
+                <div className="text-outline text-[12px]">Completed</div>
+                <div className="text-[18px] font-bold">{debugData.meetings?.completed ?? '-'}</div>
+              </div>
+              <div className="p-3 bg-surface-container rounded-lg text-center">
+                <div className="text-outline text-[12px]">Failed</div>
+                <div className="text-[18px] font-bold text-rose-600">{debugData.meetings?.failed ?? '-'}</div>
+              </div>
+            </div>
+
+            <div>
+              <h5 className="text-[14px] font-semibold mb-2">Recent Failed Samples</h5>
+              {debugData.recentFailed && debugData.recentFailed.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="text-[12px] text-outline border-b border-surface-container uppercase tracking-wider">
+                        <th className="pb-2">ID</th>
+                        <th className="pb-2">User</th>
+                        <th className="pb-2">Status</th>
+                        <th className="pb-2">Error</th>
+                        <th className="pb-2">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {debugData.recentFailed.map((m: any) => (
+                        <tr key={m._id} className="hover:bg-surface-container-low transition-colors">
+                          <td className="py-2 font-mono text-[12px] text-on-surface">{m._id}</td>
+                          <td className="py-2">{m.user?.email || m.userEmail || '-'}</td>
+                          <td className="py-2"><span className="px-2 py-1 rounded-full bg-surface-container text-[12px]">{m.status}</span></td>
+                          <td className="py-2 text-[13px] text-rose-600">{m.processingError || '-'}</td>
+                          <td className="py-2 text-outline">{new Date(m.createdAt).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-[13px] text-outline">No recent failed meetings found.</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="text-outline">Debug info unavailable.</p>
+        )}
       </div>
     </div>
   );
