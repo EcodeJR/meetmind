@@ -311,7 +311,7 @@ export const Footer = () => (
       <div className="grid md:grid-cols-4 gap-12 mb-16">
         <div className="col-span-2">
           <div className="flex items-center gap-3 mb-6">
-            <Image src="/logo.jpeg" alt="Memovoice" width={32} height={32} className="h-8 w-auto" />
+            <Image src="/logo.jpeg" alt="Memovoice" width={32} height={32} className="h-8 w-auto rounded-md" />
             <span className="text-xl font-black text-black tracking-tight uppercase">Memovoice</span>
           </div>
           <p className="text-black/60 max-w-sm mb-8 leading-relaxed text-sm">
@@ -357,7 +357,7 @@ export const Footer = () => (
           <ul className="space-y-4 text-black/55 text-xs">
             <li className="flex items-center gap-2">
               <Mail className="w-4 h-4" />
-              <a href="mailto:hello@memovoice.app" className="hover:text-black transition-colors uppercase tracking-[0.2em] font-medium">memovoiceio@gmail.com</a>
+              <a href="mailto:memovoiceio@gmail.com" className="hover:text-black transition-colors uppercase tracking-[0.2em] font-medium">memovoiceio@gmail.com</a>
             </li>
           </ul>
         </div>
