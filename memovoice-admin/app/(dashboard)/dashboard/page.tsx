@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import StatCard from '@/components/ui/StatCard';
 import Badge from '@/components/ui/Badge';
@@ -49,16 +49,20 @@ export default function OverviewPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentUsers, setRecentUsers] = useState<RecentUser[]>([]);
   const [recentMeetings, setRecentMeetings] = useState<RecentMeeting[]>([]);
+  const [chartLabels, setChartLabels] = useState<string[]>([]);
+  const [userSeries, setUserSeries] = useState<number[]>([]);
+  const [meetingSeries, setMeetingSeries] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchData = async (isRefresh = false) => {
+  const fetchData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
-      const [statsRes, usersRes, meetingsRes] = await Promise.all([
+      const [statsRes, usersRes, meetingsRes, metricsRes] = await Promise.all([
         fetch(`${RAILWAY_API}/admin/stats`, { headers: adminHeaders }),
         fetch(`${RAILWAY_API}/admin/users?page=1&limit=5`, { headers: adminHeaders }),
         fetch(`${RAILWAY_API}/admin/meetings?page=1&limit=5`, { headers: adminHeaders }),
+        fetch(`${RAILWAY_API}/admin/metrics?days=30`, { headers: adminHeaders }),
       ]);
 
       if (statsRes.ok) setStats(await statsRes.json());
@@ -69,6 +73,12 @@ export default function OverviewPage() {
       if (meetingsRes.ok) {
         const data = await meetingsRes.json();
         setRecentMeetings(data.meetings || []);
+      }
+      if (metricsRes && metricsRes.ok) {
+        const data = await metricsRes.json();
+        setChartLabels(data.labels || []);
+        setUserSeries(data.users || []);
+        setMeetingSeries(data.meetings || []);
       }
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
@@ -93,15 +103,33 @@ export default function OverviewPage() {
         { _id: '2', title: 'Daily Sync', duration: 12, status: 'processing', createdAt: new Date().toISOString(), platform: 'Google Meet' },
         { _id: '3', title: 'Product Review', duration: 45, status: 'completed', createdAt: new Date(Date.now() - 3600000).toISOString(), platform: 'MS Teams' },
       ]);
+      // fallback chart data
+      const fallbackLabels = Array.from({ length: 14 }).map((_, i) => new Date(Date.now() - (13 - i) * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+      setChartLabels(fallbackLabels);
+      setUserSeries([5, 8, 6, 12, 10, 14, 9, 11, 13, 7, 15, 10, 12, 16]);
+      setMeetingSeries([40, 55, 75, 60, 85, 45, 65, 50, 95, 30, 70, 55, 80, 90]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  const { linePath, areaPath, lineMax } = useMemo(() => {
+    if (!userSeries || userSeries.length === 0) return { linePath: '', areaPath: '', lineMax: 1 };
+    const n = userSeries.length;
+    const max = Math.max(...userSeries, 1);
+    const points = userSeries.map((v, i) => {
+      const x = (i / Math.max(1, n - 1)) * 400;
+      const y = 100 - (v / max) * 80; // pad bottom
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    }).join(' ');
+    const area = `${points} L 400 100 L 0 100 Z`;
+    return { linePath: points, areaPath: area, lineMax: max };
+  }, [userSeries]);
 
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
@@ -211,26 +239,29 @@ export default function OverviewPage() {
           </div>
           <div className="h-[200px] w-full relative">
             <div className="absolute inset-0 flex flex-col justify-between text-[10px] text-outline-variant pointer-events-none pb-4">
-              {['1.2k', '800', '400', '0'].map(label => (
-                <div key={label} className="border-b border-surface-container w-full">{label}</div>
-              ))}
+              <div className="border-b border-surface-container w-full">Top</div>
+              <div className="border-b border-surface-container w-full">Mid</div>
+              <div className="border-b border-surface-container w-full">Low</div>
+              <div className="border-b border-surface-container w-full">0</div>
             </div>
             <div className="absolute inset-0 flex items-end justify-between px-4 pb-4">
               <svg className="w-full h-full overflow-visible" viewBox="0 0 400 100">
-                <path
-                  d="M 0 80 Q 50 60 100 70 T 200 40 T 300 30 T 400 10"
-                  fill="none"
-                  stroke="#384cd3"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M 0 80 Q 50 60 100 70 T 200 40 T 300 30 T 400 10 V 100 H 0 Z"
-                  fill="#384cd3"
-                  fillOpacity="0.08"
-                />
-                <circle cx="200" cy="40" fill="#384cd3" r="4" />
-                <circle cx="400" cy="10" fill="#384cd3" r="4" />
+                {userSeries && userSeries.length > 0 && (() => {
+                  const n = userSeries.length;
+                  const max = Math.max(...userSeries, 1);
+                  const points = userSeries.map((v, i) => {
+                    const x = (i / Math.max(1, n - 1)) * 400;
+                    const y = 100 - (v / max) * 80; // pad bottom
+                    return `${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+                  }).join(' ');
+                  const area = `${points} L 400 100 L 0 100 Z`;
+                  return (
+                    <>
+                      <path d={points} fill="none" stroke="#384cd3" strokeWidth="2.5" strokeLinecap="round" />
+                      <path d={area} fill="#384cd3" fillOpacity="0.08" />
+                    </>
+                  );
+                })()}
               </svg>
             </div>
           </div>
@@ -248,15 +279,28 @@ export default function OverviewPage() {
             </button>
           </div>
           <div className="h-[200px] w-full flex items-end justify-between gap-1.5 px-2">
-            {[40, 55, 75, 60, 85, 45, 65, 50, 95, 30, 70, 55, 80, 90].map((h, i) => (
-              <div
-                key={i}
-                className={`flex-1 rounded-t-lg transition-colors cursor-pointer ${h >= 85 ? 'bg-primary' : 'bg-primary/20 hover:bg-primary'
-                  }`}
-                style={{ height: `${h}%` }}
-                title={`Day ${i + 1}: ${h} meetings`}
-              />
-            ))}
+            {meetingSeries && meetingSeries.length > 0 ? meetingSeries.map((v, i) => {
+              const max = Math.max(...meetingSeries, 1);
+              const pct = Math.round((v / max) * 100);
+              return (
+                <div
+                  key={i}
+                  className={`flex-1 rounded-t-lg transition-colors cursor-pointer ${pct >= 85 ? 'bg-primary' : 'bg-primary/20 hover:bg-primary'}`}
+                  style={{ height: `${pct}%` }}
+                  title={`${chartLabels[i] || `Day ${i + 1}`}: ${v} meetings`}
+                />
+              );
+            }) : (
+              // fallback bars
+              [40, 55, 75, 60, 85, 45, 65, 50, 95, 30, 70, 55, 80, 90].map((h, i) => (
+                <div
+                  key={i}
+                  className={`flex-1 rounded-t-lg transition-colors cursor-pointer ${h >= 85 ? 'bg-primary' : 'bg-primary/20 hover:bg-primary'}`}
+                  style={{ height: `${h}%` }}
+                  title={`Day ${i + 1}: ${h} meetings`}
+                />
+              ))
+            )}
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAdminAuth } from '../middleware/adminAuth';
 import {
   getAdminStats,
+  getAdminMetrics,
   getAdminUsers,
   getAdminUserById,
   updateUserPlan,
@@ -28,6 +29,7 @@ router.use(requireAdminAuth);
 
 // Stats & Overview
 router.get('/stats', getAdminStats);
+router.get('/metrics', getAdminMetrics);
 
 // Users
 router.get('/users', getAdminUsers);

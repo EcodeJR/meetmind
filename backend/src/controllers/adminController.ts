@@ -444,14 +444,21 @@ export const getSystemHealth = async (_req: Request, res: Response): Promise<voi
       .populate('userId', 'email')
       .lean();
 
-    const recentErrors = failedMeetingsList.map((m: any) => ({
-      id: m._id.toString(),
-      timestamp: m.createdAt.toISOString().replace('T', ' ').slice(0, 19),
-      error: m.failureReason || 'Transcription processing timeout or groq failure',
-      endpoint: '/api/meetings/process',
-      user: m.userId?.email || 'Unknown User',
-      severity: 'high',
-    }));
+    const recentErrors = failedMeetingsList.map((m: any) => {
+      const errMsg = m.processingError || 'Transcription processing timeout or groq failure';
+      // simple severity heuristic
+      let severity: 'low' | 'medium' | 'high' | 'critical' = 'medium';
+      if (/timeout|failed|error|exception/i.test(errMsg)) severity = 'high';
+      if (/out of memory|panic|critical/i.test(errMsg)) severity = 'critical';
+      return {
+        id: m._id.toString(),
+        timestamp: m.createdAt.toISOString().replace('T', ' ').slice(0, 19),
+        error: errMsg,
+        endpoint: '/api/meetings/process',
+        user: m.userId?.email || 'Unknown User',
+        severity,
+      };
+    });
 
     res.json({
       mongodb: mongoStatus,
@@ -466,6 +473,37 @@ export const getSystemHealth = async (_req: Request, res: Response): Promise<voi
     });
   } catch (error) {
     logger.error({ error }, 'Admin: getSystemHealth failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// GET /admin/metrics?days=30
+export const getAdminMetrics = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const days = Math.max(1, Math.min(90, parseInt(req.query.days as string) || 30));
+    const labels: string[] = [];
+    const users: number[] = [];
+    const meetings: number[] = [];
+
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+      const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+
+      const [userCount, meetingCount] = await Promise.all([
+        User.countDocuments({ createdAt: { $gte: dayStart, $lte: dayEnd } }),
+        Meeting.countDocuments({ createdAt: { $gte: dayStart, $lte: dayEnd } }),
+      ]);
+
+      labels.push(dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+      users.push(userCount);
+      meetings.push(meetingCount);
+    }
+
+    res.json({ labels, users, meetings });
+  } catch (error) {
+    logger.error({ error }, 'Admin: getAdminMetrics failed');
     res.status(500).json({ error: 'Internal server error' });
   }
 };
