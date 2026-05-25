@@ -95,6 +95,16 @@ npx eas build --platform android --build-type internal  # or ios
 npx eas submit  # if using EAS Submit
 ```
 
+### Hobby Plan Keepalive Note
+If your Vercel project is on the Hobby plan, do not use `vercel.json` cron jobs to keep Render awake. Hobby does not support the cron behavior we were trying to use, and it can block or complicate deployment.
+
+Use an external uptime monitor instead:
+1. Keep Render's `/ping` endpoint enabled in the backend.
+2. Add a monitor in UptimeRobot, Better Stack, or similar.
+3. Ping `https://memovoice.onrender.com/ping` every 5 minutes.
+
+That keeps the backend warm without depending on Vercel cron support.
+
 ---
 
 ## 🧪 Testing Checklist
