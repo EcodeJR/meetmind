@@ -22,6 +22,11 @@ export type OfflineMeetingQueueItem = {
   error?: string;
 };
 
+export type OfflineRecordingOptions = {
+  status?: OfflineMeetingQueueItem['status'];
+  error?: string;
+};
+
 export type ProcessedMeetingResult = {
   meeting?: {
     _id?: string;
@@ -158,7 +163,8 @@ export const getSyncingOfflineMeetingIds = async (): Promise<string[]> => {
 export const enqueueOfflineRecording = async (
   sourceUri: string,
   title: string,
-  durationSeconds: number
+  durationSeconds: number,
+  options: OfflineRecordingOptions = {}
 ): Promise<OfflineMeetingQueueItem> => {
   await ensureOfflineDirectory();
 
@@ -175,7 +181,8 @@ export const enqueueOfflineRecording = async (
     durationSeconds,
     localUri: localFile.uri,
     createdAt: new Date().toISOString(),
-    status: 'queued',
+    status: options.status || 'queued',
+    error: options.error,
   };
 
   const queue = await readQueue();

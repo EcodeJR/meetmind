@@ -49,6 +49,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useUser, useAuth } from '@clerk/clerk-expo';
+import * as FileSystem from 'expo-file-system';
 import { theme } from '@/constants/theme';
 import { Audio } from 'expo-av';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
@@ -64,6 +65,32 @@ import Animated, {
   interpolate,
   Extrapolate
 } from 'react-native-reanimated';
+
+type OfflineRecordingReason = 'offline' | 'signin' | 'limit' | 'upload-failed';
+const MAX_RECORDING_SECONDS = 30 * 60;
+
+const OFFLINE_RECORDING_MESSAGES: Record<OfflineRecordingReason, { title: string; message: string; debug: string }> = {
+  offline: {
+    title: 'No Internet Connection',
+    message: 'Your recording was saved locally. Turn the internet back on to upload and process it.',
+    debug: 'Saved locally. Waiting for connection...',
+  },
+  signin: {
+    title: 'Saved Offline',
+    message: 'Your recording was saved locally. Sign in to upload and process it.',
+    debug: 'Saved locally. Sign in to process.',
+  },
+  limit: {
+    title: 'Free Limit Reached',
+    message: 'You have reached your free meeting limit. Upgrade to Pro to process this meeting, unlock unlimited meetings, full transcripts, exports and action items.',
+    debug: 'Free limit reached. Upgrade to process this meeting.',
+  },
+  'upload-failed': {
+    title: 'Saved Offline',
+    message: 'The upload failed. Your recording was saved locally and will be ready once the issue is resolved.',
+    debug: 'Saved locally. Upload failed.',
+  },
+};
 
 
 export default function HomeScreen() {
@@ -118,7 +145,10 @@ export default function HomeScreen() {
       const fallbackTitle = `Recovered meeting ${new Date().toLocaleTimeString()}`;
       const recoveredTitle = meetingTitle.trim() || fallbackTitle;
 
-      const offlineItem = await enqueueOfflineRecording(uri, recoveredTitle, recoveredDuration);
+      const offlineItem = await enqueueOfflineRecording(uri, recoveredTitle, recoveredDuration, {
+        status: 'queued',
+        error: 'Recording was interrupted and recovered locally.',
+      });
 
       setIsRecording(false);
       setRecording(null);
@@ -269,6 +299,21 @@ export default function HomeScreen() {
 
     return () => clearInterval(timer);
   }, [loading]);
+
+  useEffect(() => {
+    if (!isRecording || loading || duration < MAX_RECORDING_SECONDS) {
+      return;
+    }
+
+    Alert.alert(
+      '30 Minute Limit Reached',
+      'This recording has reached the 30 minute limit. It will stop now so it can be saved and processed. If the meeting continues, start a new recording for the remaining time.'
+    );
+
+    handleStopRecording().catch(error => {
+      console.error('[STOP-RECORDING] Auto-stop at limit failed:', error);
+    });
+  }, [duration, isRecording, loading]);
 
   const recordButtonStyle = useAnimatedStyle(() => {
     return {
@@ -517,11 +562,14 @@ export default function HomeScreen() {
       const online = await isOnline();
 
       if (!online) {
-        const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration);
+        const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration, {
+          status: 'queued',
+          error: OFFLINE_RECORDING_MESSAGES.offline.message,
+        });
         setProcessingStage('queued');
-        setDebugStatus('Saved locally. Waiting for connection...');
-        sendLocalNotification('Saved offline', 'Your meeting will upload automatically when connection returns.');
-        Alert.alert('Saved Offline', 'Your recording is saved locally and will sync when you are back online.');
+        setDebugStatus(OFFLINE_RECORDING_MESSAGES.offline.debug);
+        sendLocalNotification(OFFLINE_RECORDING_MESSAGES.offline.title, OFFLINE_RECORDING_MESSAGES.offline.message);
+        Alert.alert(OFFLINE_RECORDING_MESSAGES.offline.title, OFFLINE_RECORDING_MESSAGES.offline.message);
         setMeetingTitle('');
         setDuration(0);
         setRecording(null);
@@ -574,18 +622,22 @@ export default function HomeScreen() {
         try {
           const uri = recording?.getURI();
           if (uri) {
-            const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration);
-            console.log('[STOP-RECORDING] Free limit reached; saved recording offline:', offlineItem.id);
+            const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration, {
+              status: 'queued',
+              error: OFFLINE_RECORDING_MESSAGES.limit.message,
+            });
+            console.log('[STOP-RECORDING] Free limit reached; saved locally for upgrade flow:', offlineItem.id);
           }
         } catch (saveError) {
-          console.error('[STOP-RECORDING] Could not save limited recording offline:', saveError);
+          console.error('[STOP-RECORDING] Could not clean up limited recording:', saveError);
         }
 
         setProcessingStage('queued');
-        setDebugStatus('Free limit reached. Upgrade to process this meeting.');
+        setDebugStatus(OFFLINE_RECORDING_MESSAGES.limit.debug);
+        sendLocalNotification(OFFLINE_RECORDING_MESSAGES.limit.title, OFFLINE_RECORDING_MESSAGES.limit.message);
         Alert.alert(
-          'Free Limit Reached',
-          'You\'ve used 5 of 5 free meetings this month. Upgrade to Pro for unlimited meetings, full transcripts, exports and action items.',
+          OFFLINE_RECORDING_MESSAGES.limit.title,
+          OFFLINE_RECORDING_MESSAGES.limit.message,
           [
             { text: 'Later', style: 'cancel' },
             { text: 'Upgrade Now', onPress: () => router.push('/settings/upgrade') },
@@ -602,14 +654,28 @@ export default function HomeScreen() {
         const uri = recording?.getURI();
         if (uri) {
           console.log('[STOP-RECORDING] Upload failed; attempting fallback to offline queue');
-          const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration);
+          const responseCode = error?.response?.status;
+          const responseCodeName = error?.response?.data?.error?.code;
+          const fallbackReason: OfflineRecordingReason =
+            responseCode === 401 || responseCodeName === 'AUTH_ERROR'
+              ? 'signin'
+              : responseCode === 403 && responseCodeName === 'MEETING_LIMIT_REACHED'
+                ? 'limit'
+                : !error?.response || error?.code === 'ECONNABORTED' || /network|timeout/i.test(String(error?.message || ''))
+                  ? 'offline'
+                  : 'upload-failed';
+
+          const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration, {
+            status: 'queued',
+            error: OFFLINE_RECORDING_MESSAGES[fallbackReason].message,
+          });
           console.log('[STOP-RECORDING] Fallback saved to offline queue:', offlineItem.id);
           
           setProcessingStage('queued');
-          setDebugStatus('Saved locally. Sign in to process.');
+          setDebugStatus(OFFLINE_RECORDING_MESSAGES[fallbackReason].debug);
           Alert.alert(
-            'Saved Offline',
-            'The upload failed. Your meeting has been saved locally. Sign in to upload and process it.'
+            OFFLINE_RECORDING_MESSAGES[fallbackReason].title,
+            OFFLINE_RECORDING_MESSAGES[fallbackReason].message
           );
           setMeetingTitle('');
           setDuration(0);
@@ -718,7 +784,7 @@ export default function HomeScreen() {
         <View style={styles.mainArea}>
           {!isRecording ? (
             <View style={styles.inputSection}>
-              <Text style={styles.inputLabel}>CONTEXT / TITLE</Text>
+              <Text style={styles.inputLabel}>MEETING TITLE</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Product Sync, Team Check-in..."
@@ -732,6 +798,9 @@ export default function HomeScreen() {
             <View style={styles.timerContainer}>
               <Text style={styles.timerText}>{formatTime(duration)}</Text>
               <Text style={styles.recordingStatus}>LIVE AUDIO CAPTURE</Text>
+              <Text style={styles.limitNotice}>
+                Max 30:00 per recording. {formatTime(Math.max(MAX_RECORDING_SECONDS - duration, 0))} remaining.
+              </Text>
               <View style={styles.keepAwakeNotice}>
                 <Text style={styles.keepAwakeNoticeText}>
                   Screen stays on to prevent interruption
@@ -983,6 +1052,13 @@ const styles = StyleSheet.create({
     color: theme.colors.pulseRed,
     letterSpacing: 2,
     marginTop: -theme.spacing.sm,
+  },
+  limitNotice: {
+    marginTop: theme.spacing.sm,
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: theme.colors.onSurfaceVariant,
+    textAlign: 'center',
   },
   keepAwakeNotice: {
     marginTop: theme.spacing.lg,

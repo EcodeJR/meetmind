@@ -731,37 +731,45 @@ export const sendBroadcastEmail = async (req: Request, res: Response): Promise<v
       res.status(400).json({ error: 'No users found for this target' });
       return;
     }
-    
-    // Background execution to avoid timeout
-    res.json({ success: true, message: `Broadcast started for ${users.length} users` });
 
-    (async () => {
-      let sentCount = 0;
-      let failedCount = 0;
-      
-      for (const user of users) {
-        try {
-          const userName = user.name || user.email.split('@')[0];
-          const personalizedHtml = html.replace(/{name}/g, userName);
-          const sent = await sendCustomEmail(user.email, subject, personalizedHtml);
-          if (sent) sentCount++;
-          else failedCount++;
-          
-          await new Promise(r => setTimeout(r, 100)); // 10 emails/sec max
-        } catch (err) {
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const user of users) {
+      try {
+        const userName = user.name || user.email.split('@')[0];
+        const personalizedHtml = html.replace(/{name}/g, userName);
+        const sent = await sendCustomEmail(user.email, subject, personalizedHtml);
+        if (sent) {
+          sentCount++;
+        } else {
           failedCount++;
         }
+      } catch (err) {
+        failedCount++;
+        logger.warn({ error: err, email: user.email }, 'Broadcast recipient send failed');
       }
 
-      const targetLabel = target === 'all' ? 'All Users' : target === 'pro' ? 'Pro Users' : 'Free Users';
-      await EmailLog.create({
-        type: 'Broadcast',
-        recipients: `${targetLabel} (${users.length})`,
-        subject,
-        status: failedCount === users.length ? 'failed' : 'sent',
-      });
-      logger.info({ sentCount, failedCount, target }, 'Broadcast finished');
-    })();
+      await new Promise(resolve => setTimeout(resolve, 100)); // 10 emails/sec max
+    }
+
+    const targetLabel = target === 'all' ? 'All Users' : target === 'pro' ? 'Pro Users' : 'Free Users';
+    await EmailLog.create({
+      type: 'Broadcast',
+      recipients: `${targetLabel} (${users.length})`,
+      subject,
+      status: failedCount === users.length ? 'failed' : 'sent',
+    });
+
+    logger.info({ sentCount, failedCount, target }, 'Broadcast finished');
+
+    res.json({
+      success: failedCount < users.length,
+      message: `Broadcast finished for ${users.length} users`,
+      total: users.length,
+      sent: sentCount,
+      failed: failedCount,
+    });
 
   } catch (error) {
     logger.error({ error }, 'Admin: sendBroadcastEmail failed');

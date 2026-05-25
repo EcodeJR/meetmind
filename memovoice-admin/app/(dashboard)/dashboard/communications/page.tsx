@@ -153,22 +153,36 @@ export default function CommunicationsPage() {
     setSending(true);
     setShowConfirm(false);
     try {
-      const endpoint = target === 'single' ? '/api/email/send-single' : '/api/email/send-broadcast';
+      const endpoint = target === 'single'
+        ? '/api/email/send-single'
+        : `${RAILWAY_API}/admin/email/broadcast`;
       const payload = target === 'single'
         ? { to: singleEmail, subject, html: body, name: singleEmail.split('@')[0] }
-        : { target, subject, html: body, template };
+        : { target, subject, html: body };
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (target !== 'single' && ADMIN_KEY) {
+        headers['x-admin-key'] = ADMIN_KEY;
+      }
 
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
+        headers,
         body: JSON.stringify(payload),
       });
 
       if (res.ok) {
-        showToast('Email task dispatched successfully!');
+        const data = await res.json().catch(() => null);
+        if (target === 'single') {
+          showToast('Email sent successfully!');
+        } else {
+          showToast(
+            data?.message ? data.message : 'Broadcast completed successfully!'
+          );
+        }
         setSubject('');
         setBody('');
         setSingleEmail('');

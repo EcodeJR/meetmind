@@ -53,6 +53,7 @@ function RootLayoutNav() {
   const hasPromptedForOfflineSync = useRef(false);
   const hasAttemptedQueuedSync = useRef(false);
   const hasRedirectedToOnboarding = useRef(false);
+  const authStateRef = useRef({ isAuthLoaded: false, isSignedIn: false });
 
   const [fontsLoaded, fontError] = useFonts({
     'Manrope-Bold': Manrope_700Bold,
@@ -81,6 +82,10 @@ function RootLayoutNav() {
       segments: segments.join('/'),
     });
   }, [isAuthLoaded, isSignedIn, fontsLoaded, fontError, user?.primaryEmailAddress?.emailAddress, segments]);
+
+  useEffect(() => {
+    authStateRef.current = { isAuthLoaded, isSignedIn: Boolean(isSignedIn) };
+  }, [isAuthLoaded, isSignedIn]);
 
   // Wire up API auth token
   useEffect(() => {
@@ -144,9 +149,11 @@ function RootLayoutNav() {
   }, [isSignedIn]);
 
   useEffect(() => {
-    if (isSignedIn || hasPromptedForOfflineSync.current) {
+    if (!isAuthLoaded || isSignedIn || hasPromptedForOfflineSync.current) {
       return;
     }
+
+    let cancelled = false;
 
     const promptIfQueuedRecordingsExist = async () => {
       try {
@@ -158,6 +165,11 @@ function RootLayoutNav() {
         }
 
         if (!online.isConnected || online.isInternetReachable === false) {
+          return;
+        }
+
+        const latestAuthState = authStateRef.current;
+        if (!latestAuthState.isAuthLoaded || latestAuthState.isSignedIn || cancelled) {
           return;
         }
 
@@ -194,10 +206,11 @@ function RootLayoutNav() {
     });
 
     return () => {
+      cancelled = true;
       unsubscribeNetInfo();
       appStateSubscription.remove();
     };
-  }, [isSignedIn, router]);
+  }, [isAuthLoaded, isSignedIn, router]);
 
   useEffect(() => {
     if (!isSignedIn || hasAttemptedQueuedSync.current) {
