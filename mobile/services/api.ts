@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const FALLBACK_API_URL = 'http://localhost:8080/api';
+const FALLBACK_API_URL = 'https://memovoice.onrender.com/api';
 
 const normalizeApiUrl = (rawUrl?: string): string => {
   const trimmed = (rawUrl || '').trim();
