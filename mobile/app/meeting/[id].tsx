@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Share,
   Alert,
   TextInput,
   KeyboardAvoidingView,
@@ -15,6 +14,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import * as MailComposer from 'expo-mail-composer';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -63,6 +65,7 @@ export default function MeetingDetailScreen() {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPro, setIsPro] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
   const [processingElapsed, setProcessingElapsed] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
@@ -95,8 +98,10 @@ export default function MeetingDetailScreen() {
         const response = await apiClient.get('/users/me');
         const user = response.data.data?.user || response.data.user;
         setIsPro(user?.subscription?.plan === 'pro' && user?.subscription?.status === 'active');
+        setUserEmail(user?.email || user?.primaryEmailAddress?.emailAddress || '');
       } catch {
         setIsPro(false);
+        setUserEmail('');
       }
     };
 
@@ -140,7 +145,161 @@ export default function MeetingDetailScreen() {
     };
   }, [id, isProcessing]);
 
-  const handleShare = async () => {
+  const escapeHtml = (value: string): string =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const formatPdfSection = (label: string, content?: string[] | string) => {
+    if (!content || (Array.isArray(content) && content.length === 0)) {
+      return '';
+    }
+
+    const body = Array.isArray(content)
+      ? `<ul>${content.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+      : `<p>${escapeHtml(content).replace(/\n/g, '<br />')}</p>`;
+
+    return `
+      <section class="section">
+        <h2>${escapeHtml(label)}</h2>
+        ${body}
+      </section>
+    `;
+  };
+
+  const buildReportHtml = () => {
+    const title = meeting?.title || 'Untitled Session';
+    const date = meeting?.createdAt ? new Date(meeting.createdAt).toLocaleString() : 'Unknown';
+    const duration = meeting?.durationSeconds ? formatDuration(meeting.durationSeconds) : '—';
+
+    return `
+      <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              margin: 0;
+              padding: 32px;
+              color: #111827;
+              background: #ffffff;
+            }
+            .header {
+              padding-bottom: 20px;
+              border-bottom: 2px solid #e5e7eb;
+              margin-bottom: 24px;
+            }
+            .eyebrow {
+              text-transform: uppercase;
+              letter-spacing: 0.12em;
+              font-size: 12px;
+              color: #6b7280;
+              margin-bottom: 8px;
+            }
+            h1 {
+              font-size: 28px;
+              line-height: 1.2;
+              margin: 0 0 10px;
+            }
+            .meta {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 12px;
+              font-size: 13px;
+              color: #4b5563;
+            }
+            .pill {
+              background: #f3f4f6;
+              border-radius: 999px;
+              padding: 6px 12px;
+            }
+            .section {
+              margin-bottom: 24px;
+            }
+            h2 {
+              font-size: 16px;
+              margin: 0 0 10px;
+              color: #111827;
+            }
+            p, li {
+              font-size: 13px;
+              line-height: 1.6;
+              color: #1f2937;
+            }
+            ul {
+              margin: 0;
+              padding-left: 20px;
+            }
+            .footer {
+              margin-top: 28px;
+              padding-top: 16px;
+              border-top: 1px solid #e5e7eb;
+              font-size: 12px;
+              color: #6b7280;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="eyebrow">Memovoice Pro Export</div>
+            <h1>${escapeHtml(title)}</h1>
+            <div class="meta">
+              <span class="pill">${escapeHtml(date)}</span>
+              <span class="pill">Duration: ${escapeHtml(duration)}</span>
+              <span class="pill">Status: ${escapeHtml(meeting?.status || 'completed')}</span>
+            </div>
+          </div>
+          ${formatPdfSection('Executive Summary', meeting?.summary || '')}
+          ${formatPdfSection('Action Items', meeting?.actionItems || [])}
+          ${formatPdfSection('Key Decisions', meeting?.keyDecisions || [])}
+          ${meeting?.rawTranscript ? formatPdfSection('Full Transcript', meeting.rawTranscript) : ''}
+          <div class="footer">Generated from the Memovoice mobile app.</div>
+        </body>
+      </html>
+    `;
+  };
+
+  const createPdfFile = async () => {
+    const { uri } = await Print.printToFileAsync({
+      html: buildReportHtml(),
+    });
+    return uri;
+  };
+
+  const exportPdf = async () => {
+    const pdfUri = await createPdfFile();
+
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(pdfUri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `${meeting?.title || 'Meeting'} PDF`,
+      });
+      return;
+    }
+
+    Alert.alert('Sharing unavailable', `PDF saved to ${pdfUri}`);
+  };
+
+  const emailPdf = async () => {
+    const pdfUri = await createPdfFile();
+
+    if (!(await MailComposer.isAvailableAsync())) {
+      await exportPdf();
+      return;
+    }
+
+    await MailComposer.composeAsync({
+      recipients: userEmail ? [userEmail] : undefined,
+      subject: `${meeting?.title || 'Meeting'} - Memovoice Export`,
+      body: `Attached is your Memovoice export for ${meeting?.title || 'this meeting'}.`,
+      attachments: [pdfUri],
+    });
+  };
+
+  const handleExport = async () => {
     if (!meeting) return;
 
     if (!isPro) {
@@ -155,13 +314,11 @@ export default function MeetingDetailScreen() {
       return;
     }
 
-    try {
-      await Share.share({
-        message: `${meeting.title}\n\nSummary: ${meeting.summary}\n\nAction Items:\n${meeting.actionItems?.join('\n')}`,
-      });
-    } catch (error) {
-      console.error('Error sharing:', error);
-    }
+    Alert.alert('Export Intelligence', 'Choose how you want to share this report.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Export PDF', onPress: exportPdf },
+      { text: 'Email PDF', onPress: emailPdf },
+    ]);
   };
 
   const handleUpdateTitle = async () => {
@@ -295,7 +452,7 @@ export default function MeetingDetailScreen() {
             )}
             
             <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
+              <TouchableOpacity style={styles.actionButton} onPress={handleExport}>
                 <Ionicons name="share-outline" size={20} color={theme.colors.secondary} />
                 <Text style={styles.actionButtonText}>{isPro ? 'Export Intelligence' : 'Upgrade to Export'}</Text>
               </TouchableOpacity>
