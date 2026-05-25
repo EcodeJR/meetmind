@@ -1,6 +1,33 @@
 import axios from 'axios';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://[IP_ADDRESS]/api';
+const FALLBACK_API_URL = 'http://localhost:8080/api';
+
+const normalizeApiUrl = (rawUrl?: string): string => {
+  const trimmed = (rawUrl || '').trim();
+  if (!trimmed) {
+    return FALLBACK_API_URL;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const cleanPath = parsed.pathname.replace(/\/+$/, '');
+
+    if (!cleanPath || cleanPath === '/') {
+      parsed.pathname = '/api';
+    } else if (!cleanPath.endsWith('/api')) {
+      parsed.pathname = `${cleanPath}/api`;
+    } else {
+      parsed.pathname = cleanPath;
+    }
+
+    return parsed.toString().replace(/\/+$/, '');
+  } catch {
+    // Keep the raw value if URL parsing fails (e.g., custom dev host format).
+    return trimmed;
+  }
+};
+
+const API_URL = normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL);
 
 export const apiClient = axios.create({
   baseURL: API_URL,
