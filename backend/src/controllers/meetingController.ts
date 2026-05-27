@@ -4,6 +4,7 @@ import { sendSuccess, sendError } from '../utils/responses';
 import { Meeting } from '../models/Meeting';
 import { User } from '../models/User';
 import { logger } from '../utils/logger';
+import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
 import { transcribeAudio } from '../services/transcriptionService';
 import { summarizeTranscript } from '../services/summarizationService';
 import { uploadAudioToCloudinary, deleteAudioFromCloudinary } from '../services/cloudinaryService';
@@ -475,6 +476,34 @@ export const updateMeeting = async (req: AuthRequest, res: Response): Promise<vo
   } catch (error) {
     logger.error({ error }, 'Error updating meeting');
     sendError(res, 'UPDATE_ERROR', 'Failed to update meeting', 500);
+  }
+};
+
+// Return current quota information for the authenticated user
+export const getMeetingQuota = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const clerkId = req.clerkId;
+    if (!clerkId) {
+      sendError(res, 'AUTH_ERROR', 'Authentication required', 401);
+      return;
+    }
+
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+      return;
+    }
+
+    const isPro = isProUser(user);
+    const monthKey = getCurrentMonthKey();
+    const usage = user.monthlyMeetingUsagePeriodKey === monthKey ? (user.monthlyMeetingUsage || 0) : 0;
+    const limit = isPro ? Infinity : FREE_PLAN_LIMITS.meetingsPerMonth;
+    const remaining = isPro ? Infinity : Math.max(0, limit - usage);
+
+    sendSuccess(res, { quota: { limit, used: usage, remaining, monthKey, isPro } });
+  } catch (error) {
+    logger.error({ error }, 'Error fetching meeting quota');
+    sendError(res, 'QUOTA_ERROR', 'Failed to fetch quota', 500);
   }
 };
 

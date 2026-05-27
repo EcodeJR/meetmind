@@ -9,6 +9,7 @@ import { checkMeetingLimit } from '../middleware/subscriptionMiddleware';
 import {
   createMeeting,
   processMeeting,
+  getMeetingQuota,
   getMeetings,
   getMeetingById,
   updateMeeting,
@@ -58,6 +59,8 @@ router.use(apiRateLimiter);
 
 router.post('/', checkMeetingLimit, createMeeting);
 router.post('/process', checkMeetingLimit, uploadRateLimiter, upload.single('audio'), processMeeting);
+// Quota endpoint (no meeting limit check here; it is safe to check quota)
+router.get('/quota', getMeetingQuota);
 router.get('/', getMeetings);
 router.get('/search', searchMeetings);
 router.get('/:id', getMeetingById);

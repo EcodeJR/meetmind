@@ -2,45 +2,81 @@ import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth';
 import { User } from '../models/User';
 import { FREE_PLAN_LIMITS } from '../utils/constants';
+import { logger } from '../utils/logger';
 
-const getCurrentMonthKey = (): string => {
+export const getCurrentMonthKey = (): string => {
   const now = new Date();
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 };
 
 export const reserveMonthlyMeetingSlot = async (clerkId: string): Promise<boolean> => {
   const monthKey = getCurrentMonthKey();
-
-  const updatedUser = await User.findOneAndUpdate(
-    {
-      clerkId,
-      'subscription.plan': 'free',
-      $or: [
-        { monthlyMeetingUsagePeriodKey: { $ne: monthKey } },
-        { monthlyMeetingUsagePeriodKey: { $exists: false } },
-        { monthlyMeetingUsage: { $lt: FREE_PLAN_LIMITS.meetingsPerMonth } },
-      ],
-    },
-    [
+  try {
+    // First try the atomic aggregation-pipeline update (fast and concurrency-safe on modern Mongo)
+    const updatedUser = await User.findOneAndUpdate(
       {
-        $set: {
-          monthlyMeetingUsagePeriodKey: {
-            $cond: [{ $ne: ['$monthlyMeetingUsagePeriodKey', monthKey] }, monthKey, '$monthlyMeetingUsagePeriodKey'],
-          },
-          monthlyMeetingUsage: {
-            $cond: [
-              { $ne: ['$monthlyMeetingUsagePeriodKey', monthKey] },
-              1,
-              { $add: ['$monthlyMeetingUsage', 1] },
-            ],
+        clerkId,
+        'subscription.plan': 'free',
+        $or: [
+          { monthlyMeetingUsagePeriodKey: { $ne: monthKey } },
+          { monthlyMeetingUsagePeriodKey: { $exists: false } },
+          { monthlyMeetingUsage: { $lt: FREE_PLAN_LIMITS.meetingsPerMonth } },
+        ],
+      },
+      [
+        {
+          $set: {
+            monthlyMeetingUsagePeriodKey: {
+              $cond: [{ $ne: ['$monthlyMeetingUsagePeriodKey', monthKey] }, monthKey, '$monthlyMeetingUsagePeriodKey'],
+            },
+            monthlyMeetingUsage: {
+              $cond: [
+                { $ne: ['$monthlyMeetingUsagePeriodKey', monthKey] },
+                1,
+                { $add: ['$monthlyMeetingUsage', 1] },
+              ],
+            },
           },
         },
-      },
-    ],
-    { returnDocument: 'after' }
-  );
+      ],
+      { returnDocument: 'after' }
+    );
 
-  return Boolean(updatedUser);
+    if (updatedUser) return true;
+
+    // If aggregation-pipeline update didn't return a user, fall through to safe non-pipeline fallback
+  } catch (err) {
+    // If the aggregation pipeline update isn't supported by the Mongo server or some other error occurred,
+    // fall back to a more compatible approach and log the original error for debugging.
+    logger.warn({ error: err }, 'reserveMonthlyMeetingSlot: aggregation update failed, falling back to compatible update');
+  }
+
+  // Fallback: read-modify-write approach that's more compatible across Mongo versions.
+  try {
+    const user = await User.findOne({ clerkId, 'subscription.plan': 'free' });
+    if (!user) return false;
+
+    if (!user.monthlyMeetingUsagePeriodKey || user.monthlyMeetingUsagePeriodKey !== monthKey) {
+      // Start a new period
+      const res = await User.updateOne(
+        { _id: user._id, $or: [{ monthlyMeetingUsagePeriodKey: { $exists: false } }, { monthlyMeetingUsagePeriodKey: { $ne: monthKey } }] },
+        { $set: { monthlyMeetingUsagePeriodKey: monthKey, monthlyMeetingUsage: 1 } }
+      );
+      return !!res.modifiedCount;
+    }
+
+    // Same period: ensure we haven't exceeded the limit
+    const current = user.monthlyMeetingUsage || 0;
+    if (current >= FREE_PLAN_LIMITS.meetingsPerMonth) {
+      return false;
+    }
+
+    const res2 = await User.updateOne({ _id: user._id, monthlyMeetingUsage: { $lt: FREE_PLAN_LIMITS.meetingsPerMonth } }, { $inc: { monthlyMeetingUsage: 1 } });
+    return !!res2.modifiedCount;
+  } catch (err) {
+    logger.error({ error: err }, 'reserveMonthlyMeetingSlot fallback failed');
+    return false;
+  }
 };
 
 export const releaseMonthlyMeetingSlot = async (clerkId: string, monthKey?: string): Promise<void> => {

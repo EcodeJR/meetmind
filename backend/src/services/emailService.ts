@@ -87,7 +87,7 @@ if (transporter) {
  */
 const sendEmailWithResend = async (
   mailOptions: nodemailer.SendMailOptions
-): Promise<{ success: boolean; messageId?: string }> => {
+): Promise<{ success: boolean; messageId?: string; validationError?: boolean; error?: any }> => {
   if (!resendClient) {
     logger.warn('Resend client not initialized (RESEND_API_KEY not set)');
     return { success: false };
@@ -102,21 +102,31 @@ const sendEmailWithResend = async (
     });
 
     if (response.error) {
-      logger.error(
-        { error: response.error },
-        'Resend API returned error'
-      );
-      return { success: false };
+      // Detect common validation error (testing mode / unverified domain)
+      const err = response.error as any;
+      if (err && (err.name === 'validation_error' || err.statusCode === 403)) {
+        logger.error({ error: err, resendFromEmail }, 'Resend API returned validation_error: testing-mode or unverified domain');
+        logger.info('REMEDY: Verify a sending domain at https://resend.com/domains and set RESEND_FROM_EMAIL to a verified address (e.g. "Name <you@yourdomain.com>").');
+        return { success: false, validationError: true, error: err };
+      }
+
+      logger.error({ error: response.error }, 'Resend API returned error');
+      return { success: false, error: response.error };
     }
 
     logger.info({ messageId: response.data?.id }, 'Email sent via Resend API (fallback)');
     return { success: true, messageId: response.data?.id };
   } catch (error: any) {
-    logger.error(
-      { error: error.message },
-      'Resend API request failed'
-    );
-    return { success: false };
+    // Catch thrown errors from the SDK and surface validation errors explicitly
+    const err = error as any;
+    if (err && (err.name === 'validation_error' || err.statusCode === 403)) {
+      logger.error({ error: err, resendFromEmail }, 'Resend API thrown validation_error: testing-mode or unverified domain');
+      logger.info('REMEDY: Verify a sending domain at https://resend.com/domains and set RESEND_FROM_EMAIL to a verified address (e.g. "Name <you@yourdomain.com>").');
+      return { success: false, validationError: true, error: err };
+    }
+
+    logger.error({ error: err?.message ?? err }, 'Resend API request failed');
+    return { success: false, error: err };
   }
 };
 
@@ -137,6 +147,14 @@ const sendEmailWithRetry = async (
     if (resendResult.success) {
       return resendResult;
     }
+
+    // If Resend rejected due to validation/testing mode, log clear remediation and avoid confusing retries
+    if (resendResult.validationError) {
+      logger.error({ resendFromEmail, to: mailOptions.to }, 'Resend is in testing mode or the sending domain is unverified. Emails to other recipients are blocked.');
+      logger.info('Action: Verify a sending domain at https://resend.com/domains and set RESEND_FROM_EMAIL to the verified address.');
+      return { success: false };
+    }
+
     logger.warn('Primary Resend send failed; falling back to Gmail SMTP if available');
   }
 
