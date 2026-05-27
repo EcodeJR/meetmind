@@ -11,6 +11,7 @@ import { Contact } from '../models/Contact';
 import { Waitlist } from '../models/Waitlist';
 import { EmailLog } from '../models/EmailLog';
 import { sendCustomEmail } from '../services/emailService';
+import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
 
 // GET /admin/stats
 export const getAdminStats = async (_req: Request, res: Response): Promise<void> => {
@@ -238,6 +239,48 @@ export const deleteUser = async (req: Request, res: Response): Promise<void> => 
     res.json({ success: true, message: 'User and all data deleted' });
   } catch (error) {
     logger.error({ error }, 'Admin: deleteUser failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// PATCH /admin/users/:id/usage/reset
+export const resetUserMonthlyUsage = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const monthKey = getCurrentMonthKey();
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      {
+        monthlyMeetingUsage: 0,
+        monthlyMeetingUsagePeriodKey: monthKey,
+      },
+      { new: true }
+    );
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    logger.info({ userId: id, monthKey }, 'Admin: User monthly usage reset');
+    res.json({
+      success: true,
+      message: 'Monthly meeting usage reset',
+      quota: {
+        monthKey,
+        used: 0,
+      },
+      user: {
+        id: user._id,
+        clerkId: user.clerkId,
+        email: user.email,
+        monthlyMeetingUsage: user.monthlyMeetingUsage,
+        monthlyMeetingUsagePeriodKey: user.monthlyMeetingUsagePeriodKey,
+      },
+    });
+  } catch (error) {
+    logger.error({ error }, 'Admin: resetUserMonthlyUsage failed');
     res.status(500).json({ error: 'Internal server error' });
   }
 };

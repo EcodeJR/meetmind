@@ -12,6 +12,8 @@ interface UserDetail {
   clerkId: string;
   subscription: { plan: string; status: string; provider?: string };
   meetingCount: number;
+  monthlyMeetingUsage?: number;
+  monthlyMeetingUsagePeriodKey?: string | null;
   lastActive: string;
   createdAt: string;
   country?: string;
@@ -104,6 +106,32 @@ export default function UserDetailPage() {
       if (res.ok) showToast('User suspended');
     } catch {
       showToast('Action failed', 'error');
+    }
+  };
+
+  const handleResetQuota = async () => {
+    const confirmed = window.confirm('Reset this user\'s monthly quota usage to 0?');
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`${RENDER_API}/admin/users/${id}/usage/reset`, {
+        method: 'PATCH',
+        headers: { 'x-admin-key': ADMIN_KEY },
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        showToast('Monthly usage reset');
+        setUser(u => u ? {
+          ...u,
+          monthlyMeetingUsage: data?.quota?.used ?? 0,
+          monthlyMeetingUsagePeriodKey: data?.quota?.monthKey ?? u.monthlyMeetingUsagePeriodKey,
+        } : u);
+      } else {
+        showToast('Reset failed', 'error');
+      }
+    } catch {
+      showToast('Reset failed', 'error');
     }
   };
 
@@ -202,6 +230,11 @@ export default function UserDetailPage() {
                   { label: 'Last Active', value: user.lastActive, icon: 'schedule' },
                   { label: 'Meetings', value: user.meetingCount, icon: 'mic' },
                   { label: 'Provider', value: user.subscription.provider || 'N/A', icon: 'credit_card' },
+                  {
+                    label: 'Monthly Usage',
+                    value: typeof user.monthlyMeetingUsage === 'number' ? user.monthlyMeetingUsage : 'N/A',
+                    icon: 'counter_1',
+                  },
                 ].map(({ label, value, icon }) => (
                   <div key={label} className="bg-surface-container-low rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-1">
@@ -247,6 +280,13 @@ export default function UserDetailPage() {
             >
               <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>block</span>
               Suspend Account
+            </button>
+            <button
+              onClick={handleResetQuota}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-sky-200 text-sky-700 text-[14px] font-medium hover:bg-sky-50 transition-all"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>restart_alt</span>
+              Reset Monthly Usage
             </button>
             <button
               onClick={() => setShowDeleteModal(true)}

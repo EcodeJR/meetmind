@@ -9,6 +9,7 @@ import {
   updateUserPlan,
   suspendUser,
   deleteUser,
+  resetUserMonthlyUsage,
   getAdminMeetings,
   deleteMeeting,
   getAdminRevenue,
@@ -38,6 +39,7 @@ router.get('/users', getAdminUsers);
 router.get('/users/:id', getAdminUserById);
 router.patch('/users/:id/plan', updateUserPlan);
 router.patch('/users/:id/suspend', suspendUser);
+router.patch('/users/:id/usage/reset', resetUserMonthlyUsage);
 router.delete('/users/:id', deleteUser);
 
 // Meetings
