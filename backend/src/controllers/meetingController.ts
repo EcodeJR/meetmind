@@ -8,7 +8,7 @@ import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
 import { transcribeAudio } from '../services/transcriptionService';
 import { summarizeTranscript } from '../services/summarizationService';
 import { uploadAudioToCloudinary, deleteAudioFromCloudinary } from '../services/cloudinaryService';
-import { sendMeetingProcessedEmail, sendMeetingFailedEmail } from '../services/emailService';
+import { sendMeetingProcessedEmail, sendMeetingFailedEmail, sendMeetingDeletedEmail, sendAccountStatusEmail } from '../services/emailService';
 import { sendTranscriptionStartedNotification, sendMeetingProcessedNotification, sendMeetingFailedNotification } from '../services/pushNotificationService';
 import fs from 'fs';
 import { FREE_PLAN_LIMITS } from '../utils/constants';
@@ -538,6 +538,14 @@ export const deleteMeeting = async (req: AuthRequest, res: Response): Promise<vo
     user.storageUsedMB = Math.max(0, (user.storageUsedMB || sizeToSubtract) - sizeToSubtract);
     await user.save();
 
+    // Send deletion confirmation email (best-effort, don't block response)
+    if (user.email) {
+      const displayName = user.name || user.email.split('@')[0];
+      sendMeetingDeletedEmail(user.email, displayName, meeting.title || 'Meeting').catch(err => {
+        logger.warn({ error: err, meetingId: meeting._id }, 'Failed to send meeting deleted email');
+      });
+    }
+
     sendSuccess(res, { message: 'Meeting purged and storage recovered' });
   } catch (error) {
     logger.error({ error }, 'Error deleting meeting');
@@ -601,6 +609,24 @@ export const deleteAllMeetings = async (req: AuthRequest, res: Response): Promis
     user.meetingCount = 0;
     user.storageUsedMB = 0;
     await user.save();
+
+    // Notify user that all meetings were deleted (best-effort)
+    if (user.email) {
+      const displayName = user.name || user.email.split('@')[0];
+      sendAccountStatusEmail(
+        user.email,
+        displayName,
+        'All Meetings Deleted',
+        'Your meeting history and associated files have been removed from your account.',
+        [
+          'All meeting transcripts and summaries have been deleted',
+          'Associated audio files have been removed and storage reclaimed',
+          'This action is irreversible; contact support if this was done in error',
+        ]
+      ).catch(err => {
+        logger.warn({ error: err, clerkId }, 'Failed to send bulk meetings deleted email');
+      });
+    }
 
     sendSuccess(res, { message: 'All institutional memory has been purged' });
   } catch (error) {

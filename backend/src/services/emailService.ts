@@ -1,6 +1,8 @@
 import nodemailer from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 import { Resend } from 'resend';
 import { logger } from '../utils/logger';
+import { buildEmailTemplate } from './emailTemplate';
 
 // Initialize nodemailer transporter with Gmail - try port 587 (TLS) if 465 (SSL) fails
 let transporter: nodemailer.Transporter | null = null;
@@ -38,6 +40,7 @@ const createTransporter = (port: number) => {
     host: 'smtp.gmail.com',
     port,
     secure: port === 465,
+    family: 4,
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 15000,
@@ -45,7 +48,7 @@ const createTransporter = (port: number) => {
       user: gmailUser,
       pass: gmailAppPassword,
     },
-  });
+  } as SMTPTransport.Options);
 };
 
 transporter = createTransporter(587);
@@ -60,7 +63,7 @@ if (transporter) {
         `Email service verification failed (code: ${(error as any).code}, errno: ${(error as any).errno}). Emails will not be sent.`
       );
       logger.info(
-        'TROUBLESHOOTING: Verify GMAIL_USER and GMAIL_APP_PASSWORD are set correctly on Railway. Gmail requires App Password (not account password) if 2FA is enabled.'
+          'TROUBLESHOOTING: Verify GMAIL_USER and GMAIL_APP_PASSWORD are set correctly. Gmail requires App Password (not account password) if 2FA is enabled. This service now forces IPv4 to avoid Render ENETUNREACH on IPv6 SMTP resolution.'
       );
 
       if (fallbackTransporter) {
@@ -207,49 +210,51 @@ const sendEmailWithRetry = async (
   return await sendEmailWithResend(mailOptions);
 };
 
+const sendTemplatedEmail = async (
+  email: string,
+  subject: string,
+  options: Parameters<typeof buildEmailTemplate>[0]
+): Promise<boolean> => {
+  const mailOptions = {
+    from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
+    to: email,
+    subject,
+    html: buildEmailTemplate(options),
+  };
+
+  const result = await sendEmailWithRetry(mailOptions);
+  return result.success;
+};
+
 /**
  * Send welcome/sign-up email
  */
 export const sendWelcomeEmail = async (email: string, firstName: string): Promise<boolean> => {
   try {
-    const mailOptions = {
-      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
-      to: email,
-      subject: 'Welcome to Memovoice - Professional Intelligence Platform',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="color: white; margin: 0;">Welcome to Memovoice</h1>
-          </div>
-          <div style="background: #f5f5f5; padding: 40px; border-radius: 0 0 8px 8px;">
-            <p style="color: #333; font-size: 16px;">Hello <strong>${firstName}</strong>,</p>
-            <p style="color: #666; font-size: 14px; line-height: 1.6;">
-              Thank you for joining Memovoice! Your account has been successfully created and is ready to use.
-            </p>
-            <p style="color: #666; font-size: 14px; line-height: 1.6;">
-              <strong>Getting Started:</strong>
-            </p>
-            <ul style="color: #666; font-size: 14px; line-height: 1.8;">
-              <li>Open the Memovoice app to begin recording meetings</li>
-              <li>Your meetings will be automatically transcribed</li>
-              <li>Get AI-powered summaries and insights</li>
-              <li>Upgrade to Pro for advanced features</li>
-            </ul>
-            <p style="color: #666; font-size: 14px; line-height: 1.6;">
-              If you have any questions, contact our support team at support@memovoice.com
-            </p>
-            <p style="color: #999; font-size: 12px; margin-top: 30px;">
-              Memovoice Team<br>
-              <em>Institutional trust. Professional depth.</em>
-            </p>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailWithRetry(mailOptions);
-    if (result.success) {
-      logger.info({ email, messageId: result.messageId }, 'Welcome email sent successfully');
+    const success = await sendTemplatedEmail(email, 'Welcome to Memovoice - Professional Intelligence Platform', {
+      preheader: 'Your Memovoice account is ready',
+      title: 'Welcome to Memovoice',
+      greetingName: firstName,
+      intro: 'Thank you for joining Memovoice. Your account has been successfully created and is ready to use.',
+      sections: [
+        {
+          title: 'Getting Started',
+          bullets: [
+            'Open the Memovoice app to begin recording meetings',
+            'Your meetings will be automatically transcribed',
+            'Get AI-powered summaries and insights',
+            'Upgrade to Pro for advanced features',
+          ],
+        },
+        {
+          title: 'Need help?',
+          body: 'If you have any questions, contact our support team at support@memovoice.com.',
+        },
+      ],
+      footer: 'Memovoice Team · Institutional trust. Professional depth.',
+    });
+    if (success) {
+      logger.info({ email }, 'Welcome email sent successfully');
       return true;
     }
     return false;
@@ -268,32 +273,24 @@ export const sendMeetingStartedEmail = async (
   meetingTitle?: string
 ): Promise<boolean> => {
   try {
-    const mailOptions = {
-      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
-      to: email,
-      subject: 'Meeting Recording Started - Memovoice',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h2 style="color: white; margin: 0;">📱 Meeting Recording Started</h2>
-          </div>
-          <div style="background: #f5f5f5; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="color: #333; font-size: 16px;">Hello <strong>${userName}</strong>,</p>
-            <p style="color: #666; font-size: 14px; line-height: 1.6;">
-              Your meeting is now being recorded and will be automatically transcribed.
-            </p>
-            ${meetingTitle ? `<p style="color: #333; font-size: 14px;"><strong>Meeting:</strong> ${meetingTitle}</p>` : ''}
-            <p style="color: #666; font-size: 12px; line-height: 1.6;">
-              Your audio is being securely stored and will be processed immediately after recording ends.
-            </p>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailWithRetry(mailOptions);
-    if (result.success) {
-      logger.info({ email, messageId: result.messageId }, 'Meeting started email sent');
+    const success = await sendTemplatedEmail(email, 'Meeting Recording Started - Memovoice', {
+      preheader: 'We are recording your meeting now',
+      title: 'Meeting Recording Started',
+      greetingName: userName,
+      intro: 'Your meeting is now being recorded and will be automatically transcribed.',
+      sections: [
+        ...(meetingTitle ? [{ title: 'Meeting', body: meetingTitle }] : []),
+        {
+          title: 'What happens next',
+          bullets: [
+            'Your audio is securely stored',
+            'Processing starts automatically after recording ends',
+          ],
+        },
+      ],
+    });
+    if (success) {
+      logger.info({ email }, 'Meeting started email sent');
       return true;
     }
     return false;
@@ -314,45 +311,26 @@ export const sendMeetingProcessedEmail = async (
   highlights?: string[]
 ): Promise<boolean> => {
   try {
-    const mailOptions = {
-      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
-      to: email,
-      subject: `Meeting Summary Ready - ${meetingTitle}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h2 style="color: white; margin: 0;">✅ Meeting Processing Complete</h2>
-          </div>
-          <div style="background: #f5f5f5; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="color: #333; font-size: 16px;">Hello <strong>${userName}</strong>,</p>
-            <p style="color: #666; font-size: 14px; line-height: 1.6;">
-              Your meeting has been successfully transcribed and summarized.
-            </p>
-            <p style="color: #333; font-size: 14px;"><strong>Meeting:</strong> ${meetingTitle}</p>
-            <div style="background: white; border-left: 4px solid #667eea; padding: 15px; margin: 20px 0; border-radius: 4px;">
-              <p style="color: #333; font-size: 13px; margin: 0;"><strong>Summary:</strong></p>
-              <p style="color: #666; font-size: 13px; line-height: 1.6; margin: 10px 0 0 0;">
-                ${summary.substring(0, 200)}${summary.length > 200 ? '...' : ''}
-              </p>
-            </div>
-            ${highlights && highlights.length > 0 ? `
-            <div style="background: #fffef6; border-left: 4px solid #ffb86b; padding: 12px; margin-bottom: 18px; border-radius: 4px;">
-              <p style="color: #333; font-size: 13px; margin: 0;"><strong>Highlights:</strong></p>
-              <ul style="color: #666; font-size: 13px; margin: 8px 0 0 16px;">
-                ${highlights.slice(0,5).map(h => `<li>${h}</li>`).join('')}
-              </ul>
-            </div>` : ''}
-            <p style="color: #666; font-size: 12px; line-height: 1.6;">
-              Open the Memovoice app to view the full transcript and summary.
-            </p>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailWithRetry(mailOptions);
-    if (result.success) {
-      logger.info({ email, messageId: result.messageId }, 'Meeting processed email sent');
+    const success = await sendTemplatedEmail(email, `Meeting Summary Ready - ${meetingTitle}`, {
+      preheader: 'Your meeting summary is ready',
+      title: 'Meeting Processing Complete',
+      greetingName: userName,
+      intro: 'Your meeting has been successfully transcribed and summarized.',
+      sections: [
+        { title: 'Meeting', body: meetingTitle },
+        {
+          title: 'Summary',
+          body: summary.substring(0, 200) + (summary.length > 200 ? '...' : ''),
+        },
+        ...(highlights && highlights.length > 0 ? [{ title: 'Highlights', bullets: highlights.slice(0, 5) }] : []),
+        {
+          title: 'Next steps',
+          bullets: ['Open the Memovoice app to view the full transcript and summary', 'Share or export the meeting from the app when needed'],
+        },
+      ],
+    });
+    if (success) {
+      logger.info({ email }, 'Meeting processed email sent');
       return true;
     }
     return false;
@@ -372,38 +350,23 @@ export const sendMeetingFailedEmail = async (
   errorMessage: string
 ): Promise<boolean> => {
   try {
-    const mailOptions = {
-      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
-      to: email,
-      subject: `Meeting Processing Failed - ${meetingTitle}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #ff6b6b 0%, #d63031 100%); padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h2 style="color: white; margin: 0;">⚠️ Meeting Processing Failed</h2>
-          </div>
-          <div style="background: #f5f5f5; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="color: #333; font-size: 16px;">Hello <strong>${userName}</strong>,</p>
-            <p style="color: #666; font-size: 14px; line-height: 1.6;">
-              Unfortunately, your meeting processing encountered an error.
-            </p>
-            <p style="color: #333; font-size: 14px;"><strong>Meeting:</strong> ${meetingTitle}</p>
-            <div style="background: #ffe5e5; border-left: 4px solid #ff6b6b; padding: 15px; margin: 20px 0; border-radius: 4px;">
-              <p style="color: #d63031; font-size: 13px; margin: 0;"><strong>Error Details:</strong></p>
-              <p style="color: #c92a2a; font-size: 12px; margin: 10px 0 0 0;">
-                ${errorMessage}
-              </p>
-            </div>
-            <p style="color: #666; font-size: 12px; line-height: 1.6;">
-              Our support team has been notified and is investigating. Try re-uploading the meeting in the app, or contact support@memovoice.com if the issue persists.
-            </p>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailWithRetry(mailOptions);
-    if (result.success) {
-      logger.info({ email, messageId: result.messageId }, 'Meeting failed email sent');
+    const success = await sendTemplatedEmail(email, `Meeting Processing Failed - ${meetingTitle}`, {
+      preheader: 'We could not finish processing your meeting',
+      title: 'Meeting Processing Failed',
+      greetingName: userName,
+      intro: 'Unfortunately, your meeting processing encountered an error.',
+      sections: [
+        { title: 'Meeting', body: meetingTitle },
+        { title: 'Error details', body: errorMessage },
+        {
+          title: 'Recommended next step',
+          bullets: ['Try re-uploading the meeting in the app', 'Contact memovoiceio@gmail.com if the issue persists'],
+        },
+      ],
+      footer: 'Our support team has been notified and is investigating.',
+    });
+    if (success) {
+      logger.info({ email }, 'Meeting failed email sent');
       return true;
     }
     return false;
@@ -421,39 +384,30 @@ export const sendSubscriptionUpgradeEmail = async (
   userName: string
 ): Promise<boolean> => {
   try {
-    const mailOptions = {
-      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
-      to: email,
-      subject: 'Welcome to Memovoice Pro - Premium Features Unlocked',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%); padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h2 style="color: white; margin: 0;">🎉 Welcome to Memovoice Pro</h2>
-          </div>
-          <div style="background: #f5f5f5; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="color: #333; font-size: 16px;">Hello <strong>${userName}</strong>,</p>
-            <p style="color: #666; font-size: 14px; line-height: 1.6;">
-              Thank you for upgrading to Memovoice Pro! You now have access to premium features.
-            </p>
-            <p style="color: #666; font-size: 14px; line-height: 1.6;"><strong>Your Pro Benefits:</strong></p>
-            <ul style="color: #666; font-size: 14px; line-height: 1.8;">
-              <li>✓ Unlimited meeting recordings</li>
-              <li>✓ Advanced AI summarization</li>
-              <li>✓ Priority support</li>
-              <li>✓ Custom meeting categories</li>
-              <li>✓ Export capabilities</li>
-            </ul>
-            <p style="color: #666; font-size: 12px; line-height: 1.6;">
-              Start using Pro features now in the Memovoice app!
-            </p>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailWithRetry(mailOptions);
-    if (result.success) {
-      logger.info({ email, messageId: result.messageId }, 'Subscription upgrade email sent');
+    const success = await sendTemplatedEmail(email, 'Welcome to Memovoice Pro - Premium Features Unlocked', {
+      preheader: 'Your Pro benefits are now active',
+      title: 'Welcome to Memovoice Pro',
+      greetingName: userName,
+      intro: 'Thank you for upgrading to Memovoice Pro. You now have access to premium features.',
+      sections: [
+        {
+          title: 'Your Pro Benefits',
+          bullets: [
+            'Unlimited meeting recordings',
+            'Advanced AI summarization',
+            'Priority support',
+            'Custom meeting categories',
+            'Export capabilities',
+          ],
+        },
+        {
+          title: 'Next step',
+          body: 'Start using Pro features now in the Memovoice app.',
+        },
+      ],
+    });
+    if (success) {
+      logger.info({ email }, 'Subscription upgrade email sent');
       return true;
     }
     return false;
@@ -472,17 +426,105 @@ export const sendCustomEmail = async (
   html: string
 ): Promise<boolean> => {
   try {
-    const mailOptions = {
-      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
-      to: email,
-      subject: subject,
-      html: html,
-    };
-
-    const result = await sendEmailWithRetry(mailOptions);
-    return result.success;
+    return await sendTemplatedEmail(email, subject, {
+      preheader: subject,
+      title: subject,
+      intro: 'You have a new message from Memovoice.',
+      sections: [{ rawHtml: html }],
+    });
   } catch (error) {
     logger.error({ error, email }, 'Failed to send custom email');
     return false;
   }
+};
+
+export const sendSettingsUpdatedEmail = async (
+  email: string,
+  userName: string,
+  changes: Array<{ label: string; before: string; after: string }>
+): Promise<boolean> => {
+  if (!changes.length) return true;
+
+  return sendTemplatedEmail(email, 'Your Memovoice Settings Were Updated', {
+    preheader: 'Important account settings were changed',
+    title: 'Settings Updated',
+    greetingName: userName,
+    intro: 'We noticed an important change to your account settings and wanted to confirm it.',
+    sections: [
+      {
+        title: 'What changed',
+        bullets: changes.map(change => `${change.label}: ${change.before} → ${change.after}`),
+      },
+      {
+        title: 'Why this matters',
+        body: 'These settings affect how Memovoice records, processes, and notifies you about meetings.',
+      },
+    ],
+  });
+};
+
+export const sendMeetingDeletedEmail = async (
+  email: string,
+  userName: string,
+  meetingTitle: string
+): Promise<boolean> => {
+  return sendTemplatedEmail(email, `Meeting Deleted - ${meetingTitle}`, {
+    preheader: 'A meeting was removed from your account',
+    title: 'Meeting Deleted',
+    greetingName: userName,
+    intro: 'A meeting was deleted from your Memovoice account.',
+    sections: [
+      { title: 'Meeting', body: meetingTitle },
+      {
+        title: 'What to know',
+        bullets: [
+          'The meeting has been removed from your account',
+          'Associated storage has been reclaimed',
+          'If you removed this by mistake, contact support as soon as possible',
+        ],
+      },
+    ],
+  });
+};
+
+export const sendAccountDeletedEmail = async (
+  email: string,
+  userName: string
+): Promise<boolean> => {
+  return sendTemplatedEmail(email, 'Your Memovoice Account Was Deleted', {
+    preheader: 'Confirmation of account deletion',
+    title: 'Account Deleted',
+    greetingName: userName,
+    intro: 'Your Memovoice account and associated data have been deleted.',
+    sections: [
+      {
+        title: 'What was removed',
+        bullets: [
+          'Your account profile',
+          'Meeting history and transcripts',
+          'Associated audio files and storage',
+        ],
+      },
+      {
+        title: 'Important',
+        body: 'This action is irreversible. If you did not request this deletion, contact support immediately.',
+      },
+    ],
+  });
+};
+
+export const sendAccountStatusEmail = async (
+  email: string,
+  userName: string,
+  title: string,
+  intro: string,
+  bullets: string[]
+): Promise<boolean> => {
+  return sendTemplatedEmail(email, title, {
+    preheader: intro,
+    title,
+    greetingName: userName,
+    intro,
+    sections: [{ title: 'Details', bullets }],
+  });
 };

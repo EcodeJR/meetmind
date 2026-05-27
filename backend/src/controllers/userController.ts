@@ -4,7 +4,7 @@ import { sendSuccess, sendError } from '../utils/responses';
 import { User } from '../models/User';
 import { Meeting } from '../models/Meeting';
 import { deleteAudioFromCloudinary } from '../services/cloudinaryService';
-import { sendWelcomeEmail } from '../services/emailService';
+import { sendWelcomeEmail, sendSettingsUpdatedEmail, sendAccountDeletedEmail } from '../services/emailService';
 import { logger } from '../utils/logger';
 import axios from 'axios';
 import { FREE_PLAN_LIMITS } from '../utils/constants';
@@ -150,6 +150,18 @@ export const updateUserPreferences = async (req: AuthRequest, res: Response) => 
       return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
     }
 
+    const previousPreferences = {
+      notificationsEnabled: user.preferences?.notificationsEnabled,
+      pushNotificationsEnabled: user.preferences?.pushNotificationsEnabled,
+      language: user.preferences?.language,
+      autoDeleteDays: user.preferences?.autoDeleteDays,
+      strategicAlerts: {
+        decisions: user.preferences?.strategicAlerts?.decisions,
+        actions: user.preferences?.strategicAlerts?.actions,
+        risks: user.preferences?.strategicAlerts?.risks,
+      },
+    };
+
     const isPro = user.subscription.plan === 'pro' && user.subscription.status === 'active';
 
     // Convert nested preferences object into dot notation for MongoDB $set
@@ -182,6 +194,40 @@ export const updateUserPreferences = async (req: AuthRequest, res: Response) => 
     }
 
     logger.info({ clerkId }, 'User preferences updated');
+
+    const changes: Array<{ label: string; before: string; after: string }> = [];
+    const currentPreferences = updatedUser.preferences || {};
+
+    if (previousPreferences.language !== currentPreferences.language) {
+      changes.push({ label: 'Language', before: String(previousPreferences.language || 'default'), after: String(currentPreferences.language || 'default') });
+    }
+    if (previousPreferences.notificationsEnabled !== currentPreferences.notificationsEnabled) {
+      changes.push({ label: 'Email notifications', before: previousPreferences.notificationsEnabled ? 'On' : 'Off', after: currentPreferences.notificationsEnabled ? 'On' : 'Off' });
+    }
+    if (previousPreferences.pushNotificationsEnabled !== currentPreferences.pushNotificationsEnabled) {
+      changes.push({ label: 'Push notifications', before: previousPreferences.pushNotificationsEnabled ? 'On' : 'Off', after: currentPreferences.pushNotificationsEnabled ? 'On' : 'Off' });
+    }
+    if (previousPreferences.autoDeleteDays !== currentPreferences.autoDeleteDays) {
+      changes.push({ label: 'Auto-delete window', before: `${previousPreferences.autoDeleteDays || 0} days`, after: `${currentPreferences.autoDeleteDays || 0} days` });
+    }
+    if (
+      previousPreferences.strategicAlerts.decisions !== currentPreferences.strategicAlerts?.decisions ||
+      previousPreferences.strategicAlerts.actions !== currentPreferences.strategicAlerts?.actions ||
+      previousPreferences.strategicAlerts.risks !== currentPreferences.strategicAlerts?.risks
+    ) {
+      changes.push({
+        label: 'Strategic alerts',
+        before: `Decisions ${previousPreferences.strategicAlerts.decisions ? 'On' : 'Off'}, Actions ${previousPreferences.strategicAlerts.actions ? 'On' : 'Off'}, Risks ${previousPreferences.strategicAlerts.risks ? 'On' : 'Off'}`,
+        after: `Decisions ${currentPreferences.strategicAlerts?.decisions ? 'On' : 'Off'}, Actions ${currentPreferences.strategicAlerts?.actions ? 'On' : 'Off'}, Risks ${currentPreferences.strategicAlerts?.risks ? 'On' : 'Off'}`,
+      });
+    }
+
+    if (changes.length > 0 && user.email) {
+      sendSettingsUpdatedEmail(user.email, user.name || user.email.split('@')[0], changes).catch(err => {
+        logger.error({ error: err, clerkId }, 'Failed to send settings update email');
+      });
+    }
+
     return sendSuccess(res, { user: updatedUser });
   } catch (error) {
     logger.error({ error }, 'Error updating preferences');
@@ -201,6 +247,11 @@ export const deleteAccount = async (req: AuthRequest, res: Response) => {
       return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
     }
     console.log(`[DELETE] User found: ${user._id}`);
+
+    const displayName = user.name || user.email.split('@')[0];
+    await sendAccountDeletedEmail(user.email, displayName).catch(err => {
+      logger.error({ error: err, clerkId }, 'Failed to send account deletion email');
+    });
 
     // 2. Identify all associated meetings
     console.log(`[DELETE] Finding meetings for user: ${user._id}`);
