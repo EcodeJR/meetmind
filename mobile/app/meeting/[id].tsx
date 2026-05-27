@@ -4,6 +4,8 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Modal,
+  Pressable,
   ActivityIndicator,
   Alert,
   TextInput,
@@ -14,9 +16,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as MailComposer from 'expo-mail-composer';
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  HeadingLevel,
+} from 'docx';
 import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -71,6 +81,7 @@ export default function MeetingDetailScreen() {
   const [editedTitle, setEditedTitle] = useState('');
   const [newTag, setNewTag] = useState('');
   const [saving, setSaving] = useState(false);
+  const [exportMenuVisible, setExportMenuVisible] = useState(false);
   const router = useRouter();
 
   const fetchMeeting = async () => {
@@ -168,6 +179,163 @@ export default function MeetingDetailScreen() {
         ${body}
       </section>
     `;
+  };
+
+  const formatMarkdownSection = (label: string, content?: string[] | string) => {
+    if (!content || (Array.isArray(content) && content.length === 0)) {
+      return '';
+    }
+
+    const body = Array.isArray(content)
+      ? content.map(item => `- ${item}`).join('\n')
+      : content;
+
+    return `## ${label}\n\n${body}\n`;
+  };
+
+  const buildMarkdownReport = () => {
+    const title = meeting?.title || 'Untitled Session';
+    const date = meeting?.createdAt ? new Date(meeting.createdAt).toLocaleString() : 'Unknown';
+    const duration = meeting?.durationSeconds ? formatDuration(meeting.durationSeconds) : '—';
+
+    return [
+      `# ${title}`,
+      '',
+      '_Memovoice Pro Export_',
+      '',
+      `- Date: ${date}`,
+      `- Duration: ${duration}`,
+      `- Status: ${meeting?.status || 'completed'}`,
+      '',
+      formatMarkdownSection('Executive Summary', meeting?.summary || ''),
+      formatMarkdownSection('Action Items', meeting?.actionItems || []),
+      formatMarkdownSection('Key Decisions', meeting?.keyDecisions || []),
+      meeting?.rawTranscript ? formatMarkdownSection('Full Transcript', meeting.rawTranscript) : '',
+      '---',
+      'Generated from the Memovoice mobile app.',
+      '',
+    ].filter(Boolean).join('\n');
+  };
+
+  const buildDocxDocument = () => {
+    const title = meeting?.title || 'Untitled Session';
+    const date = meeting?.createdAt ? new Date(meeting.createdAt).toLocaleString() : 'Unknown';
+    const duration = meeting?.durationSeconds ? formatDuration(meeting.durationSeconds) : '—';
+
+    const children: Paragraph[] = [
+      new Paragraph({ text: 'Memovoice Pro Export', heading: HeadingLevel.HEADING_2 }),
+      new Paragraph({ text: title, heading: HeadingLevel.TITLE }),
+      new Paragraph({ text: `Date: ${date}` }),
+      new Paragraph({ text: `Duration: ${duration}` }),
+      new Paragraph({ text: `Status: ${meeting?.status || 'completed'}` }),
+      new Paragraph({ text: '' }),
+    ];
+
+    const pushSection = (label: string, content?: string[] | string) => {
+      if (!content || (Array.isArray(content) && content.length === 0)) {
+        return;
+      }
+
+      children.push(new Paragraph({ text: label, heading: HeadingLevel.HEADING_1 }));
+
+      if (Array.isArray(content)) {
+        content.forEach(item => {
+          children.push(
+            new Paragraph({
+              children: [new TextRun(item)],
+              bullet: { level: 0 },
+            })
+          );
+        });
+      } else {
+        content.split('\n').forEach(line => {
+          children.push(new Paragraph({ text: line }));
+        });
+      }
+
+      children.push(new Paragraph({ text: '' }));
+    };
+
+    pushSection('Executive Summary', meeting?.summary || '');
+    pushSection('Action Items', meeting?.actionItems || []);
+    pushSection('Key Decisions', meeting?.keyDecisions || []);
+    pushSection('Full Transcript', meeting?.rawTranscript || '');
+    children.push(new Paragraph({ text: 'Generated from the Memovoice mobile app.' }));
+
+    return new Document({
+      sections: [{ children }],
+    });
+  };
+
+  const resolveExportUri = (fileName: string) => {
+    const baseDirectory = LegacyFileSystem.cacheDirectory || LegacyFileSystem.documentDirectory;
+    if (!baseDirectory) {
+      throw new Error('File storage is unavailable on this device');
+    }
+
+    return `${baseDirectory}${fileName}`;
+  };
+
+  const shareGeneratedFile = async (
+    fileName: string,
+    content: string,
+    options: { mimeType: string; dialogTitle: string; text?: boolean }
+  ) => {
+    const uri = resolveExportUri(fileName);
+    await LegacyFileSystem.writeAsStringAsync(uri, content, {
+      encoding: options.text ? LegacyFileSystem.EncodingType.UTF8 : LegacyFileSystem.EncodingType.Base64,
+    });
+
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri, {
+        mimeType: options.mimeType,
+        dialogTitle: options.dialogTitle,
+      });
+      return;
+    }
+
+    Alert.alert('Sharing unavailable', `File saved to ${uri}`);
+  };
+
+  const exportMarkdown = async (suffix = 'export', dialogTitleSuffix = 'Markdown') => {
+    await shareGeneratedFile(
+      `${(meeting?.title || 'meeting').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${suffix}.md`,
+      buildMarkdownReport(),
+      {
+        mimeType: 'text/markdown',
+        dialogTitle: `${meeting?.title || 'Meeting'} ${dialogTitleSuffix}`,
+        text: true,
+      }
+    );
+  };
+
+  const exportDocx = async (suffix = 'export', dialogTitleSuffix = 'DOCX') => {
+    const buffer = await Packer.toBase64String(buildDocxDocument());
+    await shareGeneratedFile(
+      `${(meeting?.title || 'meeting').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${suffix}.docx`,
+      buffer,
+      {
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        dialogTitle: `${meeting?.title || 'Meeting'} ${dialogTitleSuffix}`,
+      }
+    );
+  };
+
+  const shareToNotion = async () => {
+    await exportMarkdown('notion', 'Notion');
+  };
+
+  const shareToSlack = async () => {
+    await exportMarkdown('slack', 'Slack');
+  };
+
+  const shareToGoogleDocs = async () => {
+    await exportDocx('google-docs', 'Google Docs');
+  };
+
+  const runExportAction = async (action: () => Promise<void>) => {
+    setExportMenuVisible(false);
+    await action();
   };
 
   const buildReportHtml = () => {
@@ -305,7 +473,7 @@ export default function MeetingDetailScreen() {
     if (!isPro) {
       Alert.alert(
         'Pro Feature',
-        'Export to PDF and email is available on Pro. Upgrade to unlock full transcript export and action items.',
+        'Premium export unlocks PDF, DOCX, Markdown, and direct share targets for Notion, Slack, and Google Docs.',
         [
           { text: 'Later', style: 'cancel' },
           { text: 'Upgrade', onPress: () => router.push('/settings/upgrade') },
@@ -314,11 +482,7 @@ export default function MeetingDetailScreen() {
       return;
     }
 
-    Alert.alert('Export Intelligence', 'Choose how you want to share this report.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Export PDF', onPress: exportPdf },
-      { text: 'Email PDF', onPress: emailPdf },
-    ]);
+    setExportMenuVisible(true);
   };
 
   const handleUpdateTitle = async () => {
@@ -454,9 +618,76 @@ export default function MeetingDetailScreen() {
             <View style={styles.actionRow}>
               <TouchableOpacity style={styles.actionButton} onPress={handleExport}>
                 <Ionicons name="share-outline" size={20} color={theme.colors.secondary} />
-                <Text style={styles.actionButtonText}>{isPro ? 'Export Intelligence' : 'Upgrade to Export'}</Text>
+                <Text style={styles.actionButtonText}>{isPro ? 'Export Suite' : 'Upgrade to Export Suite'}</Text>
               </TouchableOpacity>
             </View>
+
+            <Modal
+              visible={exportMenuVisible}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setExportMenuVisible(false)}
+            >
+              <Pressable style={styles.exportBackdrop} onPress={() => setExportMenuVisible(false)}>
+                <Pressable style={styles.exportSheet} onPress={() => {}}>
+                  <View style={styles.exportSheetHeader}>
+                    <Text style={styles.exportEyebrow}>Memovoice Pro Export</Text>
+                    <Text style={styles.exportTitle}>Share your meeting anywhere</Text>
+                    <Text style={styles.exportSubtitle}>
+                      Send polished meeting intelligence to Notion, Slack, Google Docs, Markdown, DOCX, or PDF.
+                    </Text>
+                  </View>
+
+                  <View style={styles.exportGrid}>
+                    <TouchableOpacity style={styles.exportOption} onPress={() => runExportAction(shareToNotion)}>
+                      <Ionicons name="document-text-outline" size={18} color={theme.colors.secondary} />
+                      <Text style={styles.exportOptionTitle}>Notion</Text>
+                      <Text style={styles.exportOptionSubtitle}>Markdown-ready brief</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.exportOption} onPress={() => runExportAction(shareToSlack)}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={18} color={theme.colors.secondary} />
+                      <Text style={styles.exportOptionTitle}>Slack</Text>
+                      <Text style={styles.exportOptionSubtitle}>Fast team handoff</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.exportOption} onPress={() => runExportAction(shareToGoogleDocs)}>
+                      <Ionicons name="document-text-outline" size={18} color={theme.colors.secondary} />
+                      <Text style={styles.exportOptionTitle}>Google Docs</Text>
+                      <Text style={styles.exportOptionSubtitle}>Open in a doc workflow</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.exportOption} onPress={() => runExportAction(() => exportMarkdown())}>
+                      <Ionicons name="code-slash-outline" size={18} color={theme.colors.secondary} />
+                      <Text style={styles.exportOptionTitle}>Markdown</Text>
+                      <Text style={styles.exportOptionSubtitle}>Portable notes format</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.exportOption} onPress={() => runExportAction(() => exportDocx())}>
+                      <Ionicons name="document-outline" size={18} color={theme.colors.secondary} />
+                      <Text style={styles.exportOptionTitle}>DOCX</Text>
+                      <Text style={styles.exportOptionSubtitle}>Formatted document export</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.exportOption} onPress={() => runExportAction(exportPdf)}>
+                      <Ionicons name="print-outline" size={18} color={theme.colors.secondary} />
+                      <Text style={styles.exportOptionTitle}>PDF</Text>
+                      <Text style={styles.exportOptionSubtitle}>Classic report share</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.exportOption} onPress={() => runExportAction(emailPdf)}>
+                      <Ionicons name="mail-outline" size={18} color={theme.colors.secondary} />
+                      <Text style={styles.exportOptionTitle}>Email PDF</Text>
+                      <Text style={styles.exportOptionSubtitle}>Send directly from device</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity style={styles.exportCloseButton} onPress={() => setExportMenuVisible(false)}>
+                    <Text style={styles.exportCloseButtonText}>Close</Text>
+                  </TouchableOpacity>
+                </Pressable>
+              </Pressable>
+            </Modal>
 
             <View style={styles.meetingMetaCard}>
               <View style={styles.meetingMetaItem}>
@@ -688,6 +919,84 @@ const styles = StyleSheet.create({
     fontFamily: 'Manrope-SemiBold',
     fontSize: 14,
     color: theme.colors.secondary,
+  },
+  exportBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 16, 27, 0.72)',
+    justifyContent: 'flex-end',
+  },
+  exportSheet: {
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+  },
+  exportSheetHeader: {
+    gap: 8,
+    marginBottom: theme.spacing.lg,
+  },
+  exportEyebrow: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 10,
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
+    color: theme.colors.secondary,
+  },
+  exportTitle: {
+    fontFamily: 'Manrope-Bold',
+    fontSize: 24,
+    lineHeight: 30,
+    color: theme.colors.primary,
+  },
+  exportSubtitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    lineHeight: 20,
+    color: theme.colors.onSurfaceVariant,
+  },
+  exportGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  exportOption: {
+    width: '48%',
+    minHeight: 104,
+    borderRadius: 18,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceContainerLowest,
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  exportOptionTitle: {
+    fontFamily: 'Manrope-SemiBold',
+    fontSize: 14,
+    color: theme.colors.primary,
+  },
+  exportOptionSubtitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 11,
+    lineHeight: 16,
+    color: theme.colors.onSurfaceVariant,
+  },
+  exportCloseButton: {
+    marginTop: theme.spacing.lg,
+    alignSelf: 'flex-end',
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: 999,
+    backgroundColor: theme.colors.surfaceContainerHigh,
+  },
+  exportCloseButtonText: {
+    fontFamily: 'Manrope-SemiBold',
+    fontSize: 13,
+    color: theme.colors.primary,
   },
   meetingMetaCard: {
     marginTop: theme.spacing.md,

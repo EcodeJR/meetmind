@@ -58,13 +58,15 @@ const downloadAudioBuffer = async (url: string): Promise<Buffer> => {
 /**
  * PHASE 1: OpenAI Whisper (Primary)
  */
-const transcribeWithWhisper = async (source: string): Promise<string> => {
+const transcribeWithWhisper = async (source: string, language?: string): Promise<string> => {
   console.log(`[DEBUGGER] Whisper Transcription: Starting with source: ${source}`);
   const stream = await getAudioStream(source);
-  const response = await openai.audio.transcriptions.create({
+  const opts: any = {
     file: stream as any,
     model: 'whisper-1',
-  });
+  };
+  if (language) opts.language = language;
+  const response = await openai.audio.transcriptions.create(opts as any);
   console.log(`[DEBUGGER] Whisper Transcription: SUCCESS. Received ${response.text.split(' ').length} words.`);
   return response.text;
 };
@@ -72,15 +74,18 @@ const transcribeWithWhisper = async (source: string): Promise<string> => {
 /**
  * PHASE 2: Groq Whisper (First Fallback)
  */
-const transcribeWithGroq = async (source: string): Promise<string> => {
+const transcribeWithGroq = async (source: string, language?: string): Promise<string> => {
   console.log(`[DEBUGGER] Groq Transcription Fallback: Starting with source: ${source}`);
   
   const stream = await getAudioStream(source);
-  const response = await groq.audio.transcriptions.create({
+  const opts: any = {
     file: stream,
     model: 'whisper-large-v3',
     response_format: 'text',
-  });
+  };
+  if (language) opts.language = language;
+
+  const response = await groq.audio.transcriptions.create(opts as any);
   
   const transcript = typeof response === 'string' ? response : (response as any).text;
   console.log(`[DEBUGGER] Groq Transcription Fallback: SUCCESS. Received ${transcript.split(' ').length} words.`);
@@ -90,7 +95,7 @@ const transcribeWithGroq = async (source: string): Promise<string> => {
 /**
  * PHASE 3: Gemini 2.5 Flash (Last Resort)
  */
-const transcribeWithGemini = async (source: string): Promise<string> => {
+const transcribeWithGemini = async (source: string, language?: string): Promise<string> => {
   console.log(`[DEBUGGER] Gemini Transcription Fallback: Processing ${source}`);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
@@ -105,10 +110,12 @@ const transcribeWithGemini = async (source: string): Promise<string> => {
     },
   };
 
+  const instruction = `Transcribe this audio meeting verbatim${language ? ` in language: ${language}` : ''}. Do not add any preamble or summary, just the text spoken.`;
+
   const result = await model.generateContent([
-    'Transcribe this audio meeting verbatim. Do not add any preamble or summary, just the text spoken.',
+    instruction,
     audioPart,
-  ]);
+  ] as any);
 
   const transcript = result.response.text();
   console.log(`[DEBUGGER] Gemini Transcription Fallback: SUCCESS. Received ${transcript.split(' ').length} words.`);
@@ -119,13 +126,13 @@ const transcribeWithGemini = async (source: string): Promise<string> => {
  * Main Controller with Triple Fallback: OpenAI > Groq > Gemini
  * Supports both local file paths and Cloudinary URLs
  */
-export const transcribeAudio = async (source: string): Promise<string> => {
+export const transcribeAudio = async (source: string, language?: string): Promise<string> => {
   console.log(`[DEBUGGER] Starting transcription pipeline with source: ${source.substring(0, 80)}...`);
   
   // 1. Try OpenAI Whisper
   try {
     console.log(`[DEBUGGER] Attempting OpenAI Whisper...`);
-    return await transcribeWithWhisper(source);
+    return await transcribeWithWhisper(source, language);
   } catch (error: any) {
     console.log(`[DEBUGGER] OpenAI Whisper failed, attempting Groq... (${error.message})`);
     console.error(`[DEBUGGER] OpenAI error details:`, error);
@@ -134,7 +141,7 @@ export const transcribeAudio = async (source: string): Promise<string> => {
   // 2. Try Groq Whisper (Super fast fallback)
   try {
     console.log(`[DEBUGGER] Attempting Groq Whisper fallback...`);
-    return await transcribeWithGroq(source);
+    return await transcribeWithGroq(source, language);
   } catch (error: any) {
     console.log(`[DEBUGGER] Groq Fallback failed, attempting Gemini... (${error.message})`);
     console.error(`[DEBUGGER] Groq error details:`, error);
@@ -143,7 +150,7 @@ export const transcribeAudio = async (source: string): Promise<string> => {
   // 3. Try Gemini 2.5 Flash
   try {
     console.log(`[DEBUGGER] Attempting Gemini fallback...`);
-    return await transcribeWithGemini(source);
+    return await transcribeWithGemini(source, language);
   } catch (error: any) {
     console.error(`[DEBUGGER] FATAL: All transcription providers failed.`);
     console.error(`[DEBUGGER] Gemini error details:`, error.message);

@@ -280,7 +280,8 @@ export const sendMeetingProcessedEmail = async (
   email: string,
   userName: string,
   meetingTitle: string,
-  summary: string
+  summary: string,
+  highlights?: string[]
 ): Promise<boolean> => {
   try {
     const mailOptions = {
@@ -304,6 +305,13 @@ export const sendMeetingProcessedEmail = async (
                 ${summary.substring(0, 200)}${summary.length > 200 ? '...' : ''}
               </p>
             </div>
+            ${highlights && highlights.length > 0 ? `
+            <div style="background: #fffef6; border-left: 4px solid #ffb86b; padding: 12px; margin-bottom: 18px; border-radius: 4px;">
+              <p style="color: #333; font-size: 13px; margin: 0;"><strong>Highlights:</strong></p>
+              <ul style="color: #666; font-size: 13px; margin: 8px 0 0 16px;">
+                ${highlights.slice(0,5).map(h => `<li>${h}</li>`).join('')}
+              </ul>
+            </div>` : ''}
             <p style="color: #666; font-size: 12px; line-height: 1.6;">
               Open the Memovoice app to view the full transcript and summary.
             </p>

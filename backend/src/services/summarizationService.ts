@@ -18,21 +18,56 @@ export interface SummaryResult {
   summary: string;
   actionItems: string[];
   keyDecisions: string[];
+  riskSignals: string[];
 }
 
-const SYSTEM_PROMPT = `You are an expert meeting summarizer. Analyze the meeting transcript and extract:
+export interface SummaryPreferences {
+  language?: string;
+  strategicAlerts?: {
+    decisions?: boolean;
+    actions?: boolean;
+    risks?: boolean;
+  };
+}
+
+const LANGUAGE_LABELS: Record<string, string> = {
+  en: 'English',
+  es: 'Spanish',
+  fr: 'French',
+  de: 'German',
+  zh: 'Chinese',
+};
+
+const buildSystemPrompt = (preferences?: SummaryPreferences): string => {
+  const languageCode = preferences?.language || 'en';
+  const languageLabel = LANGUAGE_LABELS[languageCode] || `the user's preferred language (${languageCode})`;
+  const strategicAlerts = preferences?.strategicAlerts || {};
+  const focusAreas = [
+    strategicAlerts.decisions !== false ? 'key decisions' : null,
+    strategicAlerts.actions !== false ? 'action items' : null,
+    strategicAlerts.risks !== false ? 'risks or blockers' : null,
+  ].filter(Boolean).join(', ') || 'key decisions, action items, and risks';
+
+  return `You are an expert meeting summarizer. Analyze the meeting transcript and extract:
 1. A concise title (max 10 words)
 2. A 2-4 sentence summary
 3. Action items as an array (each starting with a verb, include owner if mentioned)
 4. Key decisions as an array
+5. Risk signals as an array capturing blockers, concerns, or risks mentioned in the meeting
+
+Write all human-readable text in ${languageLabel}.
+Prioritize the following alert categories in the summary output and keep them especially clear: ${focusAreas}.
+If a category is not mentioned, return an empty array for it.
 
 Respond with ONLY valid JSON in this exact format, no markdown, no preamble:
 {
   "title": "string",
   "summary": "string",
   "actionItems": ["string"],
-  "keyDecisions": ["string"]
+  "keyDecisions": ["string"],
+  "riskSignals": ["string"]
 }`;
+};
 
 const parseJsonResult = (text: string): SummaryResult => {
   try {
@@ -45,16 +80,53 @@ const parseJsonResult = (text: string): SummaryResult => {
   }
 };
 
+
+
 /**
- * PHASE 1: Claude (Anthropic) - Highest Quality
+ * Triple Fallback Summarization: Claude > Groq > Gemini
  */
-const summarizeWithClaude = async (rawTranscript: string): Promise<SummaryResult> => {
+export const summarizeTranscript = async (rawTranscript: string, preferences?: SummaryPreferences): Promise<SummaryResult> => {
+  console.log(`[DEBUGGER] Summarization: Initiating analysis for transcript (${rawTranscript.length} chars)`);
+
+  const systemPrompt = buildSystemPrompt(preferences);
+
+  // 1. Claude
+  try {
+    const result = await summarizeWithClaudeWithPrompt(rawTranscript, systemPrompt);
+    console.log(`[DEBUGGER] Summarization: SUCCESS via Claude. Title: "${result.title}"`);
+    return result;
+  } catch (error: any) {
+    console.log(`[DEBUGGER] WARNING: Claude summarization failed, trying Groq...`);
+  }
+
+  // 2. Groq (Llama 3.3 70b)
+  try {
+    const result = await summarizeWithGroqWithPrompt(rawTranscript, systemPrompt);
+    console.log(`[DEBUGGER] Summarization: SUCCESS via Groq. Title: "${result.title}"`);
+    return result;
+  } catch (error: any) {
+    console.log(`[DEBUGGER] WARNING: Groq summarization failed (${error.message || 'Unknown Error'}), trying Gemini...`);
+  }
+
+  // 3. Gemini
+  try {
+    const result = await summarizeWithGeminiWithPrompt(rawTranscript, systemPrompt);
+    console.log(`[DEBUGGER] Summarization: SUCCESS via Gemini. Title: "${result.title}"`);
+    return result;
+  } catch (error: any) {
+    console.error(`[DEBUGGER] Gemini summarization failed: ${error.message || 'Unknown Error'}`);
+    console.error(`[DEBUGGER] FATAL: All summarization providers failed.`);
+    throw new Error('AI pipeline exhausted all providers for summary.');
+  }
+};
+
+const summarizeWithClaudeWithPrompt = async (rawTranscript: string, systemPrompt: string): Promise<SummaryResult> => {
   logger.info({ transcriptLength: rawTranscript.length }, 'Attempting summarization with Claude');
 
   const message = await anthropic.messages.create({
     model: 'claude-3-5-sonnet-20240620',
     max_tokens: 1024,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt,
     messages: [
       {
         role: 'user',
@@ -71,16 +143,13 @@ const summarizeWithClaude = async (rawTranscript: string): Promise<SummaryResult
   return parseJsonResult(textContent.text);
 };
 
-/**
- * PHASE 2: Llama 3.3 70b (Groq) - Best Speed/Balance
- */
-const summarizeWithGroq = async (rawTranscript: string): Promise<SummaryResult> => {
+const summarizeWithGroqWithPrompt = async (rawTranscript: string, systemPrompt: string): Promise<SummaryResult> => {
   logger.info({ transcriptLength: rawTranscript.length }, 'Attempting summarization with Groq (Llama 3.3)');
 
   try {
     const chatCompletion = await groq.chat.completions.create({
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: `Summarize this:\n\n${rawTranscript}` },
       ],
       model: 'llama-3.3-70b-versatile',
@@ -94,10 +163,7 @@ const summarizeWithGroq = async (rawTranscript: string): Promise<SummaryResult> 
   }
 };
 
-/**
- * PHASE 3: Gemini 1.5 Flash (Google) - High Reliability
- */
-const summarizeWithGemini = async (rawTranscript: string): Promise<SummaryResult> => {
+const summarizeWithGeminiWithPrompt = async (rawTranscript: string, systemPrompt: string): Promise<SummaryResult> => {
   logger.info({ transcriptLength: rawTranscript.length }, 'Attempting summarization with Gemini (fallback)');
 
   try {
@@ -105,8 +171,7 @@ const summarizeWithGemini = async (rawTranscript: string): Promise<SummaryResult
       model: 'gemini-2.5-flash-lite',
     });
 
-    // Combining system prompt into the main prompt for maximum reliability
-    const fullPrompt = `${SYSTEM_PROMPT}\n\nMeeting Transcript to analyze:\n${rawTranscript}`;
+    const fullPrompt = `${systemPrompt}\n\nMeeting Transcript to analyze:\n${rawTranscript}`;
     const result = await model.generateContent(fullPrompt);
 
     const text = result.response.text();
@@ -114,41 +179,5 @@ const summarizeWithGemini = async (rawTranscript: string): Promise<SummaryResult
   } catch (error: any) {
     console.error(`[DEBUGGER] Gemini Summarization Internal Error:`, error.message);
     throw error;
-  }
-};
-
-/**
- * Triple Fallback Summarization: Claude > Groq > Gemini
- */
-export const summarizeTranscript = async (rawTranscript: string): Promise<SummaryResult> => {
-  console.log(`[DEBUGGER] Summarization: Initiating analysis for transcript (${rawTranscript.length} chars)`);
-
-  // 1. Claude
-  try {
-    const result = await summarizeWithClaude(rawTranscript);
-    console.log(`[DEBUGGER] Summarization: SUCCESS via Claude. Title: "${result.title}"`);
-    return result;
-  } catch (error: any) {
-    console.log(`[DEBUGGER] WARNING: Claude summarization failed, trying Groq...`);
-  }
-
-  // 2. Groq (Llama 3.3 70b)
-  try {
-    const result = await summarizeWithGroq(rawTranscript);
-    console.log(`[DEBUGGER] Summarization: SUCCESS via Groq. Title: "${result.title}"`);
-    return result;
-  } catch (error: any) {
-    console.log(`[DEBUGGER] WARNING: Groq summarization failed (${error.message || 'Unknown Error'}), trying Gemini...`);
-  }
-
-  // 3. Gemini
-  try {
-    const result = await summarizeWithGemini(rawTranscript);
-    console.log(`[DEBUGGER] Summarization: SUCCESS via Gemini. Title: "${result.title}"`);
-    return result;
-  } catch (error: any) {
-    console.error(`[DEBUGGER] Gemini summarization failed: ${error.message || 'Unknown Error'}`);
-    console.error(`[DEBUGGER] FATAL: All summarization providers failed.`);
-    throw new Error('AI pipeline exhausted all providers for summary.');
   }
 };

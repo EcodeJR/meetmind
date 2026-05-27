@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useRouter, useFocusEffect } from 'expo-router';
 import apiClient from '@/services/api';
+import { paymentService } from '@/services/paymentService';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -14,6 +15,7 @@ type UserData = {
   subscription: {
     plan: string;
     status: string;
+    cancelAtPeriodEnd?: boolean;
   };
   meetingCount: number;
   storageUsedMB: number;
@@ -26,6 +28,7 @@ export default function SettingsScreen() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [queueCount, setQueueCount] = useState(0);
   const [queueSyncing, setQueueSyncing] = useState(false);
+  const [subscriptionSyncing, setSubscriptionSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const userInitial = (user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress?.charAt(0) || '?').toUpperCase();
 
@@ -131,6 +134,32 @@ export default function SettingsScreen() {
     } finally {
       setQueueSyncing(false);
     }
+  };
+
+  const handleCancelSubscription = () => {
+    Alert.alert(
+      'Cancel Subscription',
+      'Are you sure you want to cancel your Pro plan? You will retain access until the end of your billing period.',
+      [
+        { text: 'Keep Plan', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setSubscriptionSyncing(true);
+              await paymentService.cancelSubscription();
+              Alert.alert('Cancelled', 'Your subscription has been cancelled and will not auto-renew.');
+              await fetchUserData();
+            } catch (error: any) {
+              Alert.alert('Error', error.response?.data?.message || 'Failed to cancel subscription.');
+            } finally {
+              setSubscriptionSyncing(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -288,6 +317,36 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {userData?.subscription?.plan === 'pro' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>SUBSCRIPTION</Text>
+            <View style={styles.subscriptionCard}>
+              <View style={styles.subscriptionCopy}>
+                <Text style={styles.subscriptionTitle}>Manage Pro Plan</Text>
+                <Text style={styles.subscriptionText}>
+                  Cancel any time. Pro access remains active until the end of the billing cycle.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.cancelSubscriptionButton,
+                  (subscriptionSyncing || userData?.subscription?.cancelAtPeriodEnd) && { opacity: 0.6 },
+                ]}
+                onPress={handleCancelSubscription}
+                disabled={subscriptionSyncing || Boolean(userData?.subscription?.cancelAtPeriodEnd)}
+              >
+                {subscriptionSyncing ? (
+                  <ActivityIndicator size="small" color={theme.colors.error} />
+                ) : (
+                  <Text style={styles.cancelSubscriptionButtonText}>
+                    {userData?.subscription?.cancelAtPeriodEnd ? 'Cancels at period end' : 'Cancel subscription'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {isSignedIn && (
           <View style={styles.footerButtons}>
             <TouchableOpacity
@@ -372,6 +431,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.outlineVariant,
     overflow: 'hidden',
+  },
+  subscriptionCard: {
+    backgroundColor: theme.colors.surfaceContainerLowest,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.md,
+  },
+  subscriptionCopy: {
+    gap: 4,
+  },
+  subscriptionTitle: {
+    fontFamily: 'Manrope-Bold',
+    fontSize: 16,
+    color: theme.colors.primary,
+  },
+  subscriptionText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    lineHeight: 20,
+    color: theme.colors.onSurfaceVariant,
+  },
+  cancelSubscriptionButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.error,
+    backgroundColor: 'rgba(211, 47, 47, 0.06)',
+  },
+  cancelSubscriptionButtonText: {
+    fontFamily: 'Manrope-SemiBold',
+    fontSize: 13,
+    color: theme.colors.error,
   },
   userRow: {
     flexDirection: 'row',

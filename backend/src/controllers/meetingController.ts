@@ -13,6 +13,29 @@ import fs from 'fs';
 import { FREE_PLAN_LIMITS } from '../utils/constants';
 import { releaseMonthlyMeetingSlot } from '../middleware/subscriptionMiddleware';
 
+const getStrategicAlertHighlights = (summary: {
+  actionItems?: string[];
+  keyDecisions?: string[];
+  riskSignals?: string[];
+}, preferences?: any): string[] => {
+  const alertPreferences = preferences?.strategicAlerts || {};
+  const highlights: string[] = [];
+
+  if (alertPreferences.decisions !== false) {
+    highlights.push(...(summary.keyDecisions || []));
+  }
+
+  if (alertPreferences.actions !== false) {
+    highlights.push(...(summary.actionItems || []));
+  }
+
+  if (alertPreferences.risks !== false) {
+    highlights.push(...(summary.riskSignals || []));
+  }
+
+  return highlights.slice(0, 5);
+};
+
 const isProUser = (user: any): boolean => {
   return Boolean(user && user.subscription?.plan === 'pro' && user.subscription?.status === 'active');
 };
@@ -235,7 +258,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       try {
         console.log(`[DEBUGGER] BACKGROUND: Transcribing meeting ${processingMeeting._id}`);
         console.log(`[DEBUGGER] BACKGROUND: Using Cloudinary URL: ${uploadResult.url}`);
-        const transcript = await transcribeAudio(uploadResult.url);
+        const transcript = await transcribeAudio(uploadResult.url, user.preferences?.language);
 
         if (!transcript || transcript.trim().length === 0) {
           throw new Error('Empty transcript');
@@ -244,7 +267,10 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         console.log(`[DEBUGGER] BACKGROUND: Transcription complete (${processingMeeting._id}), length: ${transcript.length} chars`);
 
         console.log(`[DEBUGGER] BACKGROUND: Summarizing meeting ${processingMeeting._id}`);
-        const aiAnalysis = await summarizeTranscript(transcript);
+        const aiAnalysis = await summarizeTranscript(transcript, {
+          language: user.preferences?.language,
+          strategicAlerts: user.preferences?.strategicAlerts,
+        });
 
         console.log(`[DEBUGGER] BACKGROUND: AI summary complete (${processingMeeting._id})`);
 
@@ -253,6 +279,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         processingMeeting.summary = aiAnalysis.summary;
         processingMeeting.actionItems = aiAnalysis.actionItems;
         processingMeeting.keyDecisions = aiAnalysis.keyDecisions;
+        processingMeeting.language = user.preferences?.language || 'en';
         processingMeeting.title = title || aiAnalysis.title || processingMeeting.title;
         processingMeeting.status = 'completed';
         processingMeeting.processingCompletedAt = new Date();
@@ -263,14 +290,27 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         await user.save();
 
         // Send success notifications
+        const strategicHighlights = getStrategicAlertHighlights(aiAnalysis, user.preferences);
+
         if (canSendPush && user.expoPushToken) {
-          sendMeetingProcessedNotification(user.expoPushToken, processingMeeting.title || 'Meeting', aiAnalysis.summary).catch(err => {
+          sendMeetingProcessedNotification(
+            user.expoPushToken,
+            processingMeeting.title || 'Meeting',
+            aiAnalysis.summary,
+            strategicHighlights
+          ).catch(err => {
             logger.warn({ error: err }, 'Failed to send meeting processed notification');
           });
         }
 
         if (canSendEmails) {
-          await sendMeetingProcessedEmail(user.email, user.clerkId, processingMeeting.title || 'Meeting', aiAnalysis.summary).catch(err => {
+          await sendMeetingProcessedEmail(
+            user.email,
+            user.clerkId,
+            processingMeeting.title || 'Meeting',
+            aiAnalysis.summary,
+            strategicHighlights
+          ).catch(err => {
             logger.warn({ error: err }, 'Failed to send meeting processed email');
           });
         }

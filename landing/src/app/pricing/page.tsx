@@ -11,7 +11,7 @@ export default function PricingPage() {
   return (
     <main className="min-h-screen bg-white">
       <Navbar />
-      <div className="pt-32 pb-20">
+      <div className="pt-0 pb-0">
         {/* <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-16">
           <h1 className="text-4xl lg:text-6xl font-black text-black mb-6 tracking-[-0.06em]">Simple, transparent pricing</h1>
           <p className="text-black/60 text-xl max-w-2xl mx-auto">
@@ -21,7 +21,7 @@ export default function PricingPage() {
         <Pricing />
         
         {/* Additional Pricing Context */}
-        <section className="py-20 bg-white mt-20 border-t border-black/10">
+        <section className="py-20 bg-white mt-10 border-t border-black/10">
           <div className="max-w-4xl mx-auto px-4 grid md:grid-cols-2 gap-12">
             <div>
               <h3 className="text-xl font-bold text-black mb-4">Enterprise grade security</h3>

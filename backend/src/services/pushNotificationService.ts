@@ -90,7 +90,8 @@ export const sendTranscriptionStartedNotification = async (
 export const sendMeetingProcessedNotification = async (
   expoPushToken: string,
   meetingTitle: string,
-  summaryPreview?: string
+  summaryPreview?: string,
+  highlights?: string[]
 ): Promise<boolean> => {
   try {
     if (!expoPushToken) {
@@ -107,6 +108,7 @@ export const sendMeetingProcessedNotification = async (
         type: 'meeting_processed',
         meetingTitle,
         summaryPreview: summaryPreview?.substring(0, 100),
+        highlights: highlights ? highlights.slice(0, 5) : undefined,
         timestamp: new Date().toISOString(),
       },
       badge: 1,
