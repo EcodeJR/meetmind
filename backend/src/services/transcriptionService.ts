@@ -2,6 +2,8 @@ import { OpenAI } from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -12,6 +14,68 @@ const groq = new Groq({
 });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+
+type ProviderName = 'openai' | 'groq' | 'gemini';
+
+const TRANSIENT_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ESOCKET',
+  'EAI_AGAIN',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+]);
+
+const isRetryableTranscriptionError = (error: any): boolean => {
+  const status = Number(error?.status || error?.statusCode || error?.response?.status);
+  const code = String(error?.code || error?.error?.code || '').toUpperCase();
+  const message = String(error?.message || error?.error?.message || '').toLowerCase();
+
+  if (TRANSIENT_ERROR_CODES.has(code)) {
+    return true;
+  }
+
+  if (status >= 500 && status < 600) {
+    return true;
+  }
+
+  if (status === 429) {
+    // Hard quota errors should fail over immediately; rate-limit style throttling can retry once.
+    return !message.includes('insufficient_quota') && !message.includes('billing');
+  }
+
+  return (
+    message.includes('timeout') ||
+    message.includes('temporar') ||
+    message.includes('service unavailable') ||
+    message.includes('high demand') ||
+    message.includes('overloaded')
+  );
+};
+
+const retryTranscriptionOnce = async <T>(
+  provider: ProviderName,
+  action: () => Promise<T>
+): Promise<T> => {
+  try {
+    return await action();
+  } catch (error: any) {
+    if (!isRetryableTranscriptionError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      {
+        provider,
+        code: error?.code || error?.error?.code,
+        status: error?.status || error?.statusCode || error?.response?.status,
+      },
+      'Transient transcription failure detected; retrying once'
+    );
+
+    return await action();
+  }
+};
 
 /**
  * Helper: Download audio from URL if needed
@@ -55,6 +119,17 @@ const downloadAudioBuffer = async (url: string): Promise<Buffer> => {
   return Buffer.from(arrayBuffer);
 };
 
+const writeAudioBufferToTempFile = async (source: string): Promise<string> => {
+  const audioBuffer = source.startsWith('http')
+    ? await downloadAudioBuffer(source)
+    : fs.readFileSync(source);
+
+  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'meetmind-audio-'));
+  const tempFilePath = path.join(tempDirectory, 'audio.mp4');
+  fs.writeFileSync(tempFilePath, audioBuffer);
+  return tempFilePath;
+};
+
 /**
  * PHASE 1: OpenAI Whisper (Primary)
  */
@@ -66,7 +141,7 @@ const transcribeWithWhisper = async (source: string, language?: string): Promise
     model: 'whisper-1',
   };
   if (language) opts.language = language;
-  const response = await openai.audio.transcriptions.create(opts as any);
+  const response = await retryTranscriptionOnce('openai', () => openai.audio.transcriptions.create(opts as any));
   console.log(`[DEBUGGER] Whisper Transcription: SUCCESS. Received ${response.text.split(' ').length} words.`);
   return response.text;
 };
@@ -76,20 +151,24 @@ const transcribeWithWhisper = async (source: string, language?: string): Promise
  */
 const transcribeWithGroq = async (source: string, language?: string): Promise<string> => {
   console.log(`[DEBUGGER] Groq Transcription Fallback: Starting with source: ${source}`);
-  
-  const stream = await getAudioStream(source);
+
+  const tempFilePath = await writeAudioBufferToTempFile(source);
   const opts: any = {
-    file: stream,
+    file: fs.createReadStream(tempFilePath),
     model: 'whisper-large-v3',
     response_format: 'text',
   };
   if (language) opts.language = language;
 
-  const response = await groq.audio.transcriptions.create(opts as any);
-  
-  const transcript = typeof response === 'string' ? response : (response as any).text;
-  console.log(`[DEBUGGER] Groq Transcription Fallback: SUCCESS. Received ${transcript.split(' ').length} words.`);
-  return transcript;
+  try {
+    const response = await retryTranscriptionOnce('groq', () => groq.audio.transcriptions.create(opts as any));
+
+    const transcript = typeof response === 'string' ? response : (response as any).text;
+    console.log(`[DEBUGGER] Groq Transcription Fallback: SUCCESS. Received ${transcript.split(' ').length} words.`);
+    return transcript;
+  } finally {
+    fs.rmSync(path.dirname(tempFilePath), { recursive: true, force: true });
+  }
 };
 
 /**
@@ -112,10 +191,10 @@ const transcribeWithGemini = async (source: string, language?: string): Promise<
 
   const instruction = `Transcribe this audio meeting verbatim${language ? ` in language: ${language}` : ''}. Do not add any preamble or summary, just the text spoken.`;
 
-  const result = await model.generateContent([
+  const result = await retryTranscriptionOnce('gemini', () => model.generateContent([
     instruction,
     audioPart,
-  ] as any);
+  ] as any));
 
   const transcript = result.response.text();
   console.log(`[DEBUGGER] Gemini Transcription Fallback: SUCCESS. Received ${transcript.split(' ').length} words.`);

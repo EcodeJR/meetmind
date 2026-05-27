@@ -11,6 +11,7 @@ const gmailUser = process.env.GMAIL_USER?.trim();
 const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, '');
 const resendApiKey = process.env.RESEND_API_KEY?.trim();
 const resendFromEmail = process.env.RESEND_FROM_EMAIL?.trim() || 'Memovoice <onboarding@resend.dev>';
+const hasProductionResendSender = resendFromEmail.includes('@') && !resendFromEmail.includes('onboarding@resend.dev');
 
 // Log what we're reading at startup for debugging
 logger.info({
@@ -18,6 +19,8 @@ logger.info({
   gmailUserValue: gmailUser ? `${gmailUser.substring(0, 3)}...` : 'NOT SET',
   gmailAppPasswordSet: !!gmailAppPassword,
   resendApiKeySet: !!resendApiKey,
+  resendFromEmail,
+  hasProductionResendSender,
 }, 'Email service startup - checking credentials');
 
 // Initialize Resend client if API key is provided
@@ -128,6 +131,15 @@ const sendEmailWithRetry = async (
     return { success: false };
   }
 
+  // Prefer Resend in production when a verified sender is configured.
+  if (resendClient && hasProductionResendSender) {
+    const resendResult = await sendEmailWithResend(mailOptions);
+    if (resendResult.success) {
+      return resendResult;
+    }
+    logger.warn('Primary Resend send failed; falling back to Gmail SMTP if available');
+  }
+
   // Try primary transporter (Gmail SMTP port 587)
   if (transporter) {
     try {
@@ -183,7 +195,7 @@ const sendEmailWithRetry = async (
 export const sendWelcomeEmail = async (email: string, firstName: string): Promise<boolean> => {
   try {
     const mailOptions = {
-      from: gmailUser,
+      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
       to: email,
       subject: 'Welcome to Memovoice - Professional Intelligence Platform',
       html: `
@@ -239,7 +251,7 @@ export const sendMeetingStartedEmail = async (
 ): Promise<boolean> => {
   try {
     const mailOptions = {
-      from: gmailUser,
+      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
       to: email,
       subject: 'Meeting Recording Started - Memovoice',
       html: `
@@ -285,7 +297,7 @@ export const sendMeetingProcessedEmail = async (
 ): Promise<boolean> => {
   try {
     const mailOptions = {
-      from: gmailUser,
+      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
       to: email,
       subject: `Meeting Summary Ready - ${meetingTitle}`,
       html: `
@@ -343,7 +355,7 @@ export const sendMeetingFailedEmail = async (
 ): Promise<boolean> => {
   try {
     const mailOptions = {
-      from: gmailUser,
+      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
       to: email,
       subject: `Meeting Processing Failed - ${meetingTitle}`,
       html: `
@@ -392,7 +404,7 @@ export const sendSubscriptionUpgradeEmail = async (
 ): Promise<boolean> => {
   try {
     const mailOptions = {
-      from: gmailUser,
+      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
       to: email,
       subject: 'Welcome to Memovoice Pro - Premium Features Unlocked',
       html: `
@@ -443,7 +455,7 @@ export const sendCustomEmail = async (
 ): Promise<boolean> => {
   try {
     const mailOptions = {
-      from: gmailUser,
+      from: resendClient && hasProductionResendSender ? resendFromEmail : gmailUser,
       to: email,
       subject: subject,
       html: html,
