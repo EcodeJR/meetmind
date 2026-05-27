@@ -1,3 +1,4 @@
+import axios from 'axios';
 import nodemailer from 'nodemailer';
 import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 import { Resend } from 'resend';
@@ -14,6 +15,8 @@ const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, '');
 const resendApiKey = process.env.RESEND_API_KEY?.trim();
 const resendFromEmail = process.env.RESEND_FROM_EMAIL?.trim() || 'Memovoice <onboarding@resend.dev>';
 const hasProductionResendSender = resendFromEmail.includes('@') && !resendFromEmail.includes('onboarding@resend.dev');
+const emailGatewayUrl = process.env.EMAIL_GATEWAY_URL?.trim();
+const emailGatewaySecret = process.env.EMAIL_GATEWAY_SECRET?.trim();
 
 // Log what we're reading at startup for debugging
 logger.info({
@@ -23,6 +26,7 @@ logger.info({
   resendApiKeySet: !!resendApiKey,
   resendFromEmail,
   hasProductionResendSender,
+  emailGatewayUrlSet: !!emailGatewayUrl,
 }, 'Email service startup - checking credentials');
 
 // Initialize Resend client if API key is provided
@@ -133,15 +137,64 @@ const sendEmailWithResend = async (
   }
 };
 
+const sendEmailWithGateway = async (
+  mailOptions: nodemailer.SendMailOptions
+): Promise<{ success: boolean; messageId?: string; error?: any }> => {
+  if (!emailGatewayUrl || !emailGatewaySecret) {
+    return { success: false };
+  }
+
+  try {
+    const response = await axios.post(
+      emailGatewayUrl,
+      {
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        html: mailOptions.html,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-email-gateway-secret': emailGatewaySecret,
+        },
+        timeout: 15000,
+      }
+    );
+
+    if (response.data?.success) {
+      logger.info({ to: mailOptions.to, messageId: response.data?.messageId }, 'Email sent via Vercel gateway');
+      return { success: true, messageId: response.data?.messageId };
+    }
+
+    logger.warn({ response: response.data }, 'Vercel email gateway returned a non-success response');
+    return { success: false, error: response.data };
+  } catch (error: any) {
+    logger.warn(
+      { error: error?.message ?? error, status: error?.response?.status },
+      'Vercel email gateway request failed'
+    );
+    return { success: false, error };
+  }
+};
+
 /**
  * Send email with automatic fallback retry (Gmail SMTP → Resend API)
  */
 const sendEmailWithRetry = async (
   mailOptions: nodemailer.SendMailOptions
 ): Promise<{ success: boolean; messageId?: string }> => {
-  if (!transporter && !fallbackTransporter && !resendClient) {
-    logger.warn('No email transporters available (Gmail SMTP and Resend API not configured)');
+  if (!transporter && !fallbackTransporter && !resendClient && !emailGatewayUrl) {
+    logger.warn('No email transporters available (Gmail SMTP, Resend API, and Vercel gateway not configured)');
     return { success: false };
+  }
+
+  if (emailGatewayUrl && emailGatewaySecret) {
+    const gatewayResult = await sendEmailWithGateway(mailOptions);
+    if (gatewayResult.success) {
+      return gatewayResult;
+    }
+
+    logger.warn('Primary Vercel email gateway failed; falling back to local transports');
   }
 
   // Prefer Resend in production when a verified sender is configured.

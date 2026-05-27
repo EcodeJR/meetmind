@@ -155,7 +155,7 @@ export default function CommunicationsPage() {
     try {
       const endpoint = target === 'single'
         ? '/api/email/send-single'
-        : `${RAILWAY_API}/admin/email/broadcast`;
+        : '/api/email/send-broadcast';
       const payload = target === 'single'
         ? { to: singleEmail, subject, html: body, name: singleEmail.split('@')[0] }
         : { target, subject, html: body };
@@ -164,13 +164,10 @@ export default function CommunicationsPage() {
         'Content-Type': 'application/json',
       };
 
-      if (target !== 'single' && ADMIN_KEY) {
-        headers['x-admin-key'] = ADMIN_KEY;
-      }
-
       const res = await fetch(endpoint, {
         method: 'POST',
         headers,
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
