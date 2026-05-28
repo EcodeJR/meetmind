@@ -443,14 +443,29 @@ export const getSystemHealth = async (_req: Request, res: Response): Promise<voi
 
       const usage = await cloudinary.api.usage();
       if (usage && usage.storage) {
-        const usedBytes = usage.storage.usage || 0;
-        const limitBytes = usage.storage.limit || 26843545600; // 25 GB default
+        const storage = usage.storage as any;
 
-        // Convert to GB with 3 decimal precision
+        // Cloudinary may return different field names depending on SDK/version or API response shape.
+        // Try several common variants for used and limit bytes.
+        const usedBytesRaw = storage.usage ?? storage.used_bytes ?? storage.bytes ?? storage.storage_bytes ?? storage.usage_in_bytes ?? storage.used ?? storage.max_bytes_used ?? 0;
+        const limitBytesRaw = storage.limit ?? storage.max_bytes ?? storage.limit_bytes ?? storage.quota_bytes ?? storage.max ?? 26843545600; // default 25GB
+
+        const usedBytes = Number(usedBytesRaw) || 0;
+        const limitBytes = Number(limitBytesRaw) || 26843545600;
+
+        // Convert to GB with 3 decimal precision for used and 1 decimal for limit
         const usedGB = Math.round((usedBytes / (1024 * 1024 * 1024)) * 1000) / 1000;
         const limitGB = Math.round((limitBytes / (1024 * 1024 * 1024)) * 10) / 10;
 
         cloudinaryStorageUsed = `${usedGB} GB / ${limitGB} GB`;
+
+        // If we have a non-empty storage object but still parsed default values,
+        // log the raw storage object to help debug in environments where
+        // Cloudinary usage returns unexpected shapes or network errors.
+        if (usedBytes === 0 && limitBytes === 26843545600 && Object.keys(storage || {}).length > 0) {
+          // eslint-disable-next-line no-console
+          console.warn('Admin: Cloudinary usage returned unexpected storage shape:', JSON.stringify(storage));
+        }
       }
     } catch (err) {
       logger.error({ err }, 'Admin: Failed to fetch Cloudinary usage metrics');
