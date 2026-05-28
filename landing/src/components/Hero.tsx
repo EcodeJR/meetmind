@@ -82,7 +82,7 @@ const Hero = () => {
 
             <div className="flex flex-col sm:flex-row gap-4 mb-8">
               <a
-                href="https://github.com/EcodeJR/meetmind/releases/download/v1.0.0/memovoice.apk"
+                href="https://github.com/EcodeJR/meetmind/releases/download/v1.1.0/Memovoice0.apk"
                 className="inline-flex items-center justify-center gap-3 bg-black text-white px-8 py-4 rounded-full font-bold text-base hover:bg-black/90 transition-all active:scale-95 uppercase tracking-[0.2em] w-full sm:w-auto"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
