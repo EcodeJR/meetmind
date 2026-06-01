@@ -927,7 +927,9 @@ export default function HomeScreen() {
               />
             ))}
           </View>
-          <Text style={styles.footerHint}>POWERED BY ANTHROPIC & WHISPER</Text>
+          <TouchableOpacity onPress={() => router.push('/settings/about')}>
+            <Text style={styles.footerHint}>POWERED BY AI</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
