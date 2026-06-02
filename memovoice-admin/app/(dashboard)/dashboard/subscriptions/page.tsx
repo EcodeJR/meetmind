@@ -23,6 +23,21 @@ interface Subscription {
   nextBilling: string;
 }
 
+interface PaymentTransaction {
+  id: string;
+  userName: string;
+  userEmail: string;
+  provider: 'flutterwave' | 'paddle';
+  status: 'initiated' | 'pending' | 'successful' | 'failed';
+  amount: number;
+  currency: string;
+  reference: string;
+  errorMessage?: string | null;
+  eventType?: string | null;
+  createdAt: string;
+  processedAt?: string | null;
+}
+
 const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
@@ -58,6 +73,7 @@ const FAILED_USERS = [
 export default function SubscriptionsPage() {
   const [revenue, setRevenue] = useState<RevenueData>(MOCK_REVENUE);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [manualEmail, setManualEmail] = useState('');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -110,6 +126,12 @@ export default function SubscriptionsPage() {
         } else {
           throw new Error('Failed to load users');
         }
+
+        const txRes = await fetch(`${RAILWAY_API}/admin/payments/transactions?limit=12`, { headers: { 'x-admin-key': ADMIN_KEY } });
+        if (txRes.ok) {
+          const txData = await txRes.json();
+          setTransactions(txData.transactions || []);
+        }
       } catch (err) {
         console.error('Failed to load subscription metrics:', err);
         // Fail gracefully back to mock data
@@ -118,6 +140,7 @@ export default function SubscriptionsPage() {
           { id: '4', name: 'James Wilson', email: 'j.wilson@corp.net', date: '2024-01-20' },
           { id: '5', name: 'Robert Kim', email: 'r.kim@studio.io', date: '2024-01-19' },
         ]);
+        setTransactions([]);
       } finally {
         setLoading(false);
       }
@@ -208,6 +231,18 @@ export default function SubscriptionsPage() {
     return name.trim().split(/\s+/).map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
   };
 
+  const formatTransactionTime = (value: string) =>
+    new Date(value).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+  const getTransactionBadge = (status: PaymentTransaction['status']) => {
+    switch (status) {
+      case 'successful': return 'bg-emerald-100 text-emerald-700';
+      case 'failed': return 'bg-error-container text-error';
+      case 'pending': return 'bg-amber-100 text-amber-700';
+      default: return 'bg-surface-variant text-outline';
+    }
+  };
+
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Toast */}
@@ -232,7 +267,7 @@ export default function SubscriptionsPage() {
             className={`${span || ''} ${dark ? 'bg-[#2f3038] text-white' : 'bg-surface-container-lowest border border-white/80'} p-5 rounded-2xl soft-shadow card-hover`}
           >
             <div className={`w-9 h-9 rounded-xl ${dark ? 'bg-primary/20' : bg} ${dark ? 'text-[#dfe0ff]' : color} flex items-center justify-center mb-3`}>
-              <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{icon}</span>
+              <span className="material-symbols-outlined text-[18px]">{icon}</span>
             </div>
             <p className={`text-[11px] uppercase tracking-wider mb-0.5 ${dark ? 'text-[#757686]' : 'text-outline'}`}>{label}</p>
             <p className={`text-[22px] font-bold font-geist ${dark ? 'text-white' : 'text-on-surface'}`}>{value}</p>
@@ -252,22 +287,40 @@ export default function SubscriptionsPage() {
             <span className="flex items-center gap-1.5 text-outline"><span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" /> Flutterwave</span>
           </div>
         </div>
-        <div className="h-[200px] flex items-end justify-between gap-3 px-2">
+        <div className="h-[220px] flex items-end justify-between gap-3 px-2">
           {revenue.chartData.map(({ month, revenue: rev }) => (
             <div key={month} className="flex-1 flex flex-col items-center gap-2">
               <span className="text-[11px] text-outline">{formatCurrency(rev)}</span>
-              <div className="w-full flex gap-1 items-end">
-                <div
-                  className="flex-1 bg-primary rounded-t-lg hover:brightness-110 transition-all cursor-pointer"
-                  style={{ height: `${(rev * 0.67 / maxRevenue) * 160}px` }}
-                  title={`Paddle: ${formatCurrency(rev * 0.67)}`}
-                />
-                <div
-                  className="flex-1 bg-emerald-500 rounded-t-lg hover:brightness-110 transition-all cursor-pointer"
-                  style={{ height: `${(rev * 0.33 / maxRevenue) * 160}px` }}
-                  title={`Flutterwave: ${formatCurrency(rev * 0.33)}`}
-                />
-              </div>
+              <svg className="w-full h-[160px] overflow-visible" viewBox="0 0 40 170" aria-hidden>
+                {(() => {
+                  const paddleHeight = Math.max(6, (rev * 0.67 / maxRevenue) * 160);
+                  const flutterHeight = Math.max(6, (rev * 0.33 / maxRevenue) * 160);
+                  return (
+                    <>
+                      <rect
+                        x="8"
+                        y={160 - paddleHeight}
+                        width="10"
+                        height={paddleHeight}
+                        rx="4"
+                        fill="#7C3AED"
+                      >
+                        <title>{`Paddle: ${formatCurrency(rev * 0.67)}`}</title>
+                      </rect>
+                      <rect
+                        x="22"
+                        y={160 - flutterHeight}
+                        width="10"
+                        height={flutterHeight}
+                        rx="4"
+                        fill="#10B981"
+                      >
+                        <title>{`Flutterwave: ${formatCurrency(rev * 0.33)}`}</title>
+                      </rect>
+                    </>
+                  );
+                })()}
+              </svg>
               <span className="text-[11px] text-outline">{month}</span>
             </div>
           ))}
@@ -317,7 +370,7 @@ export default function SubscriptionsPage() {
                   <td className="px-6 py-4">
                     <div className="flex justify-end gap-1 text-outline">
                       <button className="p-1.5 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors" title="Edit">
-                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>edit</span>
+                        <span className="material-symbols-outlined text-[18px]">edit</span>
                       </button>
                       {sub.status === 'failed' && (
                         <button
@@ -325,11 +378,64 @@ export default function SubscriptionsPage() {
                           className="p-1.5 hover:text-[#914800] hover:bg-[#ffdcc6]/30 rounded-lg transition-colors"
                           title="Send payment reminder"
                         >
-                          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>mail</span>
+                          <span className="material-symbols-outlined text-[18px]">mail</span>
                         </button>
                       )}
                     </div>
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Payment Transaction Audit */}
+      <div className="bg-surface-container-lowest rounded-2xl soft-shadow border border-white/80 overflow-hidden">
+        <div className="px-6 py-5 border-b border-outline-variant flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-[18px] font-semibold font-geist text-on-surface">Payment Transaction Audit</h3>
+            <p className="text-[12px] text-outline mt-0.5">Shows which user started the payment, whether it succeeded or failed, and the failure reason when available.</p>
+          </div>
+          <div className="text-[12px] text-outline text-right">
+            <div>{revenue.failedPayments} failed attempts</div>
+            <div>{transactions.filter(tx => tx.status === 'successful').length} successful in view</div>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-surface-container-low border-b border-outline-variant">
+                {['User', 'Provider', 'Status', 'Amount', 'Reason / Event', 'Time'].map((h) => (
+                  <th key={h} className="px-6 py-3 text-[12px] font-bold text-outline uppercase tracking-wider">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-outline-variant/50">
+              {transactions.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-outline text-[13px]">No payment transactions available yet.</td>
+                </tr>
+              ) : transactions.map(tx => (
+                <tr key={tx.id} className="hover:bg-surface-container-low transition-colors">
+                  <td className="px-6 py-4">
+                    <div>
+                      <p className="font-medium text-on-surface text-[13px]">{tx.userName}</p>
+                      <p className="text-outline text-[11px]">{tx.userEmail}</p>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-[13px] text-on-surface-variant capitalize">{tx.provider}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase ${getTransactionBadge(tx.status)}`}>{tx.status}</span>
+                  </td>
+                  <td className="px-6 py-4 text-[13px] font-medium text-on-surface">{tx.currency} {tx.amount.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-[13px] text-on-surface-variant max-w-[320px]">
+                    <div className="flex flex-col gap-1">
+                      <span className="truncate">{tx.errorMessage || tx.eventType || 'Initiated by user'}</span>
+                      <span className="text-[11px] text-outline truncate">{tx.reference}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-[13px] text-outline">{formatTransactionTime(tx.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -343,7 +449,7 @@ export default function SubscriptionsPage() {
         <div className="bg-surface-container-lowest rounded-2xl p-6 soft-shadow border border-white/80">
           <div className="flex items-center gap-3 mb-5">
             <div className="w-10 h-10 rounded-xl bg-error-container flex items-center justify-center text-error">
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>error</span>
+              <span className="material-symbols-outlined text-[20px]">error</span>
             </div>
             <div>
               <h3 className="text-[16px] font-semibold font-geist text-on-surface">Failed Payments</h3>
@@ -353,7 +459,7 @@ export default function SubscriptionsPage() {
           <div className="space-y-3">
             {failedPaymentsList.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-outline text-[13px]">
-                <span className="material-symbols-outlined mb-2" style={{ fontSize: '32px' }}>check_circle</span>
+                <span className="material-symbols-outlined mb-2 text-[32px]">check_circle</span>
                 All payments are up to date!
               </div>
             ) : (
@@ -367,7 +473,7 @@ export default function SubscriptionsPage() {
                     onClick={() => handleSendReminder(u.email)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-error text-on-error text-[12px] font-medium hover:brightness-110 transition-all"
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>mail</span>
+                    <span className="material-symbols-outlined text-[15px]">mail</span>
                     Remind
                   </button>
                 </div>
@@ -380,7 +486,7 @@ export default function SubscriptionsPage() {
         <div className="bg-surface-container-lowest rounded-2xl p-6 soft-shadow border border-white/80">
           <div className="flex items-center gap-3 mb-5">
             <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>stars</span>
+              <span className="material-symbols-outlined text-[20px]">stars</span>
             </div>
             <div>
               <h3 className="text-[16px] font-semibold font-geist text-on-surface">Grant Pro Access</h3>
@@ -403,7 +509,7 @@ export default function SubscriptionsPage() {
               disabled={!manualEmail}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[14px] font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>stars</span>
+              <span className="material-symbols-outlined text-[18px]">stars</span>
               Grant Pro Access
             </button>
             <p className="text-[11px] text-outline text-center">This will activate Pro features immediately for the user</p>

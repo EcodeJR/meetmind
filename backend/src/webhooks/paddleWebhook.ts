@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { paddle } from '../services/paymentService';
 import { User } from '../models/User';
 import { WebhookEvent } from '../models/WebhookEvent';
+import { PaymentTransaction } from '../models/PaymentTransaction';
 import { logger } from '../utils/logger';
 
 // We need to extend the Request type or assume req.rawBody exists if we use a custom middleware
@@ -63,6 +64,7 @@ export const paddleWebhookHandler = async (req: RawRequest, res: Response): Prom
     const eventData = event.data;
     const customData = eventData.custom_data;
     const userId = customData?.userId;
+    const reference = customData?.reference || eventData.transaction_id || eventData.id || null;
 
     if (event.event_type === 'subscription.created') {
       if (userId) {
@@ -75,6 +77,23 @@ export const paddleWebhookHandler = async (req: RawRequest, res: Response): Prom
           user.subscription.paddleCustomerId = eventData.customer_id;
           await user.save();
         }
+      }
+
+      if (reference) {
+        await PaymentTransaction.findOneAndUpdate(
+          { provider: 'paddle', reference },
+          {
+            status: 'successful',
+            providerReference: eventData.id?.toString() || null,
+            transactionId: eventData.transaction_id?.toString() || eventData.id?.toString() || null,
+            eventType: event.event_type,
+            processedAt: new Date(),
+            errorCode: null,
+            errorMessage: null,
+            metadata: eventData,
+          },
+          { new: true }
+        ).catch(err => logger.warn({ err, reference }, 'Failed to update Paddle transaction log'));
       }
     } else if (event.event_type === 'subscription.updated') {
       if (userId) {
@@ -114,6 +133,39 @@ export const paddleWebhookHandler = async (req: RawRequest, res: Response): Prom
           user.subscription.provider = 'paddle';
           await user.save();
         }
+      }
+      if (reference) {
+        await PaymentTransaction.findOneAndUpdate(
+          { provider: 'paddle', reference },
+          {
+            status: 'successful',
+            providerReference: eventData.id?.toString() || null,
+            transactionId: eventData.transaction_id?.toString() || eventData.id?.toString() || null,
+            eventType: event.event_type,
+            processedAt: new Date(),
+            errorCode: null,
+            errorMessage: null,
+            metadata: eventData,
+          },
+          { new: true }
+        ).catch(err => logger.warn({ err, reference }, 'Failed to update Paddle transaction log'));
+      }
+    } else if (event.event_type === 'transaction.payment_failed' || event.event_type === 'subscription.payment_failed') {
+      if (reference) {
+        await PaymentTransaction.findOneAndUpdate(
+          { provider: 'paddle', reference },
+          {
+            status: 'failed',
+            providerReference: eventData.id?.toString() || null,
+            transactionId: eventData.transaction_id?.toString() || eventData.id?.toString() || null,
+            eventType: event.event_type,
+            processedAt: new Date(),
+            errorCode: eventData.status || eventData.reason || null,
+            errorMessage: eventData.error?.message || eventData.status || eventData.reason || 'Payment failed',
+            metadata: eventData,
+          },
+          { new: true }
+        ).catch(err => logger.warn({ err, reference }, 'Failed to update Paddle failed transaction log'));
       }
     }
 

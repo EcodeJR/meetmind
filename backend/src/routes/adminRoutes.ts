@@ -13,6 +13,7 @@ import {
   getAdminMeetings,
   deleteMeeting,
   getAdminRevenue,
+  getPaymentTransactions,
   getSystemHealth,
   notifyNewUser,
   getAdminContacts,
@@ -48,6 +49,7 @@ router.delete('/meetings/:id', deleteMeeting);
 
 // Revenue & System
 router.get('/revenue', getAdminRevenue);
+router.get('/payments/transactions', getPaymentTransactions);
 router.get('/system', getSystemHealth);
 
 // Internal notification trigger

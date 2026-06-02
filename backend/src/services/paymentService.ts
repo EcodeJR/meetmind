@@ -45,11 +45,12 @@ export const initializeFlutterwavePayment = async (
   userId: string,
   email: string,
   amount: number,
-  currency: string
+  currency: string,
+  reference: string
 ) => {
   try {
     const payload = {
-      tx_ref: `tx-${userId}-${Date.now()}`,
+      tx_ref: reference,
       amount,
       currency,
       redirect_url: 'memovoice://payment-success',
@@ -125,7 +126,7 @@ export const cancelFlutterwaveSubscription = async (subscriptionId: string) => {
 /**
  * Initializes a Paddle Checkout session
  */
-export const initializePaddleCheckout = async (userId: string, email: string, priceId: string) => {
+export const initializePaddleCheckout = async (userId: string, email: string, priceId: string, reference: string) => {
   try {
     if (!paddle) {
       throw new Error('Paddle is not configured on this server');
@@ -139,7 +140,8 @@ export const initializePaddleCheckout = async (userId: string, email: string, pr
         email
       },
       customData: {
-        userId
+        userId,
+        reference,
       }
     };
 

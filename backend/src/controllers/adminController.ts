@@ -5,6 +5,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import Groq from 'groq-sdk';
 // Removed unused GoogleGenerativeAI import
 import { User } from '../models/User';
+import { PaymentTransaction } from '../models/PaymentTransaction';
 import { Meeting } from '../models/Meeting';
 import { logger } from '../utils/logger';
 import { Contact } from '../models/Contact';
@@ -387,10 +388,71 @@ export const getAdminRevenue = async (_req: Request, res: Response): Promise<voi
       chartData,
       activeSubscriptions: proUsers,
       cancelledThisMonth: await User.countDocuments({ 'subscription.status': 'cancelled' }),
-      failedPayments: await User.countDocuments({ 'subscription.status': 'past_due' }),
+      failedPayments: await PaymentTransaction.countDocuments({ status: 'failed' }),
     });
   } catch (error) {
     logger.error({ error }, 'Admin: getAdminRevenue failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// GET /admin/payments/transactions
+export const getPaymentTransactions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
+    const provider = req.query.provider as string | undefined;
+    const status = req.query.status as string | undefined;
+
+    const query: Record<string, any> = {};
+    if (provider && provider !== 'all') query.provider = provider;
+    if (status && status !== 'all') query.status = status;
+
+    const [transactions, total] = await Promise.all([
+      PaymentTransaction.find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('userId', 'email name clerkId')
+        .lean(),
+      PaymentTransaction.countDocuments(query),
+    ]);
+
+    const formatted = transactions.map((tx: any) => ({
+      id: tx._id.toString(),
+      userId: tx.userId?._id?.toString() || tx.userId?.toString() || null,
+      userName: tx.userId?.name || tx.userName || (tx.userEmail ? tx.userEmail.split('@')[0] : 'Unknown'),
+      userEmail: tx.userId?.email || tx.userEmail || 'Unknown',
+      clerkId: tx.userId?.clerkId || tx.clerkId || null,
+      provider: tx.provider,
+      status: tx.status,
+      amount: tx.amount,
+      currency: tx.currency,
+      reference: tx.reference,
+      providerReference: tx.providerReference || null,
+      transactionId: tx.transactionId || null,
+      errorCode: tx.errorCode || null,
+      errorMessage: tx.errorMessage || null,
+      eventType: tx.eventType || null,
+      createdAt: tx.createdAt,
+      processedAt: tx.processedAt || null,
+      metadata: tx.metadata || null,
+    }));
+
+    res.json({
+      transactions: formatted,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      summary: {
+        initiated: await PaymentTransaction.countDocuments({ status: 'initiated' }),
+        pending: await PaymentTransaction.countDocuments({ status: 'pending' }),
+        successful: await PaymentTransaction.countDocuments({ status: 'successful' }),
+        failed: await PaymentTransaction.countDocuments({ status: 'failed' }),
+      },
+    });
+  } catch (error) {
+    logger.error({ error }, 'Admin: getPaymentTransactions failed');
     res.status(500).json({ error: 'Internal server error' });
   }
 };

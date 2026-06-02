@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validateRequest';
 import { User } from '../models/User';
+import { PaymentTransaction } from '../models/PaymentTransaction';
 import { sendSuccess, sendError } from '../utils/responses';
 import { FREE_PLAN_LIMITS } from '../utils/constants';
 import axios from 'axios';
@@ -82,6 +83,10 @@ const verifyFlutterwaveSchema = z.object({
   transactionId: z.string().min(1),
 });
 
+const buildTransactionReference = (userId: string, provider: 'flutterwave' | 'paddle') => {
+  return `${provider}-${userId}-${Date.now()}`;
+};
+
 const detectCountryFromRequest = async (req: AuthRequest): Promise<string | null> => {
   const countryHeader = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'];
   if (typeof countryHeader === 'string' && countryHeader.length === 2) {
@@ -144,6 +149,9 @@ router.get('/plan-details', async (req: AuthRequest, res: Response): Promise<voi
 });
 
 router.post('/initialize', validateRequest(initializePaymentSchema), async (req: AuthRequest, res: Response): Promise<void> => {
+  let transactionReference = '';
+  let pricing: PricingPayload | null = null;
+  let provider: 'flutterwave' | 'paddle' | null = null;
   try {
     const clerkId = req.clerkId;
     const { email } = req.body;
@@ -168,12 +176,35 @@ router.post('/initialize', validateRequest(initializePaymentSchema), async (req:
     }
 
     // Determine provider based on user country
-    const pricing = getPricingPayload(user.country);
-    const provider = pricing.provider;
+    pricing = getPricingPayload(user.country);
+    provider = pricing.provider;
     let paymentUrl = '';
+    transactionReference = buildTransactionReference(user._id.toString(), provider);
+
+    await PaymentTransaction.create({
+      userId: user._id,
+      clerkId,
+      userEmail: user.email,
+      userName: user.name || undefined,
+      provider,
+      status: 'initiated',
+      amount: pricing.amount,
+      currency: pricing.currency,
+      reference: transactionReference,
+      metadata: {
+        country: user.country || null,
+        providerSource: 'initialize-payment',
+      },
+    });
 
     if (provider === 'flutterwave') {
-      const result = await initializeFlutterwavePayment(user._id.toString(), email || user.email, pricing.amount, pricing.currency);
+      const result = await initializeFlutterwavePayment(
+        user._id.toString(),
+        email || user.email,
+        pricing.amount,
+        pricing.currency,
+        transactionReference
+      );
       paymentUrl = result.paymentUrl;
     } else {
       if (!isPaddleConfigured) {
@@ -182,13 +213,47 @@ router.post('/initialize', validateRequest(initializePaymentSchema), async (req:
       }
 
       const priceId = process.env.PADDLE_PRO_PRICE_ID as string;
-      const result = await initializePaddleCheckout(user._id.toString(), email || user.email, priceId);
+      const result = await initializePaddleCheckout(
+        user._id.toString(),
+        email || user.email,
+        priceId,
+        transactionReference
+      );
       paymentUrl = result.paymentUrl || '';
     }
 
     sendSuccess(res, { provider, paymentUrl, plan: pricing });
   } catch (error) {
     logger.error({ error }, 'Failed to initialize payment');
+    const clerkId = req.clerkId;
+    const user = await User.findOne({ clerkId });
+    if (user) {
+      const fallbackProvider = provider || getPaymentProvider(user.country);
+      const fallbackPricing = pricing || getPricingPayload(user.country);
+      const failureReference = transactionReference || `${fallbackProvider}-${user._id.toString()}-${Date.now()}-init-failed`;
+
+      await PaymentTransaction.findOneAndUpdate(
+        { reference: failureReference },
+        {
+          userId: user._id,
+          clerkId,
+          userEmail: user.email,
+          userName: user.name || undefined,
+          provider: fallbackProvider,
+          status: 'failed',
+          amount: fallbackPricing.amount,
+          currency: fallbackPricing.currency,
+          reference: failureReference,
+          errorMessage: error instanceof Error ? error.message : 'Payment initialization failed',
+          eventType: 'initialize_failed',
+          processedAt: new Date(),
+          metadata: {
+            country: user.country || null,
+          },
+        },
+        { upsert: true, new: true }
+      ).catch(() => undefined);
+    }
     sendError(res, 'PAYMENT_INIT_FAILED', 'Could not initialize payment', 500);
   }
 });

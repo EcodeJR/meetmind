@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { User } from '../models/User';
 import { WebhookEvent } from '../models/WebhookEvent';
+import { PaymentTransaction } from '../models/PaymentTransaction';
 import { logger } from '../utils/logger';
 
 export const flutterwaveWebhookHandler = async (req: Request, res: Response): Promise<void> => {
@@ -52,6 +53,7 @@ export const flutterwaveWebhookHandler = async (req: Request, res: Response): Pr
     // Handle events
     if (event.event === 'charge.completed' && event.data.status === 'successful') {
       const userId = event.data.meta?.userId;
+      const reference = event.data.tx_ref || event.data.meta?.reference || null;
       if (userId) {
         const user = await User.findById(userId);
         if (user) {
@@ -62,6 +64,23 @@ export const flutterwaveWebhookHandler = async (req: Request, res: Response): Pr
           await user.save();
           logger.info({ userId }, 'User upgraded via Flutterwave charge.completed');
         }
+      }
+
+      if (reference) {
+        await PaymentTransaction.findOneAndUpdate(
+          { provider: 'flutterwave', reference },
+          {
+            status: 'successful',
+            providerReference: event.data.id?.toString() || null,
+            transactionId: event.data.id?.toString() || null,
+            eventType: event.event,
+            processedAt: new Date(),
+            errorCode: null,
+            errorMessage: null,
+            metadata: event.data,
+          },
+          { new: true }
+        ).catch(err => logger.warn({ err, reference }, 'Failed to update Flutterwave transaction log'));
       }
     } else if (event.event === 'subscription.cancelled') {
       // Find user by customer email or subscription ID
@@ -78,6 +97,24 @@ export const flutterwaveWebhookHandler = async (req: Request, res: Response): Pr
         user.subscription.provider = 'flutterwave';
         user.subscription.flutterwaveSubscriptionId = event.data.id?.toString();
         await user.save();
+      }
+    } else if (event.event === 'charge.failed' || event.event === 'payment.failed') {
+      const reference = event.data?.tx_ref || event.data?.meta?.reference || event.data?.reference || null;
+      if (reference) {
+        await PaymentTransaction.findOneAndUpdate(
+          { provider: 'flutterwave', reference },
+          {
+            status: 'failed',
+            providerReference: event.data?.id?.toString() || null,
+            transactionId: event.data?.id?.toString() || null,
+            eventType: event.event,
+            processedAt: new Date(),
+            errorCode: event.data?.status || event.data?.gateway_response || null,
+            errorMessage: event.data?.processor_response || event.data?.gateway_response || event.data?.status || 'Payment failed',
+            metadata: event.data,
+          },
+          { new: true }
+        ).catch(err => logger.warn({ err, reference }, 'Failed to update Flutterwave failed transaction log'));
       }
     }
 
