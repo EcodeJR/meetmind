@@ -82,6 +82,7 @@ export default function MeetingDetailScreen() {
   const [newTag, setNewTag] = useState('');
   const [saving, setSaving] = useState(false);
   const [exportMenuVisible, setExportMenuVisible] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const router = useRouter();
 
   const fetchMeeting = async () => {
@@ -96,6 +97,24 @@ export default function MeetingDetailScreen() {
       console.error('Error fetching meeting details:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    if (!meeting) return;
+    setIsRetrying(true);
+    try {
+      const response = await apiClient.post(`/meetings/${meeting._id}/retry`);
+      const updatedMeeting = response.data.data?.meeting || response.data.meeting || null;
+      if (updatedMeeting) {
+        setMeeting(updatedMeeting);
+      }
+      Alert.alert('Retry Started', 'The meeting has been re-queued for transcription.');
+    } catch (error: any) {
+      const msg = error?.response?.data?.error?.message || 'Could not restart transcription.';
+      Alert.alert('Retry Failed', msg);
+    } finally {
+      setIsRetrying(false);
     }
   };
 
@@ -742,7 +761,29 @@ export default function MeetingDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>EXECUTIVE SUMMARY</Text>
             <View style={styles.summaryCard}>
-              {isProcessing ? (
+              {meeting.status === 'failed' ? (
+                <View style={styles.processingPanel}>
+                  <View style={styles.processingHeaderRow}>
+                    <Ionicons name="warning-outline" size={20} color={theme.colors.error} />
+                    <Text style={[styles.processingHeaderTitle, { color: theme.colors.error }]}>Transcription Failed</Text>
+                  </View>
+                  <Text style={styles.processingErrorText}>{meeting.processingError || 'An unknown error occurred during processing.'}</Text>
+                  <TouchableOpacity 
+                    style={[styles.actionButton, { marginTop: 16, backgroundColor: theme.colors.error, alignSelf: 'flex-start' }]} 
+                    onPress={handleRetry} 
+                    disabled={isRetrying}
+                  >
+                    {isRetrying ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="refresh-outline" size={16} color="#fff" />
+                        <Text style={[styles.actionButtonText, { color: '#fff' }]}>Retry Transcription</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : isProcessing ? (
                 <View style={styles.processingPanel}>
                   <View style={styles.processingHeaderRow}>
                     <ActivityIndicator size="small" color={theme.colors.secondary} />
@@ -775,9 +816,6 @@ export default function MeetingDetailScreen() {
                   <Text style={styles.processingChecklist}>1. Uploading audio</Text>
                   <Text style={styles.processingChecklist}>2. Transcribing speech</Text>
                   <Text style={styles.processingChecklist}>3. Generating summary + action items</Text>
-                  {meeting.status === 'failed' && meeting.processingError ? (
-                    <Text style={styles.processingErrorText}>Last error: {meeting.processingError}</Text>
-                  ) : null}
                 </View>
               ) : (
                 <Text style={styles.summaryText}>{meeting.summary}</Text>
