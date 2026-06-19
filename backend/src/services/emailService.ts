@@ -479,11 +479,18 @@ export const sendCustomEmail = async (
   html: string
 ): Promise<boolean> => {
   try {
+    // Check if the input already contains structural HTML tags
+    const hasHtmlTags = /<p\b|<div\b|<h[1-6]\b|<ul\b|<ol\b|<table\b/i.test(html);
+    
+    // If it's plain text, apply standard template typography and preserve line breaks
+    const formattedHtml = hasHtmlTags 
+      ? html 
+      : `<div style="color: #4b5563; font-size: 14px; line-height: 1.7; white-space: pre-wrap;">${html}</div>`;
+
     return await sendTemplatedEmail(email, subject, {
       preheader: subject,
       title: subject,
-      intro: 'You have a new message from Memovoice.',
-      sections: [{ rawHtml: html }],
+      sections: [{ rawHtml: formattedHtml }],
     });
   } catch (error) {
     logger.error({ error, email }, 'Failed to send custom email');
