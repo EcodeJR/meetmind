@@ -77,36 +77,7 @@ const retryTranscriptionOnce = async <T>(
   }
 };
 
-/**
- * Helper: Download audio from URL if needed
- */
-const getAudioStream = async (source: string) => {
-  // If it's a URL, download it
-  if (source.startsWith('http')) {
-    console.log(`[DEBUGGER] Attempting to download audio from URL: ${source.substring(0, 100)}...`);
-    try {
-      const response = await fetch(source, { timeout: 30000 } as any);
-      console.log(`[DEBUGGER] Fetch response status: ${response.status}`);
-      if (!response.ok) {
-        console.error(`[DEBUGGER] HTTP error: ${response.status} ${response.statusText}`);
-        throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
-      }
-      console.log(`[DEBUGGER] Successfully downloaded audio stream`);
-      return response.body as any;
-    } catch (error: any) {
-      console.error(`[DEBUGGER] Download failed:`, error.message);
-      throw error;
-    }
-  }
-  // Otherwise treat as local file path
-  console.log(`[DEBUGGER] Attempting to read local file: ${source}`);
-  if (!fs.existsSync(source)) {
-    console.error(`[DEBUGGER] File not found: ${source}`);
-    throw new Error(`File not found: ${source}`);
-  }
-  console.log(`[DEBUGGER] Successfully opened local file stream`);
-  return fs.createReadStream(source);
-};
+
 
 /**
  * Helper: Download audio from URL as buffer
@@ -124,26 +95,39 @@ const writeAudioBufferToTempFile = async (source: string): Promise<string> => {
     ? await downloadAudioBuffer(source)
     : fs.readFileSync(source);
 
+  // Preserve the original file extension so APIs can detect the MIME type correctly.
+  // Defaulting to 'm4a' (the most common mobile recording format) when undetectable.
+  const rawExt = source.split('?')[0].split('.').pop()?.toLowerCase().trim() || '';
+  const ext = rawExt && rawExt.length <= 5 ? rawExt : 'm4a';
+
   const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'meetmind-audio-'));
-  const tempFilePath = path.join(tempDirectory, 'audio.mp4');
+  const tempFilePath = path.join(tempDirectory, `audio.${ext}`);
   fs.writeFileSync(tempFilePath, audioBuffer);
   return tempFilePath;
 };
 
 /**
  * PHASE 1: OpenAI Whisper (Primary)
+ * Downloads audio to a temp file first so the OpenAI SDK receives a proper
+ * Node.js fs.ReadStream rather than a Web ReadableStream (from fetch), which
+ * the SDK cannot consume reliably.
  */
 const transcribeWithWhisper = async (source: string, language?: string): Promise<string> => {
   console.log(`[DEBUGGER] Whisper Transcription: Starting with source: ${source}`);
-  const stream = await getAudioStream(source);
-  const opts: any = {
-    file: stream as any,
-    model: 'whisper-1',
-  };
-  if (language) opts.language = language;
-  const response = await retryTranscriptionOnce('openai', () => openai.audio.transcriptions.create(opts as any));
-  console.log(`[DEBUGGER] Whisper Transcription: SUCCESS. Received ${response.text.split(' ').length} words.`);
-  return response.text;
+  const tempFilePath = await writeAudioBufferToTempFile(source);
+  try {
+    const opts: any = {
+      file: fs.createReadStream(tempFilePath),
+      model: 'whisper-1',
+    };
+    if (language) opts.language = language;
+    const response = await retryTranscriptionOnce('openai', () => openai.audio.transcriptions.create(opts as any));
+    console.log(`[DEBUGGER] Whisper Transcription: SUCCESS. Received ${response.text.split(' ').length} words.`);
+    return response.text;
+  } finally {
+    // Always clean up the temp directory even if transcription throws
+    fs.rmSync(path.dirname(tempFilePath), { recursive: true, force: true });
+  }
 };
 
 /**

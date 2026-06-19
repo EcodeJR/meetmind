@@ -14,6 +14,7 @@ import userRoutes from './routes/userRoutes';
 import meetingRoutes from './routes/meetingRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import { flutterwaveWebhookHandler } from './webhooks/flutterwaveWebhook';
+import { clerkWebhookHandler } from './webhooks/clerkWebhook';
 import { paddleWebhookHandler } from './webhooks/paddleWebhook';
 import adminRoutes from './routes/adminRoutes';
 import publicRoutes from './routes/publicRoutes';
@@ -97,6 +98,13 @@ app.post(
   webhookRateLimiter,
   express.raw({ type: 'application/json' }),
   paddleWebhookHandler
+);
+// Clerk user lifecycle webhook — primary mechanism for reliable user creation in MongoDB
+app.post(
+  '/webhooks/clerk',
+  webhookRateLimiter,
+  express.raw({ type: 'application/json' }),
+  clerkWebhookHandler
 );
 
 app.use(express.json());

@@ -16,6 +16,7 @@ import {
   deleteMeeting,
   searchMeetings,
   deleteAllMeetings,
+  retryMeetingTranscription,
 } from '../controllers/meetingController';
 
 const router = Router();
@@ -39,14 +40,27 @@ const storage = multer.diskStorage({
   },
 });
 
+// Accepted MIME types for audio uploads.
+// Note: Some Android OS versions (especially older ones) tag .m4a files with
+// 'video/mp4' instead of 'audio/*', so we explicitly allow it here to avoid
+// silently rejecting valid recordings from older app versions.
+const ALLOWED_AUDIO_MIME_TYPES = new Set([
+  'audio/m4a', 'audio/x-m4a', 'audio/mp4', 'audio/mpeg', 'audio/mp3',
+  'audio/ogg', 'audio/wav', 'audio/webm', 'audio/aac',
+  'audio/flac', 'audio/x-wav', 'audio/3gpp',
+  'video/mp4', // Android alias for .m4a recordings
+]);
+
 const upload = multer({
   storage,
   limits: {
     fileSize: Number(process.env.MAX_AUDIO_UPLOAD_MB || 50) * 1024 * 1024,
   },
   fileFilter: (_req: any, file: any, cb: any) => {
-    if (!file.mimetype || !file.mimetype.startsWith('audio/')) {
-      cb(new Error('Only audio files are allowed'));
+    const isAudio = file.mimetype && file.mimetype.startsWith('audio/');
+    const isAllowed = file.mimetype && ALLOWED_AUDIO_MIME_TYPES.has(file.mimetype);
+    if (!isAudio && !isAllowed) {
+      cb(new Error(`File type '${file.mimetype}' is not accepted. Only audio files are allowed.`));
       return;
     }
     cb(null, true);
@@ -65,6 +79,8 @@ router.get('/', getMeetings);
 router.get('/search', searchMeetings);
 router.get('/:id', getMeetingById);
 router.patch('/:id', updateMeeting);
+// Retry a failed meeting transcription using the stored Cloudinary audio URL
+router.post('/:id/retry', retryMeetingTranscription);
 router.delete('/:id', deleteMeeting);
 router.delete('/', deleteAllMeetings);
 

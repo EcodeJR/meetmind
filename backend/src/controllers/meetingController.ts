@@ -634,3 +634,161 @@ export const deleteAllMeetings = async (req: AuthRequest, res: Response): Promis
     sendError(res, 'DELETE_ALL_ERROR', 'Failed to purge data', 500);
   }
 };
+
+/**
+ * POST /api/meetings/:id/retry
+ *
+ * Re-queues a failed meeting for transcription using its existing Cloudinary audio URL.
+ * This is the primary recovery path for:
+ *   - Meetings uploaded by older app versions that had transcription bugs
+ *   - Meetings that failed due to transient API errors
+ *
+ * The response is immediate (202 Accepted) and processing happens in the background,
+ * identical to the original processMeeting flow.
+ */
+export const retryMeetingTranscription = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const clerkId = req.clerkId;
+
+  try {
+    if (!clerkId) {
+      sendError(res, 'AUTH_ERROR', 'Authentication required', 401);
+      return;
+    }
+
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+      return;
+    }
+
+    // Find meeting — no historyFilter so we can retry even older meetings outside retention window
+    const meeting = await Meeting.findOne({ _id: id, userId: user._id });
+    if (!meeting) {
+      sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
+      return;
+    }
+
+    if (meeting.status !== 'failed') {
+      sendError(res, 'INVALID_STATUS', `Only failed meetings can be retried (current status: ${meeting.status})`, 400);
+      return;
+    }
+
+    if (!meeting.audioUrl) {
+      sendError(res, 'NO_AUDIO_URL', 'No audio URL found for this meeting — the audio file may have been deleted and cannot be recovered.', 400);
+      return;
+    }
+
+    // Reset meeting state so the UI shows progress immediately
+    meeting.status = 'processing';
+    meeting.processingError = undefined;
+    meeting.rawTranscript = '';
+    meeting.summary = '';
+    meeting.actionItems = [];
+    meeting.keyDecisions = [];
+    meeting.processingStartedAt = new Date();
+    meeting.processingCompletedAt = undefined;
+    await meeting.save();
+
+    logger.info({ clerkId, meetingId: meeting._id }, 'Meeting retry requested — starting background transcription');
+
+    // Respond immediately so the client can update its UI
+    sendSuccess(res, { meeting }, 202);
+
+    // Background processing (same pattern as processMeeting)
+    (async () => {
+      const canSendEmails = user.preferences?.notificationsEnabled ?? true;
+      const canSendPush = user.preferences?.pushNotificationsEnabled ?? true;
+
+      if (canSendPush && user.expoPushToken) {
+        sendTranscriptionStartedNotification(user.expoPushToken, meeting.title || 'Meeting').catch(() => {});
+      }
+
+      try {
+        console.log(`[RETRY] Retrying transcription for meeting ${meeting._id} using URL: ${meeting.audioUrl}`);
+
+        const transcript = await transcribeAudio(meeting.audioUrl, user.preferences?.language);
+
+        if (!transcript || transcript.trim().length === 0) {
+          throw new Error('Transcription returned an empty result');
+        }
+
+        console.log(`[RETRY] Transcription successful (${meeting._id}), length: ${transcript.length} chars`);
+
+        const aiAnalysis = await summarizeTranscript(transcript, {
+          language: user.preferences?.language,
+          strategicAlerts: user.preferences?.strategicAlerts,
+        });
+
+        console.log(`[RETRY] AI summary complete (${meeting._id})`);
+
+        meeting.rawTranscript = transcript;
+        meeting.summary = aiAnalysis.summary;
+        meeting.actionItems = aiAnalysis.actionItems;
+        meeting.keyDecisions = aiAnalysis.keyDecisions;
+        meeting.language = user.preferences?.language || 'en';
+        // Preserve original title unless AI generated a better one and no title existed
+        if (!meeting.title || meeting.title === 'New Recording' || meeting.title === 'Untitled Meeting') {
+          meeting.title = aiAnalysis.title || meeting.title;
+        }
+        meeting.status = 'completed';
+        meeting.processingCompletedAt = new Date();
+        await meeting.save();
+
+        // Only increment meetingCount on the first successful completion
+        // (it was not incremented when the meeting originally failed)
+        user.meetingCount = (user.meetingCount || 0) + 1;
+        await user.save();
+
+        const strategicHighlights = getStrategicAlertHighlights(aiAnalysis, user.preferences);
+
+        if (canSendPush && user.expoPushToken) {
+          sendMeetingProcessedNotification(
+            user.expoPushToken,
+            meeting.title || 'Meeting',
+            aiAnalysis.summary,
+            strategicHighlights
+          ).catch(() => {});
+        }
+
+        if (canSendEmails) {
+          sendMeetingProcessedEmail(
+            user.email,
+            user.clerkId,
+            meeting.title || 'Meeting',
+            aiAnalysis.summary,
+            strategicHighlights
+          ).catch(() => {});
+        }
+
+        console.log(`[RETRY] Successfully completed retry for meeting ${meeting._id}`);
+      } catch (retryError: any) {
+        console.error(`[RETRY] Retry failed for meeting ${meeting._id}:`, retryError.message);
+
+        meeting.status = 'failed';
+        meeting.processingError = String(retryError.message || retryError);
+        meeting.processingCompletedAt = new Date();
+        await meeting.save().catch(() => {});
+
+        if (canSendPush && user.expoPushToken) {
+          sendMeetingFailedNotification(
+            user.expoPushToken,
+            meeting.title || 'Meeting',
+            retryError.message || 'Retry transcription failed'
+          ).catch(() => {});
+        }
+        if (canSendEmails) {
+          sendMeetingFailedEmail(
+            user.email,
+            user.clerkId,
+            meeting.title || 'Meeting',
+            retryError.message || 'Retry transcription failed'
+          ).catch(() => {});
+        }
+      }
+    })();
+  } catch (error: any) {
+    logger.error({ error, clerkId, meetingId: id }, 'Error initiating meeting retry');
+    sendError(res, 'RETRY_ERROR', 'Failed to initiate retry', 500);
+  }
+};
