@@ -772,14 +772,19 @@ export const getAdminWaitlist = async (req: Request, res: Response): Promise<voi
 // POST /admin/waitlist/email
 export const sendWaitlistEmail = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, subject, html } = req.body;
+    const { email, firstName, subject, html } = req.body;
     if (!email || !subject || !html) {
       res.status(400).json({ error: 'Email, subject, and html content are required' });
       return;
     }
 
-    const sent = await sendCustomEmail(email, subject, html);
-    
+    const name = firstName || email.split('@')[0] || 'there';
+    const personalizedHtml = html
+      .replace(/{name}/g, name)
+      .replace(/{greetingsName}/gi, name);
+
+    const sent = await sendCustomEmail(email, name, subject, personalizedHtml);
+
     // Log it
     await EmailLog.create({
       type: 'Single',
@@ -857,9 +862,11 @@ export const sendBroadcastEmail = async (req: Request, res: Response): Promise<v
 
     for (const user of users) {
       try {
-        const userName = user.name || user.email.split('@')[0];
-        const personalizedHtml = html.replace(/{name}/g, userName);
-        const sent = await sendCustomEmail(user.email, subject, personalizedHtml);
+        const greetingName = user.name || user.email.split('@')[0] || 'there';
+        const personalizedHtml = html
+          .replace(/{name}/g, greetingName)
+          .replace(/{greetingsName}/gi, greetingName);
+        const sent = await sendCustomEmail(user.email, greetingName, subject, personalizedHtml);
         if (sent) {
           sentCount++;
         } else {
@@ -906,10 +913,12 @@ export const sendSingleEmail = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    const userName = to.split('@')[0];
-    const personalizedHtml = html.replace(/{name}/g, userName);
-    const sent = await sendCustomEmail(to, subject, personalizedHtml);
-    
+    const userName = to.split('@')[0] || 'there';
+    const personalizedHtml = html
+      .replace(/{name}/g, userName)
+      .replace(/{greetingsName}/gi, userName);
+    const sent = await sendCustomEmail(to, userName, subject, personalizedHtml);
+
     await EmailLog.create({
       type: 'Single',
       recipients: to,

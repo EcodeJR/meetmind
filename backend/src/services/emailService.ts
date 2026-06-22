@@ -67,7 +67,7 @@ if (transporter) {
         `Email service verification failed (code: ${(error as any).code}, errno: ${(error as any).errno}). Emails will not be sent.`
       );
       logger.info(
-          'TROUBLESHOOTING: Verify GMAIL_USER and GMAIL_APP_PASSWORD are set correctly. Gmail requires App Password (not account password) if 2FA is enabled. This service now forces IPv4 to avoid Render ENETUNREACH on IPv6 SMTP resolution.'
+        'TROUBLESHOOTING: Verify GMAIL_USER and GMAIL_APP_PASSWORD are set correctly. Gmail requires App Password (not account password) if 2FA is enabled. This service now forces IPv4 to avoid Render ENETUNREACH on IPv6 SMTP resolution.'
       );
 
       if (fallbackTransporter) {
@@ -322,14 +322,14 @@ export const sendWelcomeEmail = async (email: string, firstName: string): Promis
  */
 export const sendMeetingStartedEmail = async (
   email: string,
-  userName: string,
+  firstName: string,
   meetingTitle?: string
 ): Promise<boolean> => {
   try {
     const success = await sendTemplatedEmail(email, 'Meeting Recording Started - Memovoice', {
       preheader: 'We are recording your meeting now',
       title: 'Meeting Recording Started',
-      greetingName: userName,
+      greetingName: firstName,
       intro: 'Your meeting is now being recorded and will be automatically transcribed.',
       sections: [
         ...(meetingTitle ? [{ title: 'Meeting', body: meetingTitle }] : []),
@@ -358,7 +358,7 @@ export const sendMeetingStartedEmail = async (
  */
 export const sendMeetingProcessedEmail = async (
   email: string,
-  userName: string,
+  firstName: string,
   meetingTitle: string,
   summary: string,
   highlights?: string[]
@@ -367,7 +367,7 @@ export const sendMeetingProcessedEmail = async (
     const success = await sendTemplatedEmail(email, `Meeting Summary Ready - ${meetingTitle}`, {
       preheader: 'Your meeting summary is ready',
       title: 'Meeting Processing Complete',
-      greetingName: userName,
+      greetingName: firstName,
       intro: 'Your meeting has been successfully transcribed and summarized.',
       sections: [
         { title: 'Meeting', body: meetingTitle },
@@ -398,7 +398,7 @@ export const sendMeetingProcessedEmail = async (
  */
 export const sendMeetingFailedEmail = async (
   email: string,
-  userName: string,
+  firstName: string,
   meetingTitle: string,
   errorMessage: string
 ): Promise<boolean> => {
@@ -406,7 +406,7 @@ export const sendMeetingFailedEmail = async (
     const success = await sendTemplatedEmail(email, `Meeting Processing Failed - ${meetingTitle}`, {
       preheader: 'We could not finish processing your meeting',
       title: 'Meeting Processing Failed',
-      greetingName: userName,
+      greetingName: firstName,
       intro: 'Unfortunately, your meeting processing encountered an error.',
       sections: [
         { title: 'Meeting', body: meetingTitle },
@@ -434,13 +434,13 @@ export const sendMeetingFailedEmail = async (
  */
 export const sendSubscriptionUpgradeEmail = async (
   email: string,
-  userName: string
+  firstName: string
 ): Promise<boolean> => {
   try {
     const success = await sendTemplatedEmail(email, 'Welcome to Memovoice Pro - Premium Features Unlocked', {
       preheader: 'Your Pro benefits are now active',
       title: 'Welcome to Memovoice Pro',
-      greetingName: userName,
+      greetingName: firstName,
       intro: 'Thank you for upgrading to Memovoice Pro. You now have access to premium features.',
       sections: [
         {
@@ -475,21 +475,23 @@ export const sendSubscriptionUpgradeEmail = async (
  */
 export const sendCustomEmail = async (
   email: string,
+  firstName: string,
   subject: string,
   html: string
 ): Promise<boolean> => {
   try {
     // Check if the input already contains structural HTML tags
     const hasHtmlTags = /<p\b|<div\b|<h[1-6]\b|<ul\b|<ol\b|<table\b/i.test(html);
-    
+
     // If it's plain text, apply standard template typography and preserve line breaks
-    const formattedHtml = hasHtmlTags 
-      ? html 
+    const formattedHtml = hasHtmlTags
+      ? html
       : `<div style="color: #4b5563; font-size: 14px; line-height: 1.7; white-space: pre-wrap;">${html}</div>`;
 
     return await sendTemplatedEmail(email, subject, {
       preheader: subject,
       title: subject,
+      greetingName: firstName,
       sections: [{ rawHtml: formattedHtml }],
     });
   } catch (error) {
@@ -500,7 +502,7 @@ export const sendCustomEmail = async (
 
 export const sendSettingsUpdatedEmail = async (
   email: string,
-  userName: string,
+  firstName: string,
   changes: Array<{ label: string; before: string; after: string }>
 ): Promise<boolean> => {
   if (!changes.length) return true;
@@ -508,7 +510,7 @@ export const sendSettingsUpdatedEmail = async (
   return sendTemplatedEmail(email, 'Your Memovoice Settings Were Updated', {
     preheader: 'Important account settings were changed',
     title: 'Settings Updated',
-    greetingName: userName,
+    greetingName: firstName,
     intro: 'We noticed an important change to your account settings and wanted to confirm it.',
     sections: [
       {
@@ -525,13 +527,13 @@ export const sendSettingsUpdatedEmail = async (
 
 export const sendMeetingDeletedEmail = async (
   email: string,
-  userName: string,
+  firstName: string,
   meetingTitle: string
 ): Promise<boolean> => {
   return sendTemplatedEmail(email, `Meeting Deleted - ${meetingTitle}`, {
     preheader: 'A meeting was removed from your account',
     title: 'Meeting Deleted',
-    greetingName: userName,
+    greetingName: firstName,
     intro: 'A meeting was deleted from your Memovoice account.',
     sections: [
       { title: 'Meeting', body: meetingTitle },
@@ -549,12 +551,12 @@ export const sendMeetingDeletedEmail = async (
 
 export const sendAccountDeletedEmail = async (
   email: string,
-  userName: string
+  firstName: string
 ): Promise<boolean> => {
   return sendTemplatedEmail(email, 'Your Memovoice Account Was Deleted', {
     preheader: 'Confirmation of account deletion',
     title: 'Account Deleted',
-    greetingName: userName,
+    greetingName: firstName,
     intro: 'Your Memovoice account and associated data have been deleted.',
     sections: [
       {
@@ -575,7 +577,7 @@ export const sendAccountDeletedEmail = async (
 
 export const sendAccountStatusEmail = async (
   email: string,
-  userName: string,
+  firstName: string,
   title: string,
   intro: string,
   bullets: string[]
@@ -583,7 +585,7 @@ export const sendAccountStatusEmail = async (
   return sendTemplatedEmail(email, title, {
     preheader: intro,
     title,
-    greetingName: userName,
+    greetingName: firstName,
     intro,
     sections: [{ title: 'Details', bullets }],
   });

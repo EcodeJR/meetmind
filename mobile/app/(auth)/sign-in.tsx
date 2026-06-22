@@ -45,7 +45,7 @@ export default function SignInScreen() {
       });
 
       console.log('[SignIn] Sign in attempt status:', signInAttempt.status);
-      
+
       if (signInAttempt.status === 'complete') {
         console.log('[SignIn] Setting active session:', signInAttempt.createdSessionId);
         await setActive({ session: signInAttempt.createdSessionId });
@@ -84,7 +84,7 @@ export default function SignInScreen() {
       }
     } catch (err: any) {
       console.error('Google OAuth error:', err);
-      setErrors({ general: 'Google sign-in failed. Please try again.' });
+      setErrors({ general: 'Network too weak to sign in. Retry when signal improves.' });
     } finally {
       setOAuthLoading(false);
     }
