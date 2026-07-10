@@ -5,23 +5,28 @@ import { Meeting } from '../models/Meeting';
 import { User } from '../models/User';
 import { logger } from '../utils/logger';
 import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
-import { transcribeAudio } from '../services/transcriptionService';
+import { transcribeInChunks } from '../services/transcriptionService';
 import { summarizeTranscript } from '../services/summarizationService';
 import { uploadAudioToCloudinary, deleteAudioFromCloudinary } from '../services/cloudinaryService';
 import { sendMeetingProcessedEmail, sendMeetingFailedEmail, sendMeetingDeletedEmail, sendAccountStatusEmail } from '../services/emailService';
 import { sendTranscriptionStartedNotification, sendMeetingProcessedNotification, sendMeetingFailedNotification } from '../services/pushNotificationService';
 import fs from 'fs';
-import ffmpeg from 'fluent-ffmpeg';
-import path from 'path';
-import os from 'os';
 import { FREE_PLAN_LIMITS } from '../utils/constants';
 import { releaseMonthlyMeetingSlot } from '../middleware/subscriptionMiddleware';
 
+// ============================================
+// NOTE: ffmpeg import removed — preprocessAudio
+// function is no longer used anywhere in this
+// file. transcribeInChunks handles all audio
+// directly from Cloudinary URLs on Groq's
+// servers with zero local RAM cost on Render.
+// ============================================
+
 const detectHallucination = (transcript: string): boolean => {
   const sentences = transcript.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
-  
+
   if (sentences.length < 5) return false;
-  
+
   const frequency: Record<string, number> = {};
   sentences.forEach(s => {
     const normalized = s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
@@ -29,41 +34,25 @@ const detectHallucination = (transcript: string): boolean => {
       frequency[normalized] = (frequency[normalized] || 0) + 1;
     }
   });
-  
+
   const values = Object.values(frequency);
   if (values.length === 0) return false;
   const maxRepeat = Math.max(...values);
   const repeatRatio = maxRepeat / sentences.length;
-  
+
   return repeatRatio > 0.4;
 };
 
-const preprocessAudio = (inputUrl: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'meetmind-preprocess-'));
-    const outputPath = path.join(tempDir, `processed-${Date.now()}.wav`);
-    
-    console.log(`[PREPROCESS] Preprocessing audio from ${inputUrl.substring(0, 60)}... to ${outputPath}`);
-    
-    ffmpeg(inputUrl)
-      .audioFrequency(16000)    // Whisper optimal sample rate
-      .audioChannels(1)          // Mono — reduces noise
-      .audioFilters('highpass=f=200, lowpass=f=3000') // Voice frequency range only
-      .output(outputPath)
-      .on('end', () => {
-        console.log(`[PREPROCESS] Preprocessing successfully completed.`);
-        resolve(outputPath);
-      })
-      .on('error', (err: any) => {
-        console.error('[PREPROCESS] Preprocessing failed:', err);
-        try {
-          fs.rmSync(tempDir, { recursive: true, force: true });
-        } catch {}
-        reject(err);
-      })
-      .run();
-  });
-};
+// ============================================
+// preprocessAudio REMOVED
+// Previously converted MP4 → WAV which made
+// files ~10x larger and pushed them over
+// Groq's 25MB API limit, crashing Render's
+// free tier mid-transcription.
+// transcribeInChunks handles large files by
+// splitting into compressed MP4 chunks and
+// sending each to Groq's servers directly.
+// ============================================
 
 const getStrategicAlertHighlights = (summary: {
   actionItems?: string[];
@@ -133,11 +122,8 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Find or create user
     let user = await User.findOne({ clerkId });
     if (!user) {
-      // email can be passed from client on first meeting creation, or we use a placeholder
-      // that gets updated when the Clerk webhook fires
       const email = req.body.email;
       if (!email) {
         sendError(res, 'MISSING_EMAIL', 'Email is required when creating account for the first time');
@@ -157,7 +143,6 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
 
     const proUser = isProUser(user);
 
-    // Create meeting
     const initialStatus = proUser && (rawTranscript || req.body.summary) ? 'completed' : 'processing';
     const meeting = new Meeting({
       userId: user._id,
@@ -177,7 +162,6 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
     await meeting.save();
 
     if (initialStatus === 'completed') {
-      // Count only completed meetings toward usage limits
       user.meetingCount = (user.meetingCount || 0) + 1;
       await user.save();
     } else if (!proUser && req.meetingUsageMonthKey) {
@@ -198,7 +182,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
   let localPath = req.file?.path;
   let cloudinaryPublicId: string | null = null;
   const clerkId = req.clerkId;
-  
+
   try {
     if (!clerkId) {
       sendError(res, 'AUTH_ERROR', 'Authentication required', 401);
@@ -217,7 +201,6 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Verify file exists before uploading
     if (!fs.existsSync(localPath)) {
       console.log(`[DEBUGGER] ERROR: Uploaded file not found at path: ${localPath}`);
       sendError(res, 'FILE_NOT_FOUND', 'Audio file was not properly saved. Please try again.');
@@ -237,7 +220,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         fs.unlinkSync(localPath);
       }
       if (req.meetingUsageMonthKey) {
-        await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => {});
+        await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => { });
       }
       sendError(res, 'UPLOAD_ERROR', 'Failed to upload audio file', 500);
       return;
@@ -251,25 +234,22 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         console.log(`[DEBUGGER] Local file deleted. From now on using Cloudinary URL only.`);
       } catch (deleteError) {
         console.error(`[DEBUGGER] WARNING: Failed to delete local file: ${localPath}`, deleteError);
-        // Continue anyway - the file will eventually be cleaned up
       }
     }
 
-    // 1. Find user
     const user = await User.findOne({ clerkId });
     if (!user) {
       console.log(`[DEBUGGER] ERROR: User not found in database: ${clerkId}`);
-      // Cleanup Cloudinary on error
       if (cloudinaryPublicId) {
-        await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => {});
+        await deleteAudioFromCloudinary(cloudinaryPublicId).catch(() => { });
       }
       if (req.meetingUsageMonthKey) {
-        await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => {});
+        await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => { });
       }
       sendError(res, 'USER_NOT_FOUND', 'User record not found. Please sync user first.');
       return;
     }
-    // Persist a processing meeting immediately so UI can show it in history
+
     const fileSizeMB = (req.file?.size || 0) / (1024 * 1024);
     console.log(`[DEBUGGER] File size: ${fileSizeMB} MB`);
 
@@ -289,11 +269,9 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
     });
 
     await processingMeeting.save();
-    // Update user storage now so history reflects the new item; meetingCount increments on completion only
     user.storageUsedMB = (user.storageUsedMB || 0) + fileSizeMB;
     await user.save();
 
-    // Respond quickly with the processing meeting so client can show progress
     sendSuccess(res, { meeting: processingMeeting }, 202);
 
     // Background processing: transcribe, summarize, update meeting
@@ -307,27 +285,17 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         });
       }
 
-      let processedAudioPath: string | null = null;
       try {
-        console.log(`[DEBUGGER] BACKGROUND: Preprocessing meeting ${processingMeeting._id}`);
-        try {
-          processedAudioPath = await preprocessAudio(uploadResult.url);
-        } catch (preprocessErr) {
-          console.error('[DEBUGGER] Audio preprocessing failed, falling back to original URL:', preprocessErr);
-          processedAudioPath = uploadResult.url;
-        }
-
         console.log(`[DEBUGGER] BACKGROUND: Transcribing meeting ${processingMeeting._id}`);
-        console.log(`[DEBUGGER] BACKGROUND: Using audio path: ${processedAudioPath}`);
-        const transcript = await transcribeAudio(processedAudioPath, user.preferences?.language);
 
-        // Clean up preprocessed file if it was created locally
-        if (processedAudioPath && processedAudioPath.startsWith(os.tmpdir())) {
-          try {
-            fs.rmSync(path.dirname(processedAudioPath), { recursive: true, force: true });
-            console.log(`[DEBUGGER] Cleaned up preprocessed temp file.`);
-          } catch {}
-        }
+        // ============================================
+        // transcribeInChunks sends Cloudinary URL 
+        // directly to Groq — no local preprocessing.
+        // Handles large files by splitting into
+        // 10 minute compressed MP4 chunks.
+        // Zero RAM cost on Render free tier.
+        // ============================================
+        const transcript = await transcribeInChunks(uploadResult.url, user.preferences?.language);
 
         if (!transcript || transcript.trim().length === 0) {
           throw new Error('Empty transcript');
@@ -347,7 +315,6 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
 
         console.log(`[DEBUGGER] BACKGROUND: AI summary complete (${processingMeeting._id})`);
 
-        // Update meeting with final results
         processingMeeting.rawTranscript = transcript;
         processingMeeting.summary = aiAnalysis.summary;
         processingMeeting.actionItems = aiAnalysis.actionItems;
@@ -358,11 +325,9 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         processingMeeting.processingCompletedAt = new Date();
         await processingMeeting.save();
 
-        // Count the meeting only after successful processing completes
         user.meetingCount = (user.meetingCount || 0) + 1;
         await user.save();
 
-        // Send success notifications
         const strategicHighlights = getStrategicAlertHighlights(aiAnalysis, user.preferences);
 
         if (canSendPush && user.expoPushToken) {
@@ -392,22 +357,22 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         console.error(`[DEBUGGER] BACKGROUND: Error message:`, bgError.message || bgError);
         console.error(`[DEBUGGER] BACKGROUND: Error stack:`, bgError.stack);
         console.error(`[DEBUGGER] BACKGROUND: Full error object:`, JSON.stringify(bgError, null, 2));
-        
+
         processingMeeting.status = 'failed';
         processingMeeting.processingError = String(bgError.message || bgError);
         processingMeeting.processingCompletedAt = new Date();
-        await processingMeeting.save().catch(() => {});
+        await processingMeeting.save().catch(() => { });
+
         if (req.meetingUsageMonthKey) {
-          await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => {});
+          await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => { });
         }
 
-        // Send failure notifications
         if (user) {
           if (user.expoPushToken) {
-            sendMeetingFailedNotification(user.expoPushToken, title || 'Meeting', bgError.message || 'Processing failed').catch(() => {});
+            sendMeetingFailedNotification(user.expoPushToken, title || 'Meeting', bgError.message || 'Processing failed').catch(() => { });
           }
           if (user.preferences?.notificationsEnabled) {
-            sendMeetingFailedEmail(user.email, user.clerkId, title || 'Meeting', bgError.message || 'Processing failed').catch(() => {});
+            sendMeetingFailedEmail(user.email, user.clerkId, title || 'Meeting', bgError.message || 'Processing failed').catch(() => { });
           }
         }
       }
@@ -417,15 +382,14 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
   } catch (error: any) {
     console.error(`[DEBUGGER] FATAL ERROR in processMeeting:`, error);
     logger.error({ error, clerkId }, 'Error processing meeting');
-    
-    // Send failure notification and email
+
     const user = await User.findOne({ clerkId }).catch(() => null);
     if (user) {
       const canSendEmails = user.preferences?.notificationsEnabled ?? true;
       const canSendPush = user.preferences?.pushNotificationsEnabled ?? true;
 
       if (canSendPush && user.expoPushToken) {
-        sendMeetingFailedNotification(user.expoPushToken, 'Unknown Meeting', error.message).catch(() => {});
+        sendMeetingFailedNotification(user.expoPushToken, 'Unknown Meeting', error.message).catch(() => { });
       }
       if (canSendEmails) {
         await sendMeetingFailedEmail(
@@ -433,22 +397,21 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
           user.clerkId,
           'Meeting Processing',
           error.message || 'An unexpected error occurred during processing'
-        ).catch(() => {});
+        ).catch(() => { });
       }
     }
+
     if (req.meetingUsageMonthKey) {
-      await releaseMonthlyMeetingSlot(clerkId!, req.meetingUsageMonthKey).catch(() => {});
+      await releaseMonthlyMeetingSlot(clerkId!, req.meetingUsageMonthKey).catch(() => { });
     }
-    
-    // Cleanup Cloudinary if we uploaded but something failed afterwards
+
     if (cloudinaryPublicId) {
       console.log(`[DEBUGGER] Cleaning up Cloudinary: ${cloudinaryPublicId}`);
       await deleteAudioFromCloudinary(cloudinaryPublicId).catch(cleanupErr => {
         console.error(`[DEBUGGER] WARNING: Failed to clean up Cloudinary:`, cleanupErr);
       });
     }
-    
-    // Cleanup local file if it somehow still exists
+
     if (localPath && fs.existsSync(localPath)) {
       try {
         fs.unlinkSync(localPath);
@@ -456,7 +419,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         console.error(`[DEBUGGER] WARNING: Failed to clean up local file:`, deleteErr);
       }
     }
-    
+
     sendError(res, 'PROCESSING_ERROR', error.message || 'Failed to process meeting', 500);
   }
 };
@@ -551,7 +514,6 @@ export const updateMeeting = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-// Return current quota information for the authenticated user
 export const getMeetingQuota = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const clerkId = req.clerkId;
@@ -599,18 +561,15 @@ export const deleteMeeting = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // 1. Delete audio from Cloudinary if publicId exists
     if (meeting.audioPublicId) {
       await deleteAudioFromCloudinary(meeting.audioPublicId);
     }
 
-    // 2. Decrement meeting count and storage
     user.meetingCount = Math.max(0, (user.meetingCount || 1) - 1);
     const sizeToSubtract = meeting.audioSizeMB || 0;
     user.storageUsedMB = Math.max(0, (user.storageUsedMB || sizeToSubtract) - sizeToSubtract);
     await user.save();
 
-    // Send deletion confirmation email (best-effort, don't block response)
     if (user.email) {
       const displayName = user.name || user.email.split('@')[0];
       sendMeetingDeletedEmail(user.email, displayName, meeting.title || 'Meeting').catch(err => {
@@ -654,6 +613,7 @@ export const searchMeetings = async (req: AuthRequest, res: Response): Promise<v
     sendError(res, 'SEARCH_ERROR', 'Failed to search meetings', 500);
   }
 };
+
 export const deleteAllMeetings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const clerkId = req.clerkId;
@@ -664,25 +624,15 @@ export const deleteAllMeetings = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    // 1. Find all meetings to get publicIds
     const meetings = await Meeting.find({ userId: user._id });
-    
-    // 2. Filter publicIds and delete from Cloudinary
     const publicIds = meetings.map(m => m.audioPublicId).filter(Boolean) as string[];
-    
-    // Cloudinary's destroy is one by one in the free tier usually, so we loop or use bulk
-    // For safety with rate limits, we'll do it in parallel but limited or just Promise.all
     await Promise.all(publicIds.map(id => deleteAudioFromCloudinary(id)));
-
-    // 3. Delete from DB
     await Meeting.deleteMany({ userId: user._id });
 
-    // 4. Reset user stats
     user.meetingCount = 0;
     user.storageUsedMB = 0;
     await user.save();
 
-    // Notify user that all meetings were deleted (best-effort)
     if (user.email) {
       const displayName = user.name || user.email.split('@')[0];
       sendAccountStatusEmail(
@@ -707,17 +657,6 @@ export const deleteAllMeetings = async (req: AuthRequest, res: Response): Promis
   }
 };
 
-/**
- * POST /api/meetings/:id/retry
- *
- * Re-queues a failed meeting for transcription using its existing Cloudinary audio URL.
- * This is the primary recovery path for:
- *   - Meetings uploaded by older app versions that had transcription bugs
- *   - Meetings that failed due to transient API errors
- *
- * The response is immediate (202 Accepted) and processing happens in the background,
- * identical to the original processMeeting flow.
- */
 export const retryMeetingTranscription = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const clerkId = req.clerkId;
@@ -734,7 +673,6 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
       return;
     }
 
-    // Find meeting — no historyFilter so we can retry even older meetings outside retention window
     const meeting = await Meeting.findOne({ _id: id, userId: user._id });
     if (!meeting) {
       sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
@@ -751,7 +689,6 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
       return;
     }
 
-    // Reset meeting state so the UI shows progress immediately
     meeting.status = 'processing';
     meeting.processingError = undefined;
     meeting.rawTranscript = '';
@@ -764,39 +701,27 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
 
     logger.info({ clerkId, meetingId: meeting._id }, 'Meeting retry requested — starting background transcription');
 
-    // Respond immediately so the client can update its UI
     sendSuccess(res, { meeting }, 202);
 
-    // Background processing (same pattern as processMeeting)
     (async () => {
       const canSendEmails = user.preferences?.notificationsEnabled ?? true;
       const canSendPush = user.preferences?.pushNotificationsEnabled ?? true;
 
       if (canSendPush && user.expoPushToken) {
-        sendTranscriptionStartedNotification(user.expoPushToken, meeting.title || 'Meeting').catch(() => {});
+        sendTranscriptionStartedNotification(user.expoPushToken, meeting.title || 'Meeting').catch(() => { });
       }
 
-      let processedAudioPath: string | null = null;
       try {
         console.log(`[RETRY] Retrying transcription for meeting ${meeting._id} using URL: ${meeting.audioUrl}`);
 
-        console.log(`[RETRY] BACKGROUND: Preprocessing meeting ${meeting._id}`);
-        try {
-          processedAudioPath = await preprocessAudio(meeting.audioUrl);
-        } catch (preprocessErr) {
-          console.error('[RETRY] Audio preprocessing failed, falling back to original URL:', preprocessErr);
-          processedAudioPath = meeting.audioUrl;
-        }
-
-        const transcript = await transcribeAudio(processedAudioPath, user.preferences?.language);
-
-        // Clean up preprocessed file if it was created locally
-        if (processedAudioPath && processedAudioPath.startsWith(os.tmpdir())) {
-          try {
-            fs.rmSync(path.dirname(processedAudioPath), { recursive: true, force: true });
-            console.log(`[RETRY] Cleaned up preprocessed temp file.`);
-          } catch {}
-        }
+        // ============================================
+        // transcribeInChunks sends Cloudinary URL
+        // directly to Groq — no local preprocessing.
+        // Handles large files by splitting into
+        // 10 minute compressed MP4 chunks.
+        // Zero RAM cost on Render free tier.
+        // ============================================
+        const transcript = await transcribeInChunks(meeting.audioUrl, user.preferences?.language);
 
         if (!transcript || transcript.trim().length === 0) {
           throw new Error('Transcription returned an empty result');
@@ -820,7 +745,6 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         meeting.actionItems = aiAnalysis.actionItems;
         meeting.keyDecisions = aiAnalysis.keyDecisions;
         meeting.language = user.preferences?.language || 'en';
-        // Preserve original title unless AI generated a better one and no title existed
         if (!meeting.title || meeting.title === 'New Recording' || meeting.title === 'Untitled Meeting') {
           meeting.title = aiAnalysis.title || meeting.title;
         }
@@ -828,8 +752,6 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         meeting.processingCompletedAt = new Date();
         await meeting.save();
 
-        // Only increment meetingCount on the first successful completion
-        // (it was not incremented when the meeting originally failed)
         user.meetingCount = (user.meetingCount || 0) + 1;
         await user.save();
 
@@ -841,7 +763,7 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
             meeting.title || 'Meeting',
             aiAnalysis.summary,
             strategicHighlights
-          ).catch(() => {});
+          ).catch(() => { });
         }
 
         if (canSendEmails) {
@@ -851,7 +773,7 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
             meeting.title || 'Meeting',
             aiAnalysis.summary,
             strategicHighlights
-          ).catch(() => {});
+          ).catch(() => { });
         }
 
         console.log(`[RETRY] Successfully completed retry for meeting ${meeting._id}`);
@@ -861,14 +783,14 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         meeting.status = 'failed';
         meeting.processingError = String(retryError.message || retryError);
         meeting.processingCompletedAt = new Date();
-        await meeting.save().catch(() => {});
+        await meeting.save().catch(() => { });
 
         if (canSendPush && user.expoPushToken) {
           sendMeetingFailedNotification(
             user.expoPushToken,
             meeting.title || 'Meeting',
             retryError.message || 'Retry transcription failed'
-          ).catch(() => {});
+          ).catch(() => { });
         }
         if (canSendEmails) {
           sendMeetingFailedEmail(
@@ -876,7 +798,7 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
             user.clerkId,
             meeting.title || 'Meeting',
             retryError.message || 'Retry transcription failed'
-          ).catch(() => {});
+          ).catch(() => { });
         }
       }
     })();
