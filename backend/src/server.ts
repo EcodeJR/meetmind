@@ -161,4 +161,24 @@ const start = async () => {
 
 start();
 
+// ── Global process-level error catchers ─────────────────────────────────
+// These capture the exact errors that would otherwise appear as
+// {"storageErrors":[],"msg":"Unhandled error"} in Render logs.
+process.on('unhandledRejection', (reason: any) => {
+  console.error('[PROCESS] Unhandled Promise Rejection:');
+  console.error('[PROCESS] Reason:', reason?.message || reason);
+  console.error('[PROCESS] Stack:', reason?.stack || '(no stack)');
+  console.error('[PROCESS] Full object:', JSON.stringify(reason, Object.getOwnPropertyNames(reason || {}), 2));
+  logger.error({ error: reason, type: 'unhandledRejection' }, 'Unhandled Promise Rejection');
+});
+
+process.on('uncaughtException', (error: Error) => {
+  console.error('[PROCESS] Uncaught Exception:');
+  console.error('[PROCESS] Message:', error.message);
+  console.error('[PROCESS] Stack:', error.stack);
+  console.error('[PROCESS] Full object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+  logger.fatal({ error, type: 'uncaughtException' }, 'Uncaught Exception — process will exit');
+  process.exit(1);
+});
+
 export default app;

@@ -11,8 +11,59 @@ import { uploadAudioToCloudinary, deleteAudioFromCloudinary } from '../services/
 import { sendMeetingProcessedEmail, sendMeetingFailedEmail, sendMeetingDeletedEmail, sendAccountStatusEmail } from '../services/emailService';
 import { sendTranscriptionStartedNotification, sendMeetingProcessedNotification, sendMeetingFailedNotification } from '../services/pushNotificationService';
 import fs from 'fs';
+import ffmpeg from 'fluent-ffmpeg';
+import path from 'path';
+import os from 'os';
 import { FREE_PLAN_LIMITS } from '../utils/constants';
 import { releaseMonthlyMeetingSlot } from '../middleware/subscriptionMiddleware';
+
+const detectHallucination = (transcript: string): boolean => {
+  const sentences = transcript.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
+  
+  if (sentences.length < 5) return false;
+  
+  const frequency: Record<string, number> = {};
+  sentences.forEach(s => {
+    const normalized = s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    if (normalized) {
+      frequency[normalized] = (frequency[normalized] || 0) + 1;
+    }
+  });
+  
+  const values = Object.values(frequency);
+  if (values.length === 0) return false;
+  const maxRepeat = Math.max(...values);
+  const repeatRatio = maxRepeat / sentences.length;
+  
+  return repeatRatio > 0.4;
+};
+
+const preprocessAudio = (inputUrl: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'meetmind-preprocess-'));
+    const outputPath = path.join(tempDir, `processed-${Date.now()}.wav`);
+    
+    console.log(`[PREPROCESS] Preprocessing audio from ${inputUrl.substring(0, 60)}... to ${outputPath}`);
+    
+    ffmpeg(inputUrl)
+      .audioFrequency(16000)    // Whisper optimal sample rate
+      .audioChannels(1)          // Mono — reduces noise
+      .audioFilters('highpass=f=200, lowpass=f=3000') // Voice frequency range only
+      .output(outputPath)
+      .on('end', () => {
+        console.log(`[PREPROCESS] Preprocessing successfully completed.`);
+        resolve(outputPath);
+      })
+      .on('error', (err: any) => {
+        console.error('[PREPROCESS] Preprocessing failed:', err);
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch {}
+        reject(err);
+      })
+      .run();
+  });
+};
 
 const getStrategicAlertHighlights = (summary: {
   actionItems?: string[];
@@ -256,13 +307,34 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         });
       }
 
+      let processedAudioPath: string | null = null;
       try {
+        console.log(`[DEBUGGER] BACKGROUND: Preprocessing meeting ${processingMeeting._id}`);
+        try {
+          processedAudioPath = await preprocessAudio(uploadResult.url);
+        } catch (preprocessErr) {
+          console.error('[DEBUGGER] Audio preprocessing failed, falling back to original URL:', preprocessErr);
+          processedAudioPath = uploadResult.url;
+        }
+
         console.log(`[DEBUGGER] BACKGROUND: Transcribing meeting ${processingMeeting._id}`);
-        console.log(`[DEBUGGER] BACKGROUND: Using Cloudinary URL: ${uploadResult.url}`);
-        const transcript = await transcribeAudio(uploadResult.url, user.preferences?.language);
+        console.log(`[DEBUGGER] BACKGROUND: Using audio path: ${processedAudioPath}`);
+        const transcript = await transcribeAudio(processedAudioPath, user.preferences?.language);
+
+        // Clean up preprocessed file if it was created locally
+        if (processedAudioPath && processedAudioPath.startsWith(os.tmpdir())) {
+          try {
+            fs.rmSync(path.dirname(processedAudioPath), { recursive: true, force: true });
+            console.log(`[DEBUGGER] Cleaned up preprocessed temp file.`);
+          } catch {}
+        }
 
         if (!transcript || transcript.trim().length === 0) {
           throw new Error('Empty transcript');
+        }
+
+        if (detectHallucination(transcript)) {
+          throw new Error('We could not accurately transcribe this recording. This is usually caused by poor audio quality. Please try again in a quieter environment closer to the phone.');
         }
 
         console.log(`[DEBUGGER] BACKGROUND: Transcription complete (${processingMeeting._id}), length: ${transcript.length} chars`);
@@ -704,13 +776,34 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         sendTranscriptionStartedNotification(user.expoPushToken, meeting.title || 'Meeting').catch(() => {});
       }
 
+      let processedAudioPath: string | null = null;
       try {
         console.log(`[RETRY] Retrying transcription for meeting ${meeting._id} using URL: ${meeting.audioUrl}`);
 
-        const transcript = await transcribeAudio(meeting.audioUrl, user.preferences?.language);
+        console.log(`[RETRY] BACKGROUND: Preprocessing meeting ${meeting._id}`);
+        try {
+          processedAudioPath = await preprocessAudio(meeting.audioUrl);
+        } catch (preprocessErr) {
+          console.error('[RETRY] Audio preprocessing failed, falling back to original URL:', preprocessErr);
+          processedAudioPath = meeting.audioUrl;
+        }
+
+        const transcript = await transcribeAudio(processedAudioPath, user.preferences?.language);
+
+        // Clean up preprocessed file if it was created locally
+        if (processedAudioPath && processedAudioPath.startsWith(os.tmpdir())) {
+          try {
+            fs.rmSync(path.dirname(processedAudioPath), { recursive: true, force: true });
+            console.log(`[RETRY] Cleaned up preprocessed temp file.`);
+          } catch {}
+        }
 
         if (!transcript || transcript.trim().length === 0) {
           throw new Error('Transcription returned an empty result');
+        }
+
+        if (detectHallucination(transcript)) {
+          throw new Error('We could not accurately transcribe this recording. This is usually caused by poor audio quality. Please try again in a quieter environment closer to the phone.');
         }
 
         console.log(`[RETRY] Transcription successful (${meeting._id}), length: ${transcript.length} chars`);

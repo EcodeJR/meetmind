@@ -22,7 +22,8 @@ import {
   sendWaitlistEmail,
   getEmailHistory,
   sendBroadcastEmail,
-  sendSingleEmail
+  sendSingleEmail,
+  reprocessAdminMeeting
 } from '../controllers/adminController';
 
 const router = Router();
@@ -67,5 +68,8 @@ router.post('/waitlist/email', sendWaitlistEmail);
 router.get('/email/history', getEmailHistory);
 router.post('/email/broadcast', sendBroadcastEmail);
 router.post('/email/send-single', sendSingleEmail);
+
+// Reprocess/Recover a failed meeting using its existing Cloudinary URL
+router.post('/meetings/reprocess', reprocessAdminMeeting);
 
 export default router;

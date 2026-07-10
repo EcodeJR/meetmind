@@ -31,7 +31,7 @@ const API_URL = normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL);
 
 export const apiClient = axios.create({
   baseURL: API_URL,
-  timeout: 30000, // 30-second timeout to prevent hanging requests
+  timeout: 60000, // 60s default — Render free tier can take 30s+ to wake up
   headers: {
     'Content-Type': 'application/json',
   },

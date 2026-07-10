@@ -936,3 +936,145 @@ export const sendSingleEmail = async (req: Request, res: Response): Promise<void
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+import { transcribeAudio } from '../services/transcriptionService';
+import { summarizeTranscript } from '../services/summarizationService';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+// POST /admin/meetings/reprocess
+export const reprocessAdminMeeting = async (req: Request, res: Response): Promise<void> => {
+  const { meetingId } = req.body;
+
+  try {
+    const meeting = await Meeting.findById(meetingId);
+    if (!meeting) {
+      res.status(404).json({ error: 'Meeting not found' });
+      return;
+    }
+
+    if (!meeting.audioUrl) {
+      res.status(400).json({ error: 'Meeting has no audio URL stored' });
+      return;
+    }
+
+    // Temporarily load user to retrieve preference settings
+    const user = await User.findById(meeting.userId);
+    const language = user?.preferences?.language || 'en';
+
+    console.log(`[ADMIN-REPROCESS] Found meeting ${meetingId}, audio URL: ${meeting.audioUrl}`);
+
+    // Update status to processing while it transcribes
+    meeting.status = 'processing';
+    meeting.processingError = undefined;
+    await meeting.save();
+
+    // Re-use same background audio preprocessing + Whisper + Claude summarization pipeline
+    let processedAudioPath: string | null = null;
+    let transcript = '';
+    try {
+      // 1. Preprocess audio
+      try {
+        const ffmpeg = require('fluent-ffmpeg');
+        processedAudioPath = await new Promise<string>((resolve, reject) => {
+          const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'meetmind-preprocess-admin-'));
+          const outputPath = path.join(tempDir, `processed-${Date.now()}.wav`);
+          
+          ffmpeg(meeting.audioUrl)
+            .audioFrequency(16000)
+            .audioChannels(1)
+            .audioFilters('highpass=f=200, lowpass=f=3000')
+            .output(outputPath)
+            .on('end', () => resolve(outputPath))
+            .on('error', (err: any) => {
+              try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+              reject(err);
+            })
+            .run();
+        });
+      } catch (preprocessErr) {
+        console.error('[ADMIN-REPROCESS] Audio preprocessing failed, using original URL:', preprocessErr);
+        processedAudioPath = meeting.audioUrl;
+      }
+
+      // 2. Transcribe
+      transcript = await transcribeAudio(processedAudioPath, language);
+
+      // Clean up temp files if created
+      if (processedAudioPath && processedAudioPath.startsWith(os.tmpdir())) {
+        try {
+          fs.rmSync(path.dirname(processedAudioPath), { recursive: true, force: true });
+        } catch {}
+      }
+
+      if (!transcript || transcript.trim().length === 0) {
+        throw new Error('Transcription returned an empty result');
+      }
+
+      // 3. Hallucination check helper
+      const sentences = transcript.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
+      if (sentences.length >= 5) {
+        const frequency: Record<string, number> = {};
+        sentences.forEach(s => {
+          const normalized = s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+          if (normalized) {
+            frequency[normalized] = (frequency[normalized] || 0) + 1;
+          }
+        });
+        const values = Object.values(frequency);
+        if (values.length > 0) {
+          const maxRepeat = Math.max(...values);
+          const repeatRatio = maxRepeat / sentences.length;
+          if (repeatRatio > 0.4) {
+            throw new Error('We could not accurately transcribe this recording (hallucination detected).');
+          }
+        }
+      }
+
+      // 4. Summarize
+      const aiAnalysis = await summarizeTranscript(transcript, {
+        language,
+        strategicAlerts: user?.preferences?.strategicAlerts,
+      });
+
+      meeting.rawTranscript = transcript;
+      meeting.summary = aiAnalysis.summary;
+      meeting.actionItems = aiAnalysis.actionItems;
+      meeting.keyDecisions = aiAnalysis.keyDecisions;
+      meeting.language = language;
+      if (!meeting.title || meeting.title === 'New Recording' || meeting.title === 'Untitled Meeting') {
+        meeting.title = aiAnalysis.title || meeting.title;
+      }
+      meeting.status = 'completed';
+      meeting.processingCompletedAt = new Date();
+      await meeting.save();
+
+      res.json({
+        success: true,
+        meeting: {
+          id: meeting._id,
+          title: meeting.title,
+          status: meeting.status,
+          summary: meeting.summary,
+          transcript: meeting.rawTranscript,
+        }
+      });
+
+    } catch (innerError: any) {
+      meeting.status = 'failed';
+      meeting.processingError = innerError.message || String(innerError);
+      meeting.processingCompletedAt = new Date();
+      await meeting.save();
+
+      res.status(422).json({
+        error: 'transcription_failed',
+        message: innerError.message || 'Failed to process meeting'
+      });
+    }
+
+  } catch (error: any) {
+    logger.error({ error, meetingId }, 'Admin: reprocessAdminMeeting failed');
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+};

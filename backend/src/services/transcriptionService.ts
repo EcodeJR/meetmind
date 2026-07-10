@@ -119,8 +119,9 @@ const transcribeWithWhisper = async (source: string, language?: string): Promise
     const opts: any = {
       file: fs.createReadStream(tempFilePath),
       model: 'whisper-1',
+      temperature: 0,
+      language: language || 'en',
     };
-    if (language) opts.language = language;
     const response = await retryTranscriptionOnce('openai', () => openai.audio.transcriptions.create(opts as any));
     console.log(`[DEBUGGER] Whisper Transcription: SUCCESS. Received ${response.text.split(' ').length} words.`);
     return response.text;
@@ -141,8 +142,9 @@ const transcribeWithGroq = async (source: string, language?: string): Promise<st
     file: fs.createReadStream(tempFilePath),
     model: 'whisper-large-v3',
     response_format: 'text',
+    temperature: 0,
+    language: language || 'en',
   };
-  if (language) opts.language = language;
 
   try {
     const response = await retryTranscriptionOnce('groq', () => groq.audio.transcriptions.create(opts as any));

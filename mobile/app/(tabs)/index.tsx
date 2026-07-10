@@ -594,10 +594,12 @@ export default function HomeScreen() {
 
       console.log('[STOP-RECORDING] Uploading recording directly:', directRecordingItem.id);
       
-      // Add safety timeout: if upload takes > 45 seconds, bail and use fallback
+      // Safety timeout: if upload takes > 180 seconds, bail and use fallback.
+      // Note: The server responds with 202 after Cloudinary upload (before transcription),
+      // so we're mainly waiting for Render cold start (~30s) + file transfer.
       const uploadPromise = uploadQueuedMeeting(directRecordingItem);
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Upload timeout: exceeded 45 seconds')), 45000)
+        setTimeout(() => reject(new Error('Upload timed out — the server may be waking up. Your recording was saved.')), 180000)
       );
       const queueResult = await Promise.race([uploadPromise, timeoutPromise]);
 
@@ -688,7 +690,12 @@ export default function HomeScreen() {
       
       setProcessingStage('failed');
       setDebugStatus('ANALYSIS FAILED');
-      const errorMsg = error?.response?.data?.error?.message || error?.message || 'The AI pipeline encountered an issue.';
+      
+      let errorMsg = error?.response?.data?.error?.message || error?.message || 'The AI pipeline encountered an issue.';
+      if (error?.response?.data?.error?.code === 'transcription_failed' || errorMsg.includes('accurately transcribe')) {
+        errorMsg = 'Could not transcribe this recording. For best results, place your phone closer to the speakers and reduce background noise.';
+      }
+      
       console.error('[STOP-RECORDING] Showing alert:', errorMsg);
       Alert.alert('Analysis Failed', errorMsg);
     } finally {

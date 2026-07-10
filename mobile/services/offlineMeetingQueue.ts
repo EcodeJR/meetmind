@@ -291,19 +291,38 @@ export const uploadQueuedMeeting = async (item: OfflineMeetingQueueItem): Promis
     throw fileCheckError;
   }
 
-  const response = await apiClient.post('/meetings/process', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+  try {
+    const response = await apiClient.post('/meetings/process', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      // Audio uploads need a much longer timeout than normal API calls:
+      // Render free tier wakeup (~30s) + file upload + Cloudinary transfer
+      timeout: 180000, // 3 minutes
+    });
 
-  console.log('[UPLOAD] Response received:', response.status);
-  console.log('[UPLOAD] Response data:', JSON.stringify(response.data, null, 2));
+    console.log('[UPLOAD] Response received:', response.status);
+    console.log('[UPLOAD] Response data:', JSON.stringify(response.data, null, 2));
 
-  return {
-    meeting: response.data?.data?.meeting || response.data?.meeting,
-    raw: response.data,
-  };
+    return {
+      meeting: response.data?.data?.meeting || response.data?.meeting,
+      raw: response.data,
+    };
+  } catch (uploadError: any) {
+    // Provide a meaningful error message instead of generic "Network Error"
+    if (uploadError?.code === 'ECONNABORTED' || uploadError?.message?.includes('timeout')) {
+      throw new Error('Upload timed out — the server may be waking up. Please try again in a minute.');
+    }
+    if (uploadError?.message === 'Network Error' || !uploadError?.response) {
+      throw new Error('Could not reach the server. Check your connection and try again.');
+    }
+    // Server responded with an error — pass through the actual error message
+    const serverMessage = uploadError?.response?.data?.error?.message
+      || uploadError?.response?.data?.details
+      || uploadError?.response?.data?.message
+      || uploadError?.message;
+    throw new Error(serverMessage || 'Upload failed with an unknown error');
+  }
 };
 
 const readRecentUploads = async (): Promise<{ offlineId: string; remoteId: string; createdAt: string }[]> => {
