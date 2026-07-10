@@ -107,31 +107,6 @@ const writeAudioBufferToTempFile = async (source: string): Promise<string> => {
 };
 
 /**
- * PHASE 1: OpenAI Whisper (Primary)
- * Downloads audio to a temp file first so the OpenAI SDK receives a proper
- * Node.js fs.ReadStream rather than a Web ReadableStream (from fetch), which
- * the SDK cannot consume reliably.
- */
-const transcribeWithWhisper = async (source: string, language?: string): Promise<string> => {
-  console.log(`[DEBUGGER] Whisper Transcription: Starting with source: ${source}`);
-  const tempFilePath = await writeAudioBufferToTempFile(source);
-  try {
-    const opts: any = {
-      file: fs.createReadStream(tempFilePath),
-      model: 'whisper-1',
-      temperature: 0,
-      language: language || 'en',
-    };
-    const response = await retryTranscriptionOnce('openai', () => openai.audio.transcriptions.create(opts as any));
-    console.log(`[DEBUGGER] Whisper Transcription: SUCCESS. Received ${response.text.split(' ').length} words.`);
-    return response.text;
-  } finally {
-    // Always clean up the temp directory even if transcription throws
-    fs.rmSync(path.dirname(tempFilePath), { recursive: true, force: true });
-  }
-};
-
-/**
  * PHASE 2: Groq Whisper (First Fallback)
  */
 const transcribeWithGroq = async (source: string, language?: string): Promise<string> => {
@@ -164,10 +139,10 @@ const transcribeWithGemini = async (source: string, language?: string): Promise<
   console.log(`[DEBUGGER] Gemini Transcription Fallback: Processing ${source}`);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
-  const audioBuffer = source.startsWith('http') 
+  const audioBuffer = source.startsWith('http')
     ? await downloadAudioBuffer(source)
     : fs.readFileSync(source);
-    
+
   const audioPart = {
     inlineData: {
       data: audioBuffer.toString('base64'),
@@ -188,20 +163,36 @@ const transcribeWithGemini = async (source: string, language?: string): Promise<
 };
 
 /**
+ * PHASE 1: OpenAI Whisper (Primary)
+ * Downloads audio to a temp file first so the OpenAI SDK receives a proper
+ * Node.js fs.ReadStream rather than a Web ReadableStream (from fetch), which
+ * the SDK cannot consume reliably.
+ */
+const transcribeWithWhisper = async (source: string, language?: string): Promise<string> => {
+  console.log(`[DEBUGGER] Whisper Transcription: Starting with source: ${source}`);
+  const tempFilePath = await writeAudioBufferToTempFile(source);
+  try {
+    const opts: any = {
+      file: fs.createReadStream(tempFilePath),
+      model: 'whisper-1',
+      temperature: 0,
+      language: language || 'en',
+    };
+    const response = await retryTranscriptionOnce('openai', () => openai.audio.transcriptions.create(opts as any));
+    console.log(`[DEBUGGER] Whisper Transcription: SUCCESS. Received ${response.text.split(' ').length} words.`);
+    return response.text;
+  } finally {
+    // Always clean up the temp directory even if transcription throws
+    fs.rmSync(path.dirname(tempFilePath), { recursive: true, force: true });
+  }
+};
+
+/**
  * Main Controller with Triple Fallback: OpenAI > Groq > Gemini
  * Supports both local file paths and Cloudinary URLs
  */
 export const transcribeAudio = async (source: string, language?: string): Promise<string> => {
   console.log(`[DEBUGGER] Starting transcription pipeline with source: ${source.substring(0, 80)}...`);
-  
-  // 1. Try OpenAI Whisper
-  try {
-    console.log(`[DEBUGGER] Attempting OpenAI Whisper...`);
-    return await transcribeWithWhisper(source, language);
-  } catch (error: any) {
-    console.log(`[DEBUGGER] OpenAI Whisper failed, attempting Groq... (${error.message})`);
-    console.error(`[DEBUGGER] OpenAI error details:`, error);
-  }
 
   // 2. Try Groq Whisper (Super fast fallback)
   try {
@@ -210,6 +201,7 @@ export const transcribeAudio = async (source: string, language?: string): Promis
   } catch (error: any) {
     console.log(`[DEBUGGER] Groq Fallback failed, attempting Gemini... (${error.message})`);
     console.error(`[DEBUGGER] Groq error details:`, error);
+    console.error(`[DEBUGGER] Source was:`, source);
   }
 
   // 3. Try Gemini 2.5 Flash
@@ -219,6 +211,16 @@ export const transcribeAudio = async (source: string, language?: string): Promis
   } catch (error: any) {
     console.error(`[DEBUGGER] FATAL: All transcription providers failed.`);
     console.error(`[DEBUGGER] Gemini error details:`, error.message);
+    console.error(`[DEBUGGER] Source was:`, source);
+  }
+
+  // 1. Try OpenAI Whisper
+  try {
+    console.log(`[DEBUGGER] Attempting OpenAI Whisper...`);
+    return await transcribeWithWhisper(source, language);
+  } catch (error: any) {
+    console.log(`[DEBUGGER] OpenAI Whisper failed, attempting Groq... (${error.message})`);
+    console.error(`[DEBUGGER] OpenAI error details:`, error);
     console.error(`[DEBUGGER] Source was:`, source);
     throw new Error(`Transcription pipeline exhausted all providers: ${error.message}`);
   }
