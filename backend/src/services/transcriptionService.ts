@@ -4,6 +4,7 @@ import Groq from 'groq-sdk';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import ffmpeg from 'fluent-ffmpeg';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -31,16 +32,9 @@ const isRetryableTranscriptionError = (error: any): boolean => {
   const code = String(error?.code || error?.error?.code || '').toUpperCase();
   const message = String(error?.message || error?.error?.message || '').toLowerCase();
 
-  if (TRANSIENT_ERROR_CODES.has(code)) {
-    return true;
-  }
-
-  if (status >= 500 && status < 600) {
-    return true;
-  }
-
+  if (TRANSIENT_ERROR_CODES.has(code)) return true;
+  if (status >= 500 && status < 600) return true;
   if (status === 429) {
-    // Hard quota errors should fail over immediately; rate-limit style throttling can retry once.
     return !message.includes('insufficient_quota') && !message.includes('billing');
   }
 
@@ -60,9 +54,7 @@ const retryTranscriptionOnce = async <T>(
   try {
     return await action();
   } catch (error: any) {
-    if (!isRetryableTranscriptionError(error)) {
-      throw error;
-    }
+    if (!isRetryableTranscriptionError(error)) throw error;
 
     console.warn(
       {
@@ -76,8 +68,6 @@ const retryTranscriptionOnce = async <T>(
     return await action();
   }
 };
-
-
 
 /**
  * Helper: Download audio from URL as buffer
@@ -95,8 +85,6 @@ const writeAudioBufferToTempFile = async (source: string): Promise<string> => {
     ? await downloadAudioBuffer(source)
     : fs.readFileSync(source);
 
-  // Preserve the original file extension so APIs can detect the MIME type correctly.
-  // Defaulting to 'm4a' (the most common mobile recording format) when undetectable.
   const rawExt = source.split('?')[0].split('.').pop()?.toLowerCase().trim() || '';
   const ext = rawExt && rawExt.length <= 5 ? rawExt : 'm4a';
 
@@ -106,8 +94,176 @@ const writeAudioBufferToTempFile = async (source: string): Promise<string> => {
   return tempFilePath;
 };
 
+// ============================================
+// CHUNKED TRANSCRIPTION
+// Splits large audio files into 10 minute 
+// segments to stay under Groq's 25MB limit.
+// Used automatically when file exceeds 20MB.
+// WAV files (uncompressed) are much larger 
+// than MP4 — always check size before sending.
+// ============================================
+
+const GROQ_MAX_FILE_SIZE_MB = 20; // Stay safely under Groq's 25MB limit
+const CHUNK_DURATION_SECONDS = 600; // 10 minutes per chunk
+
+/**
+ * Split audio file into chunks of fixed duration
+ */
+const splitAudioIntoChunks = (
+  inputPath: string,
+  chunkDurationSeconds = CHUNK_DURATION_SECONDS
+): Promise<string[]> => {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(inputPath, async (err: any, metadata: any) => {
+      if (err) return reject(err);
+
+      const totalDuration = metadata.format.duration || 0;
+      const numChunks = Math.ceil(totalDuration / chunkDurationSeconds);
+      const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'memovoice-chunks-')
+      );
+
+      console.log(
+        `[CHUNKER] Duration: ${totalDuration.toFixed(1)}s — splitting into ${numChunks} chunk(s)`
+      );
+
+      const chunks: string[] = new Array(numChunks);
+
+      const chunkPromises = Array.from({ length: numChunks }, (_, i) => {
+        return new Promise<void>((res, rej) => {
+          const startTime = i * chunkDurationSeconds;
+          const chunkPath = path.join(tempDir, `chunk-${i}.mp4`);
+
+          // ============================================
+          // Output as MP4 not WAV — keeps chunks 
+          // small and compressed. WAV would be 
+          // ~10x larger and exceed Groq's limit.
+          // ============================================
+          ffmpeg(inputPath)
+            .setStartTime(startTime)
+            .setDuration(chunkDurationSeconds)
+            .audioCodec('aac')
+            .output(chunkPath)
+            .on('end', () => {
+              chunks[i] = chunkPath;
+              res();
+            })
+            .on('error', rej)
+            .run();
+        });
+      });
+
+      try {
+        await Promise.all(chunkPromises);
+        resolve(chunks);
+      } catch (chunkErr) {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch { }
+        reject(chunkErr);
+      }
+    });
+  });
+};
+
+/**
+ * Transcribe with Groq, automatically chunking if file is too large.
+ * Only used internally — does not fall through to other providers.
+ */
+const transcribeWithGroqChunked = async (
+  filePath: string,
+  language = 'en'
+): Promise<string> => {
+  const stats = fs.statSync(filePath);
+  const fileSizeMB = stats.size / (1024 * 1024);
+
+  console.log(`[CHUNKER] File size: ${fileSizeMB.toFixed(2)}MB`);
+
+  // Small enough — send directly without chunking
+  if (fileSizeMB < GROQ_MAX_FILE_SIZE_MB) {
+    console.log('[CHUNKER] File within limit — transcribing directly with Groq');
+    const response = await retryTranscriptionOnce('groq', () =>
+      groq.audio.transcriptions.create({
+        file: fs.createReadStream(filePath),
+        model: 'whisper-large-v3',
+        language,
+        temperature: 0,
+        response_format: 'text',
+      } as any)
+    );
+    return typeof response === 'string' ? response : (response as any).text;
+  }
+
+  // File too large — split into chunks
+  console.log('[CHUNKER] File exceeds limit — splitting into chunks...');
+  const chunks = await splitAudioIntoChunks(filePath);
+  const transcripts: string[] = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunkStats = fs.statSync(chunks[i]);
+    const chunkSizeMB = chunkStats.size / (1024 * 1024);
+    console.log(
+      `[CHUNKER] Transcribing chunk ${i + 1}/${chunks.length} (${chunkSizeMB.toFixed(2)}MB)...`
+    );
+
+    const response = await retryTranscriptionOnce('groq', () =>
+      groq.audio.transcriptions.create({
+        file: fs.createReadStream(chunks[i]),
+        model: 'whisper-large-v3',
+        language,
+        temperature: 0,
+        response_format: 'text',
+      } as any)
+    );
+
+    const chunkText = typeof response === 'string' ? response : (response as any).text;
+    transcripts.push(chunkText);
+    console.log(`[CHUNKER] Chunk ${i + 1} complete`);
+  }
+
+  // Clean up chunk temp files
+  try {
+    fs.rmSync(path.dirname(chunks[0]), { recursive: true, force: true });
+  } catch { }
+
+  const fullTranscript = transcripts.join(' ');
+  console.log(
+    `[CHUNKER] All chunks complete. Total words: ${fullTranscript.split(' ').length}`
+  );
+  return fullTranscript;
+};
+
+/**
+ * Public helper: transcribeInChunks
+ * Call this from reprocessAdminMeeting and any other place
+ * that needs to handle potentially large audio files.
+ * Accepts both local file paths and Cloudinary URLs.
+ * Always uses Groq — does not fall through to other providers.
+ */
+export const transcribeInChunks = async (
+  source: string,
+  language = 'en'
+): Promise<string> => {
+  console.log(`[CHUNKER] Starting chunked transcription for: ${source.substring(0, 80)}...`);
+
+  // Download to temp file if URL so we can check file size
+  const tempFilePath = await writeAudioBufferToTempFile(source);
+
+  try {
+    return await transcribeWithGroqChunked(tempFilePath, language);
+  } finally {
+    // Always clean up the downloaded temp file
+    try {
+      fs.rmSync(path.dirname(tempFilePath), { recursive: true, force: true });
+    } catch { }
+  }
+};
+
 /**
  * PHASE 2: Groq Whisper (First Fallback)
+ * Standard single-file transcription.
+ * Will fail with 413 if file exceeds 25MB.
+ * Use transcribeInChunks for large files instead.
  */
 const transcribeWithGroq = async (source: string, language?: string): Promise<string> => {
   console.log(`[DEBUGGER] Groq Transcription Fallback: Starting with source: ${source}`);
@@ -122,10 +278,13 @@ const transcribeWithGroq = async (source: string, language?: string): Promise<st
   };
 
   try {
-    const response = await retryTranscriptionOnce('groq', () => groq.audio.transcriptions.create(opts as any));
-
+    const response = await retryTranscriptionOnce('groq', () =>
+      groq.audio.transcriptions.create(opts as any)
+    );
     const transcript = typeof response === 'string' ? response : (response as any).text;
-    console.log(`[DEBUGGER] Groq Transcription Fallback: SUCCESS. Received ${transcript.split(' ').length} words.`);
+    console.log(
+      `[DEBUGGER] Groq Transcription Fallback: SUCCESS. Received ${transcript.split(' ').length} words.`
+    );
     return transcript;
   } finally {
     fs.rmSync(path.dirname(tempFilePath), { recursive: true, force: true });
@@ -150,23 +309,22 @@ const transcribeWithGemini = async (source: string, language?: string): Promise<
     },
   };
 
-  const instruction = `Transcribe this audio meeting verbatim${language ? ` in language: ${language}` : ''}. Do not add any preamble or summary, just the text spoken.`;
+  const instruction = `Transcribe this audio meeting verbatim${language ? ` in language: ${language}` : ''
+    }. Do not add any preamble or summary, just the text spoken.`;
 
-  const result = await retryTranscriptionOnce('gemini', () => model.generateContent([
-    instruction,
-    audioPart,
-  ] as any));
+  const result = await retryTranscriptionOnce('gemini', () =>
+    model.generateContent([instruction, audioPart] as any)
+  );
 
   const transcript = result.response.text();
-  console.log(`[DEBUGGER] Gemini Transcription Fallback: SUCCESS. Received ${transcript.split(' ').length} words.`);
+  console.log(
+    `[DEBUGGER] Gemini Transcription Fallback: SUCCESS. Received ${transcript.split(' ').length} words.`
+  );
   return transcript;
 };
 
 /**
- * PHASE 1: OpenAI Whisper (Primary)
- * Downloads audio to a temp file first so the OpenAI SDK receives a proper
- * Node.js fs.ReadStream rather than a Web ReadableStream (from fetch), which
- * the SDK cannot consume reliably.
+ * PHASE 1: OpenAI Whisper (Last Resort)
  */
 const transcribeWithWhisper = async (source: string, language?: string): Promise<string> => {
   console.log(`[DEBUGGER] Whisper Transcription: Starting with source: ${source}`);
@@ -178,50 +336,61 @@ const transcribeWithWhisper = async (source: string, language?: string): Promise
       temperature: 0,
       language: language || 'en',
     };
-    const response = await retryTranscriptionOnce('openai', () => openai.audio.transcriptions.create(opts as any));
-    console.log(`[DEBUGGER] Whisper Transcription: SUCCESS. Received ${response.text.split(' ').length} words.`);
+    const response = await retryTranscriptionOnce('openai', () =>
+      openai.audio.transcriptions.create(opts as any)
+    );
+    console.log(
+      `[DEBUGGER] Whisper Transcription: SUCCESS. Received ${response.text.split(' ').length} words.`
+    );
     return response.text;
   } finally {
-    // Always clean up the temp directory even if transcription throws
     fs.rmSync(path.dirname(tempFilePath), { recursive: true, force: true });
   }
 };
 
 /**
- * Main Controller with Triple Fallback: OpenAI > Groq > Gemini
- * Supports both local file paths and Cloudinary URLs
+ * Main transcription pipeline with triple fallback: Groq > Gemini > OpenAI
+ * For large files use transcribeInChunks directly instead.
  */
 export const transcribeAudio = async (source: string, language?: string): Promise<string> => {
-  console.log(`[DEBUGGER] Starting transcription pipeline with source: ${source.substring(0, 80)}...`);
+  console.log(
+    `[DEBUGGER] Starting transcription pipeline with source: ${source.substring(0, 80)}...`
+  );
 
-  // 2. Try Groq Whisper (Super fast fallback)
+  // 1. Try Groq Whisper first
   try {
     console.log(`[DEBUGGER] Attempting Groq Whisper fallback...`);
     return await transcribeWithGroq(source, language);
   } catch (error: any) {
-    console.log(`[DEBUGGER] Groq Fallback failed, attempting Gemini... (${error.message})`);
+    console.log(
+      `[DEBUGGER] Groq Fallback failed, attempting Gemini... (${error.message})`
+    );
     console.error(`[DEBUGGER] Groq error details:`, error);
     console.error(`[DEBUGGER] Source was:`, source);
   }
 
-  // 3. Try Gemini 2.5 Flash
+  // 2. Try Gemini
   try {
     console.log(`[DEBUGGER] Attempting Gemini fallback...`);
     return await transcribeWithGemini(source, language);
   } catch (error: any) {
-    console.error(`[DEBUGGER] FATAL: All transcription providers failed.`);
+    console.error(`[DEBUGGER] FATAL: Gemini also failed.`);
     console.error(`[DEBUGGER] Gemini error details:`, error.message);
     console.error(`[DEBUGGER] Source was:`, source);
   }
 
-  // 1. Try OpenAI Whisper
+  // 3. OpenAI Whisper as last resort
   try {
     console.log(`[DEBUGGER] Attempting OpenAI Whisper...`);
     return await transcribeWithWhisper(source, language);
   } catch (error: any) {
-    console.log(`[DEBUGGER] OpenAI Whisper failed, attempting Groq... (${error.message})`);
+    console.log(
+      `[DEBUGGER] OpenAI Whisper failed. (${error.message})`
+    );
     console.error(`[DEBUGGER] OpenAI error details:`, error);
     console.error(`[DEBUGGER] Source was:`, source);
-    throw new Error(`Transcription pipeline exhausted all providers: ${error.message}`);
+    throw new Error(
+      `Transcription pipeline exhausted all providers: ${error.message}`
+    );
   }
 };

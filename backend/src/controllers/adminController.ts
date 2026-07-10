@@ -937,7 +937,7 @@ export const sendSingleEmail = async (req: Request, res: Response): Promise<void
   }
 };
 
-import { transcribeAudio } from '../services/transcriptionService';
+import { transcribeInChunks } from '../services/transcriptionService';
 import { summarizeTranscript } from '../services/summarizationService';
 import fs from 'fs';
 import os from 'os';
@@ -984,57 +984,51 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
 
     // Process in background after response is sent
     setImmediate(async () => {
+      // ============================================
+      // processedAudioPath kept as null intentionally.
+      // Step 1 (FFmpeg preprocessing) is skipped — 
+      // transcribeInChunks handles the Cloudinary URL 
+      // directly on Groq's servers with zero local RAM.
+      // WAV preprocessing made files LARGER and caused
+      // Render's free tier to crash mid-transcription.
+      // The cleanup block below safely handles null.
+      // ============================================
       let processedAudioPath: string | null = null;
       let transcript = '';
 
       try {
-        // STEP 1: Preprocess audio with FFmpeg
-        console.log(`[ADMIN-REPROCESS] Step 1: Preprocessing audio...`);
-        try {
-          const ffmpeg = require('fluent-ffmpeg');
-          processedAudioPath = await new Promise<string>((resolve, reject) => {
-            const tempDir = fs.mkdtempSync(
-              path.join(os.tmpdir(), 'meetmind-preprocess-admin-')
-            );
-            const outputPath = path.join(tempDir, `processed-${Date.now()}.wav`);
+        // STEP 1: SKIPPED
+        // ============================================
+        // FFmpeg preprocessing removed — was converting
+        // MP4 → WAV which made files ~10x larger and
+        // pushed them over Groq's 25MB API limit.
+        // transcribeInChunks (Step 2) handles large 
+        // files by splitting into compressed MP4 chunks.
+        // ============================================
+        console.log(`[ADMIN-REPROCESS] Step 1: Skipped (transcribeInChunks handles preprocessing)`);
 
-            ffmpeg(meeting.audioUrl)
-              .audioFrequency(16000)
-              .audioChannels(1)
-              .audioFilters('highpass=f=200, lowpass=f=3000')
-              .output(outputPath)
-              .on('end', () => resolve(outputPath))
-              .on('error', (err: any) => {
-                try {
-                  fs.rmSync(tempDir, { recursive: true, force: true });
-                } catch {}
-                reject(err);
-              })
-              .run();
-          });
-          console.log(`[ADMIN-REPROCESS] Audio preprocessing complete: ${processedAudioPath}`);
-        } catch (preprocessErr) {
-          // Preprocessing failed — fall back to original Cloudinary URL
-          // This is non-fatal, transcription can still work with raw audio
-          console.error(
-            '[ADMIN-REPROCESS] Audio preprocessing failed, falling back to original URL:',
-            preprocessErr
-          );
-          processedAudioPath = meeting.audioUrl;
-        }
+        // STEP 2: Transcribe with chunking support
+        // ============================================
+        // transcribeInChunks:
+        // - Downloads audio from Cloudinary URL
+        // - Checks file size
+        // - If under 20MB: sends directly to Groq
+        // - If over 20MB: splits into 10min MP4 chunks
+        //   and transcribes each chunk separately
+        // - All processing happens on Groq's servers
+        // - Zero RAM cost on Render free tier
+        // ============================================
+        console.log(`[ADMIN-REPROCESS] Step 2: Transcribing with chunk support...`);
+        transcript = await transcribeInChunks(meeting.audioUrl, language);
 
-        // STEP 2: Transcribe
-        console.log(`[ADMIN-REPROCESS] Step 2: Transcribing audio...`);
-        transcript = await transcribeAudio(processedAudioPath, language);
-
-        // Clean up temp files
-        if (processedAudioPath && processedAudioPath.startsWith(os.tmpdir())) {
+        // processedAudioPath is null so this block safely does nothing
+        if (processedAudioPath && (processedAudioPath as string).startsWith(os.tmpdir())) {
           try {
-            fs.rmSync(path.dirname(processedAudioPath), { 
-              recursive: true, 
-              force: true 
+            fs.rmSync(path.dirname(processedAudioPath), {
+              recursive: true,
+              force: true
             });
-          } catch {}
+          } catch { }
         }
 
         if (!transcript || transcript.trim().length === 0) {
@@ -1122,7 +1116,6 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
         );
 
       } catch (innerError: any) {
-        // Background processing failed — update meeting to failed state
         console.error(
           `[ADMIN-REPROCESS] Background processing failed for meeting ${meetingId}:`,
           innerError.message
@@ -1140,14 +1133,14 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
           );
         }
 
-        // Clean up any temp files if they exist
-        if (processedAudioPath && processedAudioPath.startsWith(os.tmpdir())) {
+        // processedAudioPath is null so this block safely does nothing
+        if (processedAudioPath && (processedAudioPath as string).startsWith(os.tmpdir())) {
           try {
-            fs.rmSync(path.dirname(processedAudioPath), { 
-              recursive: true, 
-              force: true 
+            fs.rmSync(path.dirname(processedAudioPath), {
+              recursive: true,
+              force: true
             });
-          } catch {}
+          } catch { }
         }
       }
     }); // end setImmediate
