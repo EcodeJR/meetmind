@@ -937,7 +937,7 @@ export const sendSingleEmail = async (req: Request, res: Response): Promise<void
   }
 };
 
-import { transcribeInChunks } from '../services/transcriptionService';
+import { transcribeInChunks, diarizeWithAI } from '../services/transcriptionService';
 import { summarizeTranscript } from '../services/summarizationService';
 import fs from 'fs';
 import os from 'os';
@@ -994,7 +994,7 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
       // The cleanup block below safely handles null.
       // ============================================
       let processedAudioPath: string | null = null;
-      let transcript = '';
+
 
       try {
         // STEP 1: SKIPPED
@@ -1019,7 +1019,7 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
         // - Zero RAM cost on Render free tier
         // ============================================
         console.log(`[ADMIN-REPROCESS] Step 2: Transcribing with chunk support...`);
-        transcript = await transcribeInChunks(meeting.audioUrl, language);
+        const rawTranscript = await transcribeInChunks(meeting.audioUrl, language);
 
         // processedAudioPath is null so this block safely does nothing
         if (processedAudioPath && (processedAudioPath as string).startsWith(os.tmpdir())) {
@@ -1031,12 +1031,12 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
           } catch { }
         }
 
-        if (!transcript || transcript.trim().length === 0) {
+        if (!rawTranscript || rawTranscript.trim().length === 0) {
           throw new Error('Transcription returned an empty result');
         }
 
         console.log(
-          `[ADMIN-REPROCESS] Transcription complete. Length: ${transcript.length} chars`
+          `[ADMIN-REPROCESS] Transcription complete. Length: ${rawTranscript.length} chars`
         );
 
         // STEP 3: Hallucination detection
@@ -1048,7 +1048,7 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
         // makes up more than 40% of the output.
         // ============================================
         console.log(`[ADMIN-REPROCESS] Step 3: Checking for hallucination...`);
-        const sentences = transcript
+        const sentences = rawTranscript
           .split(/[.!?]+/)
           .map(s => s.trim())
           .filter(Boolean);
@@ -1083,6 +1083,17 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
             }
           }
         }
+
+        // STEP 3b: AI Speaker Diarization
+        // ============================================
+        // Passes raw transcript through Groq Llama to
+        // infer speaker changes and add Speaker labels.
+        // Zero cost — uses existing Groq API key.
+        // Falls back to raw transcript on any error.
+        // ============================================
+        console.log(`[ADMIN-REPROCESS] Step 3b: Running AI speaker diarization...`);
+        const transcript = await diarizeWithAI(rawTranscript);
+        console.log(`[ADMIN-REPROCESS] Diarization complete. Output length: ${transcript.length} chars`);
 
         // STEP 4: Summarize
         console.log(`[ADMIN-REPROCESS] Step 4: Generating AI summary...`);

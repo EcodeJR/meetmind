@@ -5,7 +5,7 @@ import { Meeting } from '../models/Meeting';
 import { User } from '../models/User';
 import { logger } from '../utils/logger';
 import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
-import { transcribeInChunks } from '../services/transcriptionService';
+import { transcribeInChunks, diarizeWithAI } from '../services/transcriptionService';
 import { summarizeTranscript } from '../services/summarizationService';
 import { uploadAudioToCloudinary, deleteAudioFromCloudinary } from '../services/cloudinaryService';
 import { sendMeetingProcessedEmail, sendMeetingFailedEmail, sendMeetingDeletedEmail, sendAccountStatusEmail } from '../services/emailService';
@@ -295,17 +295,28 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         // 10 minute compressed MP4 chunks.
         // Zero RAM cost on Render free tier.
         // ============================================
-        const transcript = await transcribeInChunks(uploadResult.url, user.preferences?.language);
+        const rawTranscript = await transcribeInChunks(uploadResult.url, user.preferences?.language);
 
-        if (!transcript || transcript.trim().length === 0) {
+        if (!rawTranscript || rawTranscript.trim().length === 0) {
           throw new Error('Empty transcript');
         }
 
-        if (detectHallucination(transcript)) {
+        if (detectHallucination(rawTranscript)) {
           throw new Error('We could not accurately transcribe this recording. This is usually caused by poor audio quality. Please try again in a quieter environment closer to the phone.');
         }
 
-        console.log(`[DEBUGGER] BACKGROUND: Transcription complete (${processingMeeting._id}), length: ${transcript.length} chars`);
+        console.log(`[DEBUGGER] BACKGROUND: Transcription complete (${processingMeeting._id}), length: ${rawTranscript.length} chars`);
+
+        // ============================================
+        // AI Speaker Diarization
+        // Passes raw transcript through Groq Llama to
+        // infer speaker changes and add Speaker labels.
+        // Zero cost — uses existing Groq API key.
+        // Falls back to raw transcript on any error.
+        // ============================================
+        console.log(`[DEBUGGER] BACKGROUND: Running AI speaker diarization (${processingMeeting._id})...`);
+        const transcript = await diarizeWithAI(rawTranscript);
+        console.log(`[DEBUGGER] BACKGROUND: Diarization complete (${processingMeeting._id}), length: ${transcript.length} chars`);
 
         console.log(`[DEBUGGER] BACKGROUND: Summarizing meeting ${processingMeeting._id}`);
         const aiAnalysis = await summarizeTranscript(transcript, {
@@ -721,17 +732,28 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         // 10 minute compressed MP4 chunks.
         // Zero RAM cost on Render free tier.
         // ============================================
-        const transcript = await transcribeInChunks(meeting.audioUrl, user.preferences?.language);
+        const rawTranscript = await transcribeInChunks(meeting.audioUrl, user.preferences?.language);
 
-        if (!transcript || transcript.trim().length === 0) {
+        if (!rawTranscript || rawTranscript.trim().length === 0) {
           throw new Error('Transcription returned an empty result');
         }
 
-        if (detectHallucination(transcript)) {
+        if (detectHallucination(rawTranscript)) {
           throw new Error('We could not accurately transcribe this recording. This is usually caused by poor audio quality. Please try again in a quieter environment closer to the phone.');
         }
 
-        console.log(`[RETRY] Transcription successful (${meeting._id}), length: ${transcript.length} chars`);
+        console.log(`[RETRY] Transcription successful (${meeting._id}), length: ${rawTranscript.length} chars`);
+
+        // ============================================
+        // AI Speaker Diarization
+        // Passes raw transcript through Groq Llama to
+        // infer speaker changes and add Speaker labels.
+        // Zero cost — uses existing Groq API key.
+        // Falls back to raw transcript on any error.
+        // ============================================
+        console.log(`[RETRY] Running AI speaker diarization (${meeting._id})...`);
+        const transcript = await diarizeWithAI(rawTranscript);
+        console.log(`[RETRY] Diarization complete (${meeting._id}), length: ${transcript.length} chars`);
 
         const aiAnalysis = await summarizeTranscript(transcript, {
           language: user.preferences?.language,

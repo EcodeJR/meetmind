@@ -260,6 +260,61 @@ export const transcribeInChunks = async (
 };
 
 /**
+ * AI Speaker Diarization (Zero Cost)
+ * Passes the raw Whisper transcript through Groq's Llama model to infer
+ * speaker changes based on conversation flow and context.
+ * Outputs a "Speaker 1: ...\nSpeaker 2: ..." formatted transcript.
+ * Falls back to the original transcript if diarization fails.
+ */
+export const diarizeWithAI = async (transcript: string): Promise<string> => {
+  console.log(`[DIARIZE] Starting AI speaker diarization (${transcript.length} chars)...`);
+
+  // Skip diarization for very short transcripts — not enough context for the model
+  if (!transcript || transcript.trim().length < 50) {
+    console.log('[DIARIZE] Transcript too short — skipping diarization');
+    return transcript;
+  }
+
+  const prompt = `The following is a meeting transcript with no speaker labels.
+Analyze the conversation flow, topic changes, question-and-answer patterns, and speaking styles
+to identify different speakers. Label them as Speaker 1, Speaker 2, etc.
+
+Format the output exactly like this (one speaker turn per line):
+Speaker 1: [what they said]
+Speaker 2: [what they said]
+
+Rules:
+- Only return the reformatted transcript, nothing else — no preamble, no explanation.
+- Keep each speaker's words exactly as they appear in the original.
+- If the transcript clearly has only one speaker, label everything as Speaker 1.
+- Group consecutive sentences from the same speaker together on one line.
+
+Transcript:
+${transcript}`;
+
+  try {
+    const response = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0,
+    });
+
+    const diarized = response.choices[0]?.message?.content?.trim();
+
+    if (!diarized || diarized.length < 10) {
+      console.warn('[DIARIZE] Empty or too-short response from AI — falling back to raw transcript');
+      return transcript;
+    }
+
+    console.log(`[DIARIZE] Diarization complete. Output length: ${diarized.length} chars`);
+    return diarized;
+  } catch (error: any) {
+    console.error('[DIARIZE] AI diarization failed — falling back to raw transcript:', error.message);
+    return transcript;
+  }
+};
+
+/**
  * PHASE 2: Groq Whisper (First Fallback)
  * Standard single-file transcription.
  * Will fail with 413 if file exceeds 25MB.
