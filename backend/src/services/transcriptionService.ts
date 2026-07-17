@@ -275,19 +275,43 @@ export const diarizeWithAI = async (transcript: string): Promise<string> => {
     return transcript;
   }
 
-  const prompt = `The following is a meeting transcript with no speaker labels.
-Analyze the conversation flow, topic changes, question-and-answer patterns, and speaking styles
-to identify different speakers. Label them as Speaker 1, Speaker 2, etc.
+  const prompt = `The following is a raw meeting transcript with no speaker labels.
 
-Format the output exactly like this (one speaker turn per line):
-Speaker 1: [what they said]
-Speaker 2: [what they said]
+Your task is to identify and label each speaker turn.
 
-Rules:
-- Only return the reformatted transcript, nothing else — no preamble, no explanation.
-- Keep each speaker's words exactly as they appear in the original.
-- If the transcript clearly has only one speaker, label everything as Speaker 1.
-- Group consecutive sentences from the same speaker together on one line.
+ANALYSIS INSTRUCTIONS:
+- Analyze conversation flow, turn-taking patterns, question-and-answer 
+  exchanges, topic initiations, and speaking style differences
+- Pay close attention to:
+  * Who asks questions vs who answers them
+  * Affirmations and reactions ("Right.", "Yeah.", "Exactly.", "I mean,") 
+    — these are usually the listener responding, not a new speaker turn
+  * When someone introduces a new topic vs when someone elaborates on it
+  * Sentence length and vocabulary patterns per speaker
+  * Direct responses that clearly follow a question from the other person
+
+LABELING RULES:
+- Label speakers as Speaker 1, Speaker 2, etc.
+- Group all consecutive sentences from the same speaker on one line
+- Short affirmations like "Right.", "Yeah.", "Exactly.", "Oh, absolutely.", 
+  "I mean," at the start of a sentence are strong signals of a speaker switch
+- If two consecutive sentences have clearly different speaking styles 
+  or one directly responds to the other, treat them as different speakers
+- If the transcript clearly has only one speaker, label everything as Speaker 1
+- Do not merge speakers just because topics are similar
+
+OUTPUT FORMAT (strict — one speaker turn per line):
+Speaker 1: [exact words]
+Speaker 2: [exact words]
+Speaker 1: [exact words]
+
+CRITICAL RULES:
+- Only return the reformatted transcript — no preamble, no explanation, 
+  no summary, nothing else
+- Keep every word exactly as it appears in the original transcript
+- Do not paraphrase, summarize, or correct any words
+- Do not skip any content from the original transcript
+- Every word from the original must appear in the output
 
 Transcript:
 ${transcript}`;
