@@ -13,6 +13,7 @@ import { Waitlist } from '../models/Waitlist';
 import { EmailLog } from '../models/EmailLog';
 import { sendCustomEmail } from '../services/emailService';
 import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
+import { sendError } from '../utils/responses';
 
 // GET /admin/stats
 export const getAdminStats = async (_req: Request, res: Response): Promise<void> => {
@@ -945,17 +946,27 @@ import path from 'path';
 
 // POST /admin/meetings/reprocess
 export const reprocessAdminMeeting = async (req: Request, res: Response): Promise<void> => {
-  const { meetingId } = req.body;
+  const meetingId = req.params.id || req.body.meetingId;
 
   try {
+    if (!meetingId) {
+      sendError(res, 'MISSING_MEETING_ID', 'Meeting id is required', 400);
+      return;
+    }
+
     const meeting = await Meeting.findById(meetingId);
     if (!meeting) {
-      res.status(404).json({ error: 'Meeting not found' });
+      sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
+      return;
+    }
+
+    if (meeting.status !== 'failed') {
+      sendError(res, 'INVALID_STATUS', `Only failed meetings can be retried (current status: ${meeting.status})`, 400);
       return;
     }
 
     if (!meeting.audioUrl) {
-      res.status(400).json({ error: 'Meeting has no audio URL stored' });
+      sendError(res, 'NO_AUDIO_URL', 'Meeting has no audio URL stored', 400);
       return;
     }
 
@@ -976,7 +987,7 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
     // All heavy processing happens in background
     // after the response is sent.
     // ============================================
-    res.json({
+    res.status(202).json({
       success: true,
       message: 'Reprocessing started in background. Check the meeting status in 2-3 minutes.',
       meetingId,

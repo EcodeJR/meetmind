@@ -34,6 +34,16 @@ interface RecentMeeting {
   platform?: string;
 }
 
+interface FailedMeeting {
+  _id: string;
+  title: string;
+  userName: string;
+  userEmail: string;
+  status: string;
+  createdAt: string;
+  processingError?: string | null;
+}
+
 const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
 
@@ -49,12 +59,33 @@ export default function OverviewPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentUsers, setRecentUsers] = useState<RecentUser[]>([]);
   const [recentMeetings, setRecentMeetings] = useState<RecentMeeting[]>([]);
+  const [failedMeetings, setFailedMeetings] = useState<FailedMeeting[]>([]);
   const [chartLabels, setChartLabels] = useState<string[]>([]);
   const [userSeries, setUserSeries] = useState<number[]>([]);
   const [meetingSeries, setMeetingSeries] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [debugData, setDebugData] = useState<any | null>(null);
+  const [failedMeetingsLoading, setFailedMeetingsLoading] = useState(true);
+  const [failedMeetingsPage, setFailedMeetingsPage] = useState(1);
+  const [failedMeetingsTotalPages, setFailedMeetingsTotalPages] = useState(1);
+  const [failedMeetingsTotal, setFailedMeetingsTotal] = useState(0);
+  const [retryingMeetingId, setRetryingMeetingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  const extractErrorMessage = async (response: Response) => {
+    try {
+      const payload = await response.json();
+      return payload?.error?.message || payload?.error || payload?.message || `Request failed (${response.status})`;
+    } catch {
+      return `Request failed (${response.status})`;
+    }
+  };
+
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const fetchData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -122,9 +153,61 @@ export default function OverviewPage() {
     }
   }, []);
 
+  const fetchFailedMeetings = useCallback(async (page = 1) => {
+    setFailedMeetingsLoading(true);
+    try {
+      const response = await fetch(`${RAILWAY_API}/admin/meetings?page=${page}&limit=6&status=failed`, { headers: adminHeaders });
+      if (!response.ok) throw new Error(await extractErrorMessage(response));
+      const data = await response.json();
+      setFailedMeetings(data.meetings || []);
+      setFailedMeetingsTotal(data.total || 0);
+      setFailedMeetingsTotalPages(data.pages || 1);
+    } catch (error) {
+      console.error('Failed to load failed meetings:', error);
+      setFailedMeetings([]);
+      setFailedMeetingsTotal(0);
+      setFailedMeetingsTotalPages(1);
+    } finally {
+      setFailedMeetingsLoading(false);
+    }
+  }, []);
+
+  const handleRetryMeeting = useCallback(async (meetingId: string) => {
+    setRetryingMeetingId(meetingId);
+    try {
+      const response = await fetch(`${RAILWAY_API}/admin/meetings/${meetingId}/retry`, {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        throw new Error(await extractErrorMessage(response));
+      }
+
+      const payload = await response.json();
+      showToast(payload?.message || 'Retry started successfully');
+      await Promise.all([
+        fetchData(true),
+        fetchFailedMeetings(failedMeetingsPage),
+      ]);
+    } catch (error: any) {
+      showToast(error?.message || 'Retry failed', 'error');
+    } finally {
+      setRetryingMeetingId(null);
+    }
+  }, [failedMeetingsPage, fetchData, fetchFailedMeetings]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    fetchFailedMeetings(failedMeetingsPage);
+  }, [failedMeetingsPage, fetchFailedMeetings]);
 
   const { linePath, areaPath, lineMax } = useMemo(() => {
     if (!userSeries || userSeries.length === 0) return { linePath: '', areaPath: '', lineMax: 1 };
@@ -161,13 +244,24 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-8 animate-fade-in">
+      {toast && (
+        <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-xl shadow-xl text-[14px] font-medium text-white animate-slide-up ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-error'}`}>
+          {toast.msg}
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="flex justify-between items-center">
         <div>
           <p className="text-[14px] text-outline">Welcome back, Admin</p>
         </div>
         <button
-          onClick={() => fetchData(true)}
+          onClick={async () => {
+            await Promise.all([
+              fetchData(true),
+              fetchFailedMeetings(failedMeetingsPage),
+            ]);
+          }}
           disabled={refreshing}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container-lowest border border-outline-variant text-[14px] text-on-surface hover:bg-surface-container-low transition-all soft-shadow disabled:opacity-60"
         >
@@ -392,6 +486,93 @@ export default function OverviewPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Failed Meetings */}
+      <div className="bg-surface-container-lowest p-6 rounded-2xl soft-shadow border border-surface-container">
+        <div className="flex justify-between items-center mb-6 gap-4">
+          <div>
+            <h4 className="text-[18px] font-semibold font-geist text-on-surface">Failed Meetings</h4>
+            <p className="text-[12px] text-outline">Retry any meeting that failed transcription or summarization</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[12px] text-outline">{new Intl.NumberFormat().format(failedMeetingsTotal)} failed total</p>
+            <Link href="/dashboard/meetings" className="text-primary text-[12px] font-semibold hover:underline">
+              Open meetings index
+            </Link>
+          </div>
+        </div>
+
+        {failedMeetingsLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="p-4 rounded-xl border border-surface-container bg-surface-container-low animate-pulse">
+                <div className="h-4 w-2/3 bg-surface-container rounded mb-2" />
+                <div className="h-3 w-1/2 bg-surface-container rounded" />
+              </div>
+            ))}
+          </div>
+        ) : failedMeetings.length > 0 ? (
+          <div className="space-y-3">
+            {failedMeetings.map((meeting) => (
+              <div
+                key={meeting._id}
+                className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between p-4 bg-surface-container-low rounded-xl hover:ring-1 hover:ring-primary/30 transition-all"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h5 className="font-semibold text-on-surface text-[14px] truncate">{meeting.title}</h5>
+                    <Badge variant="failed" />
+                  </div>
+                  <p className="text-[12px] text-outline mt-1">
+                    {meeting.userName || meeting.userEmail || 'Unknown user'} · {meeting.userEmail || 'No email'} · {formatDate(meeting.createdAt)}
+                  </p>
+                  <p className="text-[12px] text-rose-600 mt-2 line-clamp-2">
+                    {meeting.processingError || 'No error details stored yet.'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <button
+                    onClick={() => handleRetryMeeting(meeting._id)}
+                    disabled={retryingMeetingId === meeting._id}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-[13px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+                  >
+                    <span className={`material-symbols-outlined ${retryingMeetingId === meeting._id ? 'animate-spin' : ''}`} style={{ fontSize: '18px' }}>
+                      refresh
+                    </span>
+                    {retryingMeetingId === meeting._id ? 'Retrying...' : 'Retry'}
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            <div className="flex items-center justify-between pt-2">
+              <p className="text-[12px] text-outline">
+                Page {failedMeetingsPage} of {Math.max(1, failedMeetingsTotalPages)}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setFailedMeetingsPage(p => Math.max(1, p - 1))}
+                  disabled={failedMeetingsPage === 1}
+                  className="px-3 py-2 rounded-lg border border-outline-variant text-outline hover:bg-surface-container-highest disabled:opacity-40 transition-all"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setFailedMeetingsPage(p => Math.min(failedMeetingsTotalPages, p + 1))}
+                  disabled={failedMeetingsPage >= failedMeetingsTotalPages}
+                  className="px-3 py-2 rounded-lg border border-outline-variant text-outline hover:bg-surface-container-highest disabled:opacity-40 transition-all"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="p-5 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-800 text-[13px]">
+            No failed meetings found.
+          </div>
+        )}
       </div>
 
       {/* Admin Debug Panel */}

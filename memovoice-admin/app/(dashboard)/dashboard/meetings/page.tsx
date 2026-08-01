@@ -17,6 +17,7 @@ interface Meeting {
   summary?: string;
   actionItems?: string[];
   keyDecisions?: string[];
+  processingError?: string;
 }
 
 const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
@@ -119,6 +120,29 @@ export default function MeetingsPage() {
       showToast('Delete failed', 'error');
     }
     setDeleteConfirm(null);
+  };
+
+  const handleRetry = async (id: string) => {
+    try {
+      const res = await fetch(`${RAILWAY_API}/admin/meetings/${id}/retry`, {
+        method: 'POST',
+        headers: {
+          'x-admin-key': ADMIN_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(payload?.error?.message || payload?.error || payload?.message || 'Retry failed');
+      }
+
+      showToast(payload?.message || 'Retry started');
+      await fetchMeetings();
+    } catch (error: any) {
+      showToast(error?.message || 'Retry failed', 'error');
+    }
   };
 
   const formatDate = (d: string) =>
@@ -274,6 +298,15 @@ export default function MeetingsPage() {
                       >
                         <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>delete</span>
                       </button>
+                      {m.status === 'failed' && (
+                        <button
+                          onClick={() => handleRetry(m._id)}
+                          className="p-1.5 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                          title="Retry transcription"
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>refresh</span>
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -351,6 +384,12 @@ export default function MeetingsPage() {
                       No transcript has been generated for this meeting.
                     </div>
                   )}
+                  {viewMeeting.processingError && (
+                    <div className="mt-4 p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-[13px]">
+                      <h4 className="font-bold text-[14px] mb-1.5">Latest Processing Error</h4>
+                      <p className="whitespace-pre-wrap">{viewMeeting.processingError}</p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -368,7 +407,7 @@ export default function MeetingsPage() {
 
                   {viewMeeting.keyDecisions && viewMeeting.keyDecisions.length > 0 && (
                     <div>
-                      <h4 className="font-bold text-on-surface text-[14px] mb-1.5 flex items-center gap-1.5 text-emerald-600">
+                      <h4 className="font-bold text-[14px] mb-1.5 flex items-center gap-1.5 text-emerald-600">
                         <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>verified</span>
                         Key Decisions
                       </h4>
@@ -382,7 +421,7 @@ export default function MeetingsPage() {
 
                   {viewMeeting.actionItems && viewMeeting.actionItems.length > 0 && (
                     <div>
-                      <h4 className="font-bold text-on-surface text-[14px] mb-1.5 flex items-center gap-1.5 text-primary">
+                      <h4 className="font-bold text-[14px] mb-1.5 flex items-center gap-1.5 text-primary">
                         <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>assignment</span>
                         Action Items
                       </h4>

@@ -277,44 +277,44 @@ export const diarizeWithAI = async (transcript: string): Promise<string> => {
 
   const prompt = `The following is a raw meeting transcript with no speaker labels.
 
-Your task is to identify and label each speaker turn.
+  Your task is to identify and label each speaker turn.
 
-ANALYSIS INSTRUCTIONS:
-- Analyze conversation flow, turn-taking patterns, question-and-answer 
-  exchanges, topic initiations, and speaking style differences
-- Pay close attention to:
-  * Who asks questions vs who answers them
-  * Affirmations and reactions ("Right.", "Yeah.", "Exactly.", "I mean,") 
-    — these are usually the listener responding, not a new speaker turn
-  * When someone introduces a new topic vs when someone elaborates on it
-  * Sentence length and vocabulary patterns per speaker
-  * Direct responses that clearly follow a question from the other person
+  ANALYSIS INSTRUCTIONS:
+  - Analyze conversation flow, turn-taking patterns, question-and-answer 
+    exchanges, topic initiations, and speaking style differences
+  - Pay close attention to:
+    * Who asks questions vs who answers them
+    * Affirmations and reactions ("Right.", "Yeah.", "Exactly.", "I mean,") 
+      — these are usually the listener responding, not a new speaker turn
+    * When someone introduces a new topic vs when someone elaborates on it
+    * Sentence length and vocabulary patterns per speaker
+    * Direct responses that clearly follow a question from the other person
 
-LABELING RULES:
-- Label speakers as Speaker 1, Speaker 2, etc.
-- Group all consecutive sentences from the same speaker on one line
-- Short affirmations like "Right.", "Yeah.", "Exactly.", "Oh, absolutely.", 
-  "I mean," at the start of a sentence are strong signals of a speaker switch
-- If two consecutive sentences have clearly different speaking styles 
-  or one directly responds to the other, treat them as different speakers
-- If the transcript clearly has only one speaker, label everything as Speaker 1
-- Do not merge speakers just because topics are similar
+  LABELING RULES:
+  - Label speakers as Speaker 1, Speaker 2, Speaker 3, etc.
+  - Group all consecutive sentences from the same speaker on one line
+  - Short affirmations like "Right.", "Yeah.", "Exactly.", "Oh, absolutely.", 
+    "I mean," at the start of a sentence are strong signals of a speaker switch
+  - If two consecutive sentences have clearly different speaking styles 
+    or one directly responds to the other, treat them as different speakers
+  - If the transcript clearly has only one speaker, label everything as Speaker 1
+  - Do not merge speakers just because topics are similar
 
-OUTPUT FORMAT (strict — one speaker turn per line):
-Speaker 1: [exact words]
-Speaker 2: [exact words]
-Speaker 1: [exact words]
+  OUTPUT FORMAT (strict — one speaker turn per line):
+  Speaker 1: [exact words]
+  Speaker 2: [exact words]
+  Speaker 1: [exact words]
 
-CRITICAL RULES:
-- Only return the reformatted transcript — no preamble, no explanation, 
-  no summary, nothing else
-- Keep every word exactly as it appears in the original transcript
-- Do not paraphrase, summarize, or correct any words
-- Do not skip any content from the original transcript
-- Every word from the original must appear in the output
+  CRITICAL RULES:
+  - Only return the reformatted transcript — no preamble, no explanation, 
+    no summary, nothing else
+  - Keep every word exactly as it appears in the original transcript
+  - Do not paraphrase, summarize, or correct any words
+  - Do not skip any content from the original transcript
+  - Every word from the original must appear in the output
 
-Transcript:
-${transcript}`;
+  Transcript:
+  ${transcript}`;
 
   try {
     const response = await groq.chat.completions.create({

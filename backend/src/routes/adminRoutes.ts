@@ -69,6 +69,9 @@ router.get('/email/history', getEmailHistory);
 router.post('/email/broadcast', sendBroadcastEmail);
 router.post('/email/send-single', sendSingleEmail);
 
+// Failed meeting retry
+router.post('/meetings/:id/retry', reprocessAdminMeeting);
+
 // Reprocess/Recover a failed meeting using its existing Cloudinary URL
 router.post('/meetings/reprocess', reprocessAdminMeeting);
 
