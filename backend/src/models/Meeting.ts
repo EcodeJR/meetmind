@@ -1,5 +1,12 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
+export interface ITranscriptionQuality {
+  score: number;
+  label: 'excellent' | 'good' | 'fair' | 'poor';
+  hallucinationDetected: boolean;
+  hallucinationNote?: string;
+}
+
 export interface IMeeting extends Document {
   userId: Types.ObjectId;
   title?: string;
@@ -21,6 +28,7 @@ export interface IMeeting extends Document {
   processingError?: string;
   language: string;
   tags: string[];
+  transcriptionQuality?: ITranscriptionQuality;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -98,6 +106,15 @@ const meetingSchema = new Schema<IMeeting>(
     },
     processingError: {
       type: String,
+    },
+    transcriptionQuality: {
+      type: {
+        score: { type: Number },
+        label: { type: String, enum: ['excellent', 'good', 'fair', 'poor'] },
+        hallucinationDetected: { type: Boolean },
+        hallucinationNote: { type: String },
+      },
+      default: undefined,
     },
   },
   {

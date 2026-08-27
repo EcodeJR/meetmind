@@ -1,4 +1,5 @@
 import { AuthRequest } from '../middleware/auth';
+import { ITranscriptionQuality } from '../models/Meeting';
 import { Response } from 'express';
 import { sendSuccess, sendError } from '../utils/responses';
 import { Meeting } from '../models/Meeting';
@@ -22,25 +23,67 @@ import { releaseMonthlyMeetingSlot } from '../middleware/subscriptionMiddleware'
 // servers with zero local RAM cost on Render.
 // ============================================
 
-const detectHallucination = (transcript: string): boolean => {
+// ============================================
+// Transcription quality scorer
+// Returns a 0–100 score + label + hallucination
+// flag with a human-readable cause note.
+// ============================================
+const scoreTranscription = (transcript: string): ITranscriptionQuality => {
+  const words = transcript.trim().split(/\s+/).filter(Boolean);
   const sentences = transcript.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
 
-  if (sentences.length < 5) return false;
+  let score = 100;
+  let hallucinationDetected = false;
+  let hallucinationNote: string | undefined;
 
+  // --- Signal 1: Sentence-level repetition ---
   const frequency: Record<string, number> = {};
   sentences.forEach(s => {
     const normalized = s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-    if (normalized) {
-      frequency[normalized] = (frequency[normalized] || 0) + 1;
-    }
+    if (normalized) frequency[normalized] = (frequency[normalized] || 0) + 1;
   });
+  const repeatRatio = sentences.length > 0
+    ? Math.max(...Object.values(frequency)) / sentences.length
+    : 0;
 
-  const values = Object.values(frequency);
-  if (values.length === 0) return false;
-  const maxRepeat = Math.max(...values);
-  const repeatRatio = maxRepeat / sentences.length;
+  if (repeatRatio > 0.40) {
+    score -= 60;
+    hallucinationDetected = true;
+    hallucinationNote =
+      'Whisper repeated phrases extensively. This is typically caused by background music, long silences, or very low audio volume. Try recording in a quieter environment closer to the microphone.';
+  } else if (repeatRatio > 0.20) {
+    score -= 30;
+    hallucinationDetected = true;
+    hallucinationNote =
+      'Some repeated phrases were detected. This can happen when there is background noise or periods of silence in the audio.';
+  }
 
-  return repeatRatio > 0.4;
+  // --- Signal 2: Very short transcript ---
+  if (words.length < 50) {
+    score -= 20;
+    if (!hallucinationNote) {
+      hallucinationNote =
+        'Very little speech was detected. Ensure the microphone was active and positioned close to the speakers during the recording.';
+    }
+  }
+
+  // --- Signal 3: Inaudible / music markers ---
+  const inaudibleMatches = (transcript.match(/\[INAUDIBLE\]|\[MUSIC\]|\[NOISE\]/gi) || []).length;
+  score -= Math.min(inaudibleMatches * 10, 30);
+
+  // --- Signal 4: Non-Latin character dominance ---
+  const nonLatinRatio = (transcript.match(/[^\x00-\x7F]/g) || []).length / Math.max(transcript.length, 1);
+  if (nonLatinRatio > 0.30) score -= 15;
+
+  score = Math.max(0, Math.min(100, score));
+
+  let label: ITranscriptionQuality['label'];
+  if (score >= 85) label = 'excellent';
+  else if (score >= 65) label = 'good';
+  else if (score >= 40) label = 'fair';
+  else label = 'poor';
+
+  return { score, label, hallucinationDetected, hallucinationNote };
 };
 
 // ============================================
@@ -301,11 +344,19 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
           throw new Error('Empty transcript');
         }
 
-        if (detectHallucination(rawTranscript)) {
-          throw new Error('We could not accurately transcribe this recording. This is usually caused by poor audio quality. Please try again in a quieter environment closer to the phone.');
-        }
-
         console.log(`[DEBUGGER] BACKGROUND: Transcription complete (${processingMeeting._id}), length: ${rawTranscript.length} chars`);
+
+        // Score the transcription quality
+        const quality = scoreTranscription(rawTranscript);
+        console.log(`[DEBUGGER] BACKGROUND: Transcription quality: ${quality.score}/100 (${quality.label})`);
+
+        // If quality is 'poor' due to severe hallucination, abort early
+        if (quality.label === 'poor' && quality.hallucinationDetected) {
+          throw new Error(
+            quality.hallucinationNote ||
+            'We could not accurately transcribe this recording. This is usually caused by poor audio quality. Please try again in a quieter environment closer to the phone.'
+          );
+        }
 
         // ============================================
         // AI Speaker Diarization
@@ -334,6 +385,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         processingMeeting.title = title || aiAnalysis.title || processingMeeting.title;
         processingMeeting.status = 'completed';
         processingMeeting.processingCompletedAt = new Date();
+        processingMeeting.transcriptionQuality = quality;
         await processingMeeting.save();
 
         user.meetingCount = (user.meetingCount || 0) + 1;
@@ -738,8 +790,15 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
           throw new Error('Transcription returned an empty result');
         }
 
-        if (detectHallucination(rawTranscript)) {
-          throw new Error('We could not accurately transcribe this recording. This is usually caused by poor audio quality. Please try again in a quieter environment closer to the phone.');
+        // Score the transcription quality
+        const quality = scoreTranscription(rawTranscript);
+        console.log(`[RETRY] Transcription quality: ${quality.score}/100 (${quality.label})`);
+
+        if (quality.label === 'poor' && quality.hallucinationDetected) {
+          throw new Error(
+            quality.hallucinationNote ||
+            'We could not accurately transcribe this recording. This is usually caused by poor audio quality. Please try again in a quieter environment closer to the phone.'
+          );
         }
 
         console.log(`[RETRY] Transcription successful (${meeting._id}), length: ${rawTranscript.length} chars`);
@@ -772,6 +831,7 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         }
         meeting.status = 'completed';
         meeting.processingCompletedAt = new Date();
+        meeting.transcriptionQuality = quality;
         await meeting.save();
 
         user.meetingCount = (user.meetingCount || 0) + 1;

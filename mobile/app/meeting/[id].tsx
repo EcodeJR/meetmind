@@ -31,6 +31,13 @@ import apiClient from '@/services/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 
+type TranscriptionQuality = {
+  score: number;
+  label: 'excellent' | 'good' | 'fair' | 'poor';
+  hallucinationDetected: boolean;
+  hallucinationNote?: string;
+};
+
 type Meeting = {
   _id: string;
   title: string;
@@ -45,6 +52,7 @@ type Meeting = {
   tags?: string[];
   status?: 'pending' | 'processing' | 'completed' | 'failed';
   processingError?: string;
+  transcriptionQuality?: TranscriptionQuality;
 };
 
 const formatDateTime = (value: Date) =>
@@ -68,6 +76,77 @@ const formatDuration = (totalSeconds: number) => {
   if (minutes > 0) parts.push(`${minutes}m`);
   if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
   return parts.join(' ');
+};
+
+// Format elapsed seconds as M:SS
+const formatTimestamp = (totalSeconds: number): string => {
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+type SpeakerTurn = {
+  speaker: string;
+  text: string;
+  estimatedStart: number; // seconds from meeting start
+};
+
+// Parse the diarized "Speaker N: text" transcript into turn objects
+// with linearly-interpolated timestamps based on total duration.
+const parseSpeakerTurns = (transcript: string, durationSeconds: number): SpeakerTurn[] => {
+  const lines = transcript
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  const speakerLineRegex = /^(Speaker\s+\d+):\s*(.+)$/i;
+  const turns: SpeakerTurn[] = [];
+
+  lines.forEach(line => {
+    const match = line.match(speakerLineRegex);
+    if (match) {
+      turns.push({ speaker: match[1], text: match[2], estimatedStart: 0 });
+    } else if (turns.length > 0) {
+      // Continuation of previous speaker's text
+      turns[turns.length - 1].text += ' ' + line;
+    } else {
+      turns.push({ speaker: 'Speaker 1', text: line, estimatedStart: 0 });
+    }
+  });
+
+  if (turns.length === 0) return [];
+
+  // Interpolate timestamps by character count
+  const totalChars = turns.reduce((sum, t) => sum + t.text.length, 0);
+  let accChars = 0;
+  turns.forEach(turn => {
+    turn.estimatedStart = totalChars > 0
+      ? (accChars / totalChars) * durationSeconds
+      : 0;
+    accChars += turn.text.length;
+  });
+
+  return turns;
+};
+
+const SPEAKER_COLORS = [
+  { bg: '#EEF2FF', border: '#818CF8', text: '#3730A3', pill: '#6366F1' }, // indigo
+  { bg: '#F0FDF4', border: '#4ADE80', text: '#166534', pill: '#22C55E' }, // green
+  { bg: '#FFF7ED', border: '#FB923C', text: '#9A3412', pill: '#F97316' }, // orange
+  { bg: '#FDF4FF', border: '#C084FC', text: '#6B21A8', pill: '#A855F7' }, // purple
+  { bg: '#F0F9FF', border: '#38BDF8', text: '#0C4A6E', pill: '#0EA5E9' }, // sky
+];
+
+const getSpeakerColor = (speaker: string) => {
+  const num = parseInt(speaker.replace(/\D/g, ''), 10) || 1;
+  return SPEAKER_COLORS[(num - 1) % SPEAKER_COLORS.length];
+};
+
+const QUALITY_CONFIG = {
+  excellent: { color: '#16A34A', bg: '#F0FDF4', border: '#4ADE80', emoji: '✦' },
+  good:      { color: '#2563EB', bg: '#EFF6FF', border: '#93C5FD', emoji: '◎' },
+  fair:      { color: '#D97706', bg: '#FFFBEB', border: '#FCD34D', emoji: '◐' },
+  poor:      { color: '#DC2626', bg: '#FEF2F2', border: '#FCA5A5', emoji: '◌' },
 };
 
 export default function MeetingDetailScreen() {
@@ -823,6 +902,47 @@ export default function MeetingDetailScreen() {
             </View>
           </View>
 
+          {/* Transcription Quality Card */}
+          {meeting.status === 'completed' && meeting.transcriptionQuality && (() => {
+            const q = meeting.transcriptionQuality!;
+            const cfg = QUALITY_CONFIG[q.label];
+            return (
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>TRANSCRIPTION QUALITY</Text>
+                <View style={[styles.qualityCard, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+                  <View style={styles.qualityCardTop}>
+                    {/* Score circle */}
+                    <View style={[styles.qualityScoreCircle, { borderColor: cfg.color }]}>
+                      <Text style={[styles.qualityScoreNumber, { color: cfg.color }]}>{q.score}</Text>
+                      <Text style={[styles.qualityScoreMax, { color: cfg.color }]}>/100</Text>
+                    </View>
+                    <View style={styles.qualityCardInfo}>
+                      <View style={[styles.qualityLabelChip, { backgroundColor: cfg.color }]}>
+                        <Text style={styles.qualityLabelText}>{cfg.emoji} {q.label.toUpperCase()}</Text>
+                      </View>
+                      <Text style={[styles.qualityCardTitle, { color: cfg.color }]}>Transcription accuracy</Text>
+                      <Text style={styles.qualityCardHint}>
+                        {q.label === 'excellent' && 'Crisp, accurate transcript — great audio quality.'}
+                        {q.label === 'good' && 'Good overall accuracy with minor issues.'}
+                        {q.label === 'fair' && 'Moderate accuracy — some words may be incorrect.'}
+                        {q.label === 'poor' && 'Low accuracy — review carefully.'}
+                      </Text>
+                    </View>
+                  </View>
+                  {q.hallucinationDetected && q.hallucinationNote && (
+                    <View style={styles.hallucinationBanner}>
+                      <Ionicons name="warning-outline" size={15} color="#B45309" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.hallucinationBannerTitle}>Possible AI hallucination detected</Text>
+                        <Text style={styles.hallucinationBannerText}>{q.hallucinationNote}</Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              </View>
+            );
+          })()}
+
           {/* Action Items Section */}
           {isPro && meeting.actionItems && meeting.actionItems.length > 0 && (
             <View style={styles.section}>
@@ -871,10 +991,51 @@ export default function MeetingDetailScreen() {
                   </View>
                 </View>
               ) : meeting.rawTranscript ? (
-                <View style={styles.transcriptBlock}>
-                   <Text style={styles.speakerLabel}>PRIMARY SPEAKER</Text>
-                   <Text style={styles.transcriptText}>{meeting.rawTranscript}</Text>
-                </View>
+                (() => {
+                  const turns = parseSpeakerTurns(
+                    meeting.rawTranscript,
+                    meeting.durationSeconds || 0
+                  );
+
+                  // If no speaker labels detected, render plain text
+                  if (turns.length === 0 || !meeting.rawTranscript.match(/^Speaker\s+\d+:/im)) {
+                    return (
+                      <View style={styles.transcriptBlock}>
+                        <Text style={styles.speakerLabel}>PRIMARY SPEAKER</Text>
+                        <Text style={styles.transcriptText}>{meeting.rawTranscript}</Text>
+                      </View>
+                    );
+                  }
+
+                  return (
+                    <View>
+                      {turns.map((turn, idx) => {
+                        const colors = getSpeakerColor(turn.speaker);
+                        return (
+                          <View
+                            key={idx}
+                            style={[
+                              styles.speakerTurnCard,
+                              { backgroundColor: colors.bg, borderColor: colors.border },
+                            ]}
+                          >
+                            <View style={styles.speakerTurnHeader}>
+                              <View style={[styles.speakerPill, { backgroundColor: colors.pill }]}>
+                                <Text style={styles.speakerPillText}>{turn.speaker}</Text>
+                              </View>
+                              <Text style={[styles.speakerTimestamp, { color: colors.text }]}>
+                                {formatTimestamp(turn.estimatedStart)}
+                              </Text>
+                            </View>
+                            <Text style={[styles.speakerTurnText, { color: colors.text }]}>
+                              {turn.text}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })()
               ) : (
                 <Text style={styles.noTranscriptText}>Transcription is still in progress. This page auto-refreshes every few seconds.</Text>
               )}
@@ -1282,5 +1443,122 @@ const styles = StyleSheet.create({
   },
   bottomGap: {
     height: 60,
+  },
+
+  // ── Transcription Quality Card ──────────────────────────────────
+  qualityCard: {
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    padding: theme.spacing.md,
+    gap: 12,
+  },
+  qualityCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  qualityScoreCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  qualityScoreNumber: {
+    fontFamily: 'Manrope-Bold',
+    fontSize: 26,
+    lineHeight: 30,
+  },
+  qualityScoreMax: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 10,
+    lineHeight: 12,
+  },
+  qualityCardInfo: {
+    flex: 1,
+    gap: 6,
+  },
+  qualityLabelChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  qualityLabelText: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: '#fff',
+  },
+  qualityCardTitle: {
+    fontFamily: 'Manrope-SemiBold',
+    fontSize: 14,
+  },
+  qualityCardHint: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    lineHeight: 18,
+    color: theme.colors.onSurfaceVariant,
+  },
+  hallucinationBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FFFBEB',
+    borderRadius: theme.borderRadius.base,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    padding: 10,
+    marginTop: 4,
+  },
+  hallucinationBannerTitle: {
+    fontFamily: 'Manrope-SemiBold',
+    fontSize: 12,
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  hallucinationBannerText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#78350F',
+  },
+
+  // ── Speaker Turn Bubbles ────────────────────────────────────────
+  speakerTurnCard: {
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 10,
+  },
+  speakerTurnHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  speakerPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  speakerPillText: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: '#fff',
+  },
+  speakerTimestamp: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 11,
+    letterSpacing: 0.5,
+    opacity: 0.75,
+  },
+  speakerTurnText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 15,
+    lineHeight: 24,
   },
 });
