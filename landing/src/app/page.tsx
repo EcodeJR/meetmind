@@ -23,17 +23,17 @@ export default function Home() {
     <main className="min-h-screen bg-white text-black selection:bg-black/10 selection:text-black">
       <Navbar />
       <Hero />
-      <SocialProof />
+      {/* <SocialProof /> */}
       <Problem />
       <Features />
       <HowItWorks />
       <Pricing />
-      <Testimonials />
+      {/* <Testimonials /> */}
       <FAQ />
       <ContactSection />
       <FinalCTA />
       <Footer />
-      
+
       {/* Structured Data for SEO */}
       <script
         type="application/ld+json"
