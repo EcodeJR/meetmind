@@ -82,7 +82,7 @@ const Hero = () => {
 
             <div className="flex flex-col sm:flex-row gap-4 mb-8">
               <a
-                href="https://github.com/EcodeJR/meetmind/releases/download/v1.1.0/Memovoice0.apk"
+                href="https://github.com/EcodeJR/meetmind/releases/download/v1.2.0/application-d901fa13-2531-4317-8900-26fbea054e60.apk"
                 className="inline-flex items-center justify-center gap-3 bg-black text-white px-8 py-4 rounded-full font-bold text-base hover:bg-black/90 transition-all active:scale-95 uppercase tracking-[0.2em] w-full sm:w-auto"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
@@ -179,12 +179,12 @@ const Hero = () => {
                   className={`${panel.tone} rounded-[28px] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.08)]`}
                 >
                   <div className="rounded-[22px] overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
-                    <Image 
-                      src={imageMap[panel.label]} 
-                      alt={panel.title} 
-                      width={640} 
-                      height={420} 
-                      className="w-full h-[180px] sm:h-[220px] md:h-[260px] lg:h-[300px] xl:h-[340px] 2xl:h-[380px] object-contain transition-all duration-300" 
+                    <Image
+                      src={imageMap[panel.label]}
+                      alt={panel.title}
+                      width={640}
+                      height={420}
+                      className="w-full h-[180px] sm:h-[220px] md:h-[260px] lg:h-[300px] xl:h-[340px] 2xl:h-[380px] object-contain transition-all duration-300"
                     />
                   </div>
                   <div className="mt-4 flex items-end justify-between gap-4">
