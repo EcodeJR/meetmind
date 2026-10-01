@@ -31,6 +31,7 @@ type PricingPayload = {
   amountLabel: string;
   free: {
     meetingsPerMonth: number;
+    maxRecordingMinutes: number;
     summary: string;
     history: string;
     export: boolean;
@@ -38,6 +39,7 @@ type PricingPayload = {
   };
   pro: {
     meetingsPerMonth: string;
+    maxRecordingMinutes: string;
     summary: string;
     history: string;
     export: boolean;
@@ -61,6 +63,7 @@ const getPricingPayload = (country?: string | null): PricingPayload => {
     amountLabel: isNigerian ? `₦${amount.toLocaleString('en-NG')}` : `$${amount.toLocaleString('en-US')}`,
     free: {
       meetingsPerMonth: FREE_PLAN_LIMITS.meetingsPerMonth,
+      maxRecordingMinutes: Math.floor(FREE_PLAN_LIMITS.maxRecordingSeconds / 60),
       summary: 'Basic summary only',
       history: `${FREE_PLAN_LIMITS.transcriptRetentionDays} day history`,
       export: false,
@@ -68,6 +71,7 @@ const getPricingPayload = (country?: string | null): PricingPayload => {
     },
     pro: {
       meetingsPerMonth: 'Unlimited',
+      maxRecordingMinutes: 'Unlimited',
       summary: 'Full transcripts',
       history: 'Unlimited history',
       export: true,

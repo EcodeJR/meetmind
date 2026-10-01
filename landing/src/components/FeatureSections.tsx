@@ -135,7 +135,7 @@ export const Features = () => (
           },
           {
             title: "AI Transcription",
-            desc: "Accurate speaker-labeled transcripts generated within seconds of meeting completion.",
+            desc: "Speaker-labeled transcripts generated after your meeting, ready for review and correction.",
             icon: <FileText className="w-6 h-6" />
           },
           {

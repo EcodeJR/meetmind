@@ -18,8 +18,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 const FREE_FEATURES = [
   '5 meetings per month',
+  'Up to 30 minutes per meeting',
   'Basic summary only',
-  '7 day history',
+  '7-day history',
 ];
 
 const PRO_FEATURES = [
@@ -113,6 +114,7 @@ export default function SubscriptionScreen() {
   const proFeatures = planDetails?.pro
     ? [
         `${planDetails.pro.meetingsPerMonth} meetings`,
+        `${planDetails.pro.maxRecordingMinutes} recording length`,
         planDetails.pro.summary,
         'Action item extraction',
         'Export to PDF and email',
@@ -122,6 +124,7 @@ export default function SubscriptionScreen() {
   const freeFeatures = planDetails?.free
     ? [
         `${planDetails.free.meetingsPerMonth} meetings per month`,
+        `Up to ${planDetails.free.maxRecordingMinutes} minutes per meeting`,
         planDetails.free.summary,
         planDetails.free.history,
       ]
@@ -161,7 +164,7 @@ export default function SubscriptionScreen() {
               </View>
             ))}
           </View>
-          <Text style={styles.freeNote}>No action items, no exports, and only 5 meetings each month.</Text>
+          <Text style={styles.freeNote}>No action items or exports. Five meetings per month, up to 30 minutes each.</Text>
         </View>
 
         <View style={styles.pricingCard}>

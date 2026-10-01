@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import path from 'path';
 import fs from 'fs';
 import { logger } from './utils/logger';
+import { incrementMetric, recordDuration } from './utils/metrics';
 import { connectDB } from './utils/database';
 import { errorHandling } from './middleware/errorHandler';
 import { globalRateLimiter, webhookRateLimiter } from './middleware/rateLimiter';
@@ -39,9 +40,25 @@ REQUIRED_ENV.forEach(variable => {
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Root Request Logger - Debug only
-app.use((req, _res, next) => {
+const getMetricRoute = (path: string): string => {
+  if (path.startsWith('/api/meetings')) return '/api/meetings';
+  if (path.startsWith('/api/payments')) return '/api/payments';
+  if (path.startsWith('/api/users')) return '/api/users';
+  if (path.startsWith('/webhooks/')) return '/webhooks';
+  if (path.startsWith('/admin')) return '/admin';
+  return '/other';
+};
+
+// Request logs and aggregate operational metrics. No user IDs, request bodies,
+// or meeting titles are collected in metric labels.
+app.use((req, res, next) => {
+  const requestStartedAt = Date.now();
   logger.info({ method: req.method, url: req.url, ip: req.ip }, 'Incoming Request');
+  res.on('finish', () => {
+    const labels = { method: req.method, route: getMetricRoute(req.path), status: res.statusCode };
+    incrementMetric('http_requests_total', labels);
+    recordDuration('http_request_duration_ms', Date.now() - requestStartedAt, labels);
+  });
   next();
 });
 

@@ -57,7 +57,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-black mb-4">6. Limitation of Liability</h2>
             <p>
-              Memovoice provides transcription services for informational purposes. While we strive for 99.9% accuracy, we are not liable for any errors in transcription or summarization, nor for any business decisions made based on such outputs.
+              Memovoice provides transcription services for informational purposes. AI output can contain errors and its quality depends on factors such as recording conditions, speakers, accents, language, and background noise. Review important transcripts and summaries before relying on them for business decisions.
             </p>
           </section>
 

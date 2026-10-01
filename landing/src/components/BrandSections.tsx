@@ -92,7 +92,7 @@ export const Pricing = () => (
           </div>
 
           <ul className="space-y-4 mb-10">
-            {['5 meetings per month', 'Basic summary only', '7 day history'].map((item, i) => (
+            {['5 meetings per month', 'Up to 30 minutes per meeting', 'Basic summary only', '7-day history'].map((item, i) => (
               <li key={i} className="flex items-center gap-3 text-black/70 text-sm">
                 <Check className="w-5 h-5 text-black flex-shrink-0" />
                 {item}
@@ -190,9 +190,9 @@ export const FAQ = () => {
 
   const faqs = [
     { q: "Does Memovoice work without internet?", a: "Yes. You can record your meetings completely offline. Your data will be processed once you reconnect to a secure network." },
-    { q: "How accurate is the transcription?", a: "We utilize a triple-fallback AI synthesis model (OpenAI, Claude, and Gemini) to achieve 99.9% accuracy, even with accents and technical jargon." },
+    { q: "How accurate is the transcription?", a: "Memovoice uses multiple AI providers to improve reliability. Accuracy depends on audio quality, speakers, accents, background noise, and language, so always review important details." },
     { q: "Is my meeting data private and secure?", a: "Absolutely. We employ institutional-grade encryption and a privacy-first architecture. We do not use bots and never listen to your recordings." },
-    { q: "What languages are supported?", a: "Currently we support English, Spanish, French, German, and Portuguese with high-fidelity accuracy." },
+    { q: "What languages are supported?", a: "Memovoice supports English, Spanish, French, German, and Portuguese. Results can vary with recording quality, accents, and technical vocabulary." },
     { q: "Can I use Memovoice on iPhone?", a: "We are currently launched on Android, with an iOS version scheduled for release in late 2026." },
     { q: "How do I cancel my subscription?", a: "You can cancel any time directly through the app settings. Your Pro features will remain active until the end of your billing cycle." }
   ];

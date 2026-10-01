@@ -14,6 +14,7 @@ import { sendTranscriptionStartedNotification, sendMeetingProcessedNotification,
 import fs from 'fs';
 import { FREE_PLAN_LIMITS } from '../utils/constants';
 import { releaseMonthlyMeetingSlot } from '../middleware/subscriptionMiddleware';
+import { incrementMetric, recordDuration } from '../utils/metrics';
 
 // ============================================
 // NOTE: ffmpeg import removed — preprocessAudio
@@ -319,6 +320,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
 
     // Background processing: transcribe, summarize, update meeting
     (async () => {
+      const processingStartedAt = Date.now();
       const canSendEmails = user.preferences?.notificationsEnabled ?? true;
       const canSendPush = user.preferences?.pushNotificationsEnabled ?? true;
 
@@ -387,6 +389,8 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         processingMeeting.processingCompletedAt = new Date();
         processingMeeting.transcriptionQuality = quality;
         await processingMeeting.save();
+        incrementMetric('meeting_processing_total', { outcome: 'completed' });
+        recordDuration('meeting_processing_duration_ms', Date.now() - processingStartedAt, { outcome: 'completed' });
 
         user.meetingCount = (user.meetingCount || 0) + 1;
         await user.save();
@@ -425,6 +429,8 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         processingMeeting.processingError = String(bgError.message || bgError);
         processingMeeting.processingCompletedAt = new Date();
         await processingMeeting.save().catch(() => { });
+        incrementMetric('meeting_processing_total', { outcome: 'failed' });
+        recordDuration('meeting_processing_duration_ms', Date.now() - processingStartedAt, { outcome: 'failed' });
 
         if (req.meetingUsageMonthKey) {
           await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => { });
