@@ -19,6 +19,7 @@ import { clerkWebhookHandler } from './webhooks/clerkWebhook';
 import { paddleWebhookHandler } from './webhooks/paddleWebhook';
 import adminRoutes from './routes/adminRoutes';
 import publicRoutes from './routes/publicRoutes';
+import actionRoutes from './routes/actionRoutes';
 import { startRetentionCleanupScheduler } from './services/retentionService';
 
 const REQUIRED_ENV = [
@@ -131,6 +132,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', healthRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/meetings', meetingRoutes);
+app.use('/api/actions', actionRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api', publicRoutes);
 

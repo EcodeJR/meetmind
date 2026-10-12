@@ -26,6 +26,31 @@ export const sendLocalNotification = async (title: string, body: string) => {
   }
 };
 
+export const scheduleLocalNotification = async (title: string, body: string, date: Date) => {
+  try {
+    const Notifications = await loadNotifications();
+    const permissions = await Notifications.getPermissionsAsync();
+    if (permissions.status !== 'granted') {
+      const requested = await Notifications.requestPermissionsAsync();
+      if (requested.status !== 'granted') return false;
+    }
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: true,
+        ...(Platform.OS === 'android' ? { channelId: 'default' } : {}),
+      },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
+    });
+    return true;
+  } catch (error) {
+    console.warn('[PUSH] Failed to schedule local notification:', error);
+    return false;
+  }
+};
+
 // Configure Android notification channel on app start
 export const configureNotifications = async () => {
   try {

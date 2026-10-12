@@ -4,6 +4,7 @@ import { Response } from 'express';
 import { sendSuccess, sendError } from '../utils/responses';
 import { Meeting } from '../models/Meeting';
 import { TranscriptionFeedback } from '../models/TranscriptionFeedback';
+import { ActionItem } from '../models/ActionItem';
 import { User } from '../models/User';
 import { logger } from '../utils/logger';
 import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
@@ -104,6 +105,14 @@ const buildTranscriptSegments = (transcript: string, durationSeconds: number) =>
       endSeconds: Math.round((consumedCharacters / totalCharacters) * durationSeconds),
     };
   });
+};
+
+const syncGeneratedActionItems = async (userId: any, meetingId: any, actionItems: string[]): Promise<void> => {
+  await ActionItem.deleteMany({ userId, meetingId, generated: true });
+  const uniqueItems = [...new Set(actionItems.map(item => item.trim()).filter(Boolean))];
+  if (uniqueItems.length > 0) {
+    await ActionItem.insertMany(uniqueItems.map(title => ({ userId, meetingId, title, owner: 'Me', priority: 'medium', status: 'open', generated: true })));
+  }
 };
 
 // ============================================
@@ -408,6 +417,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         processingMeeting.transcriptSegments = buildTranscriptSegments(transcript, processingMeeting.durationSeconds || 0);
         processingMeeting.summary = aiAnalysis.summary;
         processingMeeting.actionItems = aiAnalysis.actionItems;
+        await syncGeneratedActionItems(user._id, processingMeeting._id, aiAnalysis.actionItems);
         processingMeeting.keyDecisions = aiAnalysis.keyDecisions;
         processingMeeting.language = user.preferences?.language || 'en';
         processingMeeting.title = title || aiAnalysis.title || processingMeeting.title;
@@ -876,6 +886,7 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         meeting.transcriptSegments = buildTranscriptSegments(transcript, meeting.durationSeconds || 0);
         meeting.summary = aiAnalysis.summary;
         meeting.actionItems = aiAnalysis.actionItems;
+        await syncGeneratedActionItems(user._id, meeting._id, aiAnalysis.actionItems);
         meeting.keyDecisions = aiAnalysis.keyDecisions;
         meeting.language = user.preferences?.language || 'en';
         if (!meeting.title || meeting.title === 'New Recording' || meeting.title === 'Untitled Meeting') {

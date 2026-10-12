@@ -54,6 +54,16 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="actions"
+        options={{
+          title: 'ACTIONS',
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="checkmark-done-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'SETTINGS',
