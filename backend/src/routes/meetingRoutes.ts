@@ -6,6 +6,9 @@ import fs from 'fs';
 import { authMiddleware } from '../middleware/auth';
 import { apiRateLimiter, uploadRateLimiter } from '../middleware/rateLimiter';
 import { checkMeetingLimit } from '../middleware/subscriptionMiddleware';
+import { validateRequest } from '../middleware/validateRequest';
+import { updateMeetingSchema } from '../utils/validators';
+import { z } from 'zod';
 import {
   createMeeting,
   processMeeting,
@@ -17,6 +20,7 @@ import {
   searchMeetings,
   deleteAllMeetings,
   retryMeetingTranscription,
+  submitTranscriptionFeedback,
 } from '../controllers/meetingController';
 
 const router = Router();
@@ -78,7 +82,11 @@ router.get('/quota', getMeetingQuota);
 router.get('/', getMeetings);
 router.get('/search', searchMeetings);
 router.get('/:id', getMeetingById);
-router.patch('/:id', updateMeeting);
+router.patch('/:id', validateRequest(updateMeetingSchema), updateMeeting);
+router.post('/:id/feedback', validateRequest(z.object({
+  category: z.enum(['transcript', 'summary', 'speaker', 'general']),
+  message: z.string().max(1000).optional(),
+})), submitTranscriptionFeedback);
 // Retry a failed meeting transcription using the stored Cloudinary audio URL
 router.post('/:id/retry', retryMeetingTranscription);
 router.delete('/:id', deleteMeeting);

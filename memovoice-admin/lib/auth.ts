@@ -3,7 +3,13 @@ import bcrypt from 'bcryptjs';
 import { NextApiRequest } from 'next';
 import { NextRequest } from 'next/server';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-dev-secret';
+const getJwtSecret = (): string => {
+  const secret = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error('ADMIN_JWT_SECRET must be set to a value of at least 32 characters');
+  }
+  return secret;
+};
 
 export interface AdminPayload {
   email: string;
@@ -13,11 +19,11 @@ export interface AdminPayload {
 }
 
 export function generateAdminToken(email: string): string {
-  return jwt.sign({ email, role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+  return jwt.sign({ email, role: 'admin' }, getJwtSecret(), { expiresIn: '8h' });
 }
 
 export function verifyAdminToken(token: string): AdminPayload {
-  return jwt.verify(token, JWT_SECRET) as AdminPayload;
+  return jwt.verify(token, getJwtSecret()) as AdminPayload;
 }
 
 export function verifyAdminCredentials(email: string, password: string): boolean {
@@ -25,6 +31,7 @@ export function verifyAdminCredentials(email: string, password: string): boolean
   const adminPassword = process.env.ADMIN_PASSWORD;
 
   if (!adminEmail || !adminPassword) return false;
+  if (process.env.NODE_ENV === 'production' && !adminPassword.startsWith('$2')) return false;
   if (email !== adminEmail) return false;
 
   // Support both hashed and plain passwords for development

@@ -3,6 +3,7 @@ import { ITranscriptionQuality } from '../models/Meeting';
 import { Response } from 'express';
 import { sendSuccess, sendError } from '../utils/responses';
 import { Meeting } from '../models/Meeting';
+import { TranscriptionFeedback } from '../models/TranscriptionFeedback';
 import { User } from '../models/User';
 import { logger } from '../utils/logger';
 import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
@@ -85,6 +86,24 @@ const scoreTranscription = (transcript: string): ITranscriptionQuality => {
   else label = 'poor';
 
   return { score, label, hallucinationDetected, hallucinationNote };
+};
+
+const buildTranscriptSegments = (transcript: string, durationSeconds: number) => {
+  const turns = transcript.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+    const match = line.match(/^(Speaker\s+\d+):\s*(.+)$/i);
+    return { speaker: match?.[1] || 'Speaker 1', text: match?.[2] || line };
+  });
+  const totalCharacters = turns.reduce((total, turn) => total + turn.text.length, 0) || 1;
+  let consumedCharacters = 0;
+  return turns.map(turn => {
+    const startSeconds = (consumedCharacters / totalCharacters) * durationSeconds;
+    consumedCharacters += turn.text.length;
+    return {
+      ...turn,
+      startSeconds: Math.round(startSeconds),
+      endSeconds: Math.round((consumedCharacters / totalCharacters) * durationSeconds),
+    };
+  });
 };
 
 // ============================================
@@ -308,6 +327,12 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       audioUrl: uploadResult.url,
       audioPublicId: uploadResult.publicId,
       audioSizeMB: fileSizeMB,
+      recordingConsent: req.body.consentAcknowledgedAt
+        ? {
+            acknowledgedAt: new Date(req.body.consentAcknowledgedAt),
+            policyVersion: String(req.body.consentPolicyVersion || '2026-10'),
+          }
+        : undefined,
       status: 'processing',
       processingStartedAt: new Date(),
     });
@@ -380,6 +405,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         console.log(`[DEBUGGER] BACKGROUND: AI summary complete (${processingMeeting._id})`);
 
         processingMeeting.rawTranscript = transcript;
+        processingMeeting.transcriptSegments = buildTranscriptSegments(transcript, processingMeeting.durationSeconds || 0);
         processingMeeting.summary = aiAnalysis.summary;
         processingMeeting.actionItems = aiAnalysis.actionItems;
         processingMeeting.keyDecisions = aiAnalysis.keyDecisions;
@@ -555,7 +581,7 @@ export const updateMeeting = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const { id } = req.params;
     const clerkId = req.clerkId;
-    const { title, tags, summary } = req.body;
+    const { title, tags, summary, rawTranscript, actionItems, keyDecisions } = req.body;
 
     const user = await User.findOne({ clerkId });
     if (!user) {
@@ -567,7 +593,7 @@ export const updateMeeting = async (req: AuthRequest, res: Response): Promise<vo
 
     const meeting = await Meeting.findOneAndUpdate(
       { _id: id, userId: user._id, ...historyFilter },
-      { title, tags, summary },
+      { title, tags, summary, rawTranscript, actionItems, keyDecisions },
       { returnDocument: 'after' }
     );
 
@@ -580,6 +606,25 @@ export const updateMeeting = async (req: AuthRequest, res: Response): Promise<vo
   } catch (error) {
     logger.error({ error }, 'Error updating meeting');
     sendError(res, 'UPDATE_ERROR', 'Failed to update meeting', 500);
+  }
+};
+
+export const submitTranscriptionFeedback = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const user = await User.findOne({ clerkId: req.clerkId });
+    const meeting = await Meeting.findOne({ _id: req.params.id, userId: user?._id });
+    if (!user || !meeting) {
+      sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
+      return;
+    }
+
+    const { category, message } = req.body;
+    await TranscriptionFeedback.create({ userId: user._id, meetingId: meeting._id, category, message });
+    logger.info({ meetingId: meeting._id, category }, 'Transcription feedback received');
+    sendSuccess(res, { message: 'Feedback received' }, 201);
+  } catch (error) {
+    logger.error({ error, meetingId: req.params.id }, 'Failed to save transcription feedback');
+    sendError(res, 'FEEDBACK_ERROR', 'Could not submit feedback', 500);
   }
 };
 
@@ -828,6 +873,7 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         console.log(`[RETRY] AI summary complete (${meeting._id})`);
 
         meeting.rawTranscript = transcript;
+        meeting.transcriptSegments = buildTranscriptSegments(transcript, meeting.durationSeconds || 0);
         meeting.summary = aiAnalysis.summary;
         meeting.actionItems = aiAnalysis.actionItems;
         meeting.keyDecisions = aiAnalysis.keyDecisions;

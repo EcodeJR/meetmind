@@ -34,6 +34,10 @@ export interface IUser extends Document {
       risks: boolean;
     };
   };
+  consent?: {
+    recordingPolicyVersion?: string;
+    recordingAcknowledgedAt?: Date;
+  };
   createdAt: Date;
 }
 
@@ -125,6 +129,10 @@ const userSchema = new Schema<IUser>(
         actions: { type: Boolean, default: true },
         risks: { type: Boolean, default: true },
       },
+    },
+    consent: {
+      recordingPolicyVersion: { type: String, default: null },
+      recordingAcknowledgedAt: { type: Date, default: null },
     },
   },
   {

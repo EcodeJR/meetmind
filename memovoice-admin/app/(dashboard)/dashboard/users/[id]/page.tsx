@@ -27,8 +27,8 @@ interface Meeting {
   createdAt: string;
 }
 
-const RENDER_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice-backend.onrender.com';
-const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
+const RENDER_API = '/api';
+const ADMIN_KEY = '';
 
 const MOCK_USER: UserDetail = {
   _id: '1', name: 'Sarah Miller', email: 'sarah.m@agency.com', clerkId: 'clerk_abc123',

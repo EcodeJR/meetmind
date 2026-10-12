@@ -249,9 +249,7 @@ export const deleteAccount = async (req: AuthRequest, res: Response) => {
     console.log(`[DELETE] User found: ${user._id}`);
 
     const displayName = user.name || user.email.split('@')[0];
-    await sendAccountDeletedEmail(user.email, displayName).catch(err => {
-      logger.error({ error: err, clerkId }, 'Failed to send account deletion email');
-    });
+    const receiptEmail = user.email;
 
     // 2. Identify all associated meetings
     console.log(`[DELETE] Finding meetings for user: ${user._id}`);
@@ -286,6 +284,11 @@ export const deleteAccount = async (req: AuthRequest, res: Response) => {
     await User.deleteOne({ _id: user._id });
     console.log(`[DELETE] User identity dissolved`);
 
+    // Only send the deletion receipt once the account and its meeting records are gone.
+    await sendAccountDeletedEmail(receiptEmail, displayName).catch(err => {
+      logger.error({ error: err, clerkId }, 'Failed to send account deletion receipt');
+    });
+
     logger.info({ clerkId }, 'User account and all data deleted successfully');
     console.log(`[DELETE] Account deletion complete for: ${clerkId}`);
     return sendSuccess(res, { message: 'Account and all associated memory purged' });
@@ -296,6 +299,32 @@ export const deleteAccount = async (req: AuthRequest, res: Response) => {
     console.error(`[DELETE] Full error:`, error);
     logger.error({ error }, 'Error deleting account');
     return sendError(res, 'DELETE_ERROR', `Failed to delete account: ${error.message}`, 500);
+  }
+};
+
+export const exportAccountData = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const user = await User.findOne({ clerkId: req.clerkId }).lean();
+    if (!user) {
+      sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
+      return;
+    }
+
+    const meetings = await Meeting.find({ userId: user._id }).sort({ createdAt: -1 }).lean();
+    const { expoPushToken: _expoPushToken, ...userData } = user;
+    const exportMeetings = meetings.map(({ audioPublicId, audioUrl, ...meeting }) => meeting);
+
+    logger.info({ clerkId: req.clerkId, meetingCount: exportMeetings.length }, 'Account data export generated');
+    sendSuccess(res, {
+      exportedAt: new Date().toISOString(),
+      formatVersion: '1.0',
+      note: 'Audio files are not included in this JSON export. Meeting metadata, transcripts, summaries, and preferences are included.',
+      user: userData,
+      meetings: exportMeetings,
+    });
+  } catch (error) {
+    logger.error({ error, clerkId: req.clerkId }, 'Error exporting account data');
+    sendError(res, 'EXPORT_ERROR', 'Could not export account data', 500);
   }
 };
 export const updateProfile = async (req: AuthRequest, res: Response) => {

@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
-const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
+const RAILWAY_API = '/api';
+const ADMIN_KEY = '';
 
 const TARGET_OPTIONS = [
   { value: 'all', label: 'All Users', icon: 'group', description: 'Send to all registered users' },

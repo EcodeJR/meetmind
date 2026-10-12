@@ -9,6 +9,8 @@ import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { getOfflineMeetingCount, processOfflineMeetingQueue } from '@/services/offlineMeetingQueue';
 
 type UserData = {
@@ -59,6 +61,30 @@ export default function SettingsScreen() {
 
   const handleSignOut = async () => {
     await signOut();
+  };
+
+  const handleExportAccountData = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.get('/users/me/export');
+      const exportData = response.data.data || response.data;
+      const fileName = `memovoice-data-export-${new Date().toISOString().slice(0, 10)}.json`;
+      const uri = `${FileSystem.documentDirectory}${fileName}`;
+      await FileSystem.writeAsStringAsync(uri, JSON.stringify(exportData, null, 2), {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/json', dialogTitle: 'Save your Memovoice data export' });
+      } else {
+        Alert.alert('Export ready', `Your account data was saved to ${uri}`);
+      }
+    } catch (error) {
+      console.error('Account data export failed:', error);
+      Alert.alert('Export failed', 'We could not prepare your account data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpdateAvatar = async () => {
@@ -354,6 +380,13 @@ export default function SettingsScreen() {
               onPress={() => router.push('/settings/contact-us')}
             >
               <Text style={styles.signOutText}>Contact Us</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.signOutButton}
+              onPress={handleExportAccountData}
+            >
+              <Text style={styles.signOutText}>Export My Data</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

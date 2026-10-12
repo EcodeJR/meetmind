@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import * as jose from 'jose';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-dev-secret';
+const JWT_SECRET = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET;
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
 
   let isAuthenticated = false;
 
-  if (token) {
+  if (token && JWT_SECRET && JWT_SECRET.length >= 32) {
     try {
       // Use jose for edge-compatible token verification
       const secret = new TextEncoder().encode(JWT_SECRET);

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -20,6 +20,7 @@ import * as LegacyFileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as MailComposer from 'expo-mail-composer';
+import { Audio } from 'expo-av';
 import {
   Document,
   Packer,
@@ -53,6 +54,8 @@ type Meeting = {
   status?: 'pending' | 'processing' | 'completed' | 'failed';
   processingError?: string;
   transcriptionQuality?: TranscriptionQuality;
+  audioUrl?: string;
+  transcriptSegments?: Array<{ speaker: string; text: string; startSeconds: number; endSeconds: number }>;
 };
 
 const formatDateTime = (value: Date) =>
@@ -162,6 +165,10 @@ export default function MeetingDetailScreen() {
   const [saving, setSaving] = useState(false);
   const [exportMenuVisible, setExportMenuVisible] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [isTranscriptEditing, setIsTranscriptEditing] = useState(false);
+  const [editedTranscript, setEditedTranscript] = useState('');
+  const soundRef = useRef<Audio.Sound | null>(null);
   const router = useRouter();
 
   const fetchMeeting = async () => {
@@ -199,6 +206,9 @@ export default function MeetingDetailScreen() {
 
   useEffect(() => {
     fetchMeeting();
+    return () => {
+      soundRef.current?.unloadAsync().catch(() => undefined);
+    };
   }, [id]);
 
   useEffect(() => {
@@ -583,6 +593,66 @@ export default function MeetingDetailScreen() {
     setExportMenuVisible(true);
   };
 
+  const seekToTranscriptTime = async (seconds: number) => {
+    if (!meeting?.audioUrl) return;
+    try {
+      if (!soundRef.current) {
+        const { sound } = await Audio.Sound.createAsync({ uri: meeting.audioUrl }, { shouldPlay: false });
+        soundRef.current = sound;
+        sound.setOnPlaybackStatusUpdate(status => {
+          if (status.isLoaded) setIsPlayingAudio(status.isPlaying);
+        });
+      }
+      await soundRef.current.setPositionAsync(seconds * 1000);
+      await soundRef.current.playAsync();
+    } catch {
+      Alert.alert('Audio unavailable', 'We could not load the recording for playback.');
+    }
+  };
+
+  const handleToggleAudio = async () => {
+    if (!meeting?.audioUrl) {
+      Alert.alert('Audio unavailable', 'This recording is no longer available.');
+      return;
+    }
+    if (isPlayingAudio && soundRef.current) {
+      await soundRef.current.pauseAsync();
+      return;
+    }
+    await seekToTranscriptTime(0);
+  };
+
+  const handleAccuracyFeedback = () => {
+    Alert.alert('Help improve this result', 'Was the main issue with the transcript, speaker labels, or summary?', [
+      { text: 'Cancel', style: 'cancel' },
+      ...(['transcript', 'speaker', 'summary'] as const).map(category => ({
+        text: category[0].toUpperCase() + category.slice(1),
+        onPress: async () => {
+          try {
+            await apiClient.post(`/meetings/${id}/feedback`, { category });
+            Alert.alert('Thank you', 'Your feedback was saved for review.');
+          } catch {
+            Alert.alert('Feedback not sent', 'Please try again later.');
+          }
+        },
+      })),
+    ]);
+  };
+
+  const saveTranscriptCorrection = async () => {
+    if (!meeting) return;
+    try {
+      setSaving(true);
+      await apiClient.patch(`/meetings/${id}`, { rawTranscript: editedTranscript });
+      setMeeting({ ...meeting, rawTranscript: editedTranscript });
+      setIsTranscriptEditing(false);
+    } catch {
+      Alert.alert('Update failed', 'Your transcript correction could not be saved.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleUpdateTitle = async () => {
     if (!meeting || !editedTitle.trim() || editedTitle === meeting.title) {
       setIsEditing(false);
@@ -714,9 +784,17 @@ export default function MeetingDetailScreen() {
             )}
             
             <View style={styles.actionRow}>
+              <TouchableOpacity style={styles.actionButton} onPress={handleToggleAudio}>
+                <Ionicons name={isPlayingAudio ? 'pause-outline' : 'play-outline'} size={20} color={theme.colors.secondary} />
+                <Text style={styles.actionButtonText}>{isPlayingAudio ? 'Pause audio' : 'Play audio'}</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton} onPress={handleExport}>
                 <Ionicons name="share-outline" size={20} color={theme.colors.secondary} />
                 <Text style={styles.actionButtonText}>{isPro ? 'Export Suite' : 'Upgrade to Export Suite'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton} onPress={handleAccuracyFeedback}>
+                <Ionicons name="flag-outline" size={20} color={theme.colors.secondary} />
+                <Text style={styles.actionButtonText}>Report issue</Text>
               </TouchableOpacity>
             </View>
 
@@ -977,7 +1055,17 @@ export default function MeetingDetailScreen() {
 
           {/* Full Transcript Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>FULL TRANSCRIPT</Text>
+            <View style={styles.transcriptHeader}>
+              <Text style={styles.sectionLabel}>FULL TRANSCRIPT</Text>
+              {isPro && meeting.rawTranscript ? (
+                <TouchableOpacity onPress={() => {
+                  setEditedTranscript(meeting.rawTranscript || '');
+                  setIsTranscriptEditing(true);
+                }}>
+                  <Text style={styles.editTranscriptText}>Correct text</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
             <View style={[styles.transcriptContainer, isLockedForFreeUser && styles.lockedSectionContainer]}>
               {isLockedForFreeUser ? (
                 <View style={styles.lockedPreviewCard}>
@@ -990,12 +1078,29 @@ export default function MeetingDetailScreen() {
                     </Text>
                   </View>
                 </View>
+              ) : isTranscriptEditing ? (
+                <View style={styles.transcriptEditor}>
+                  <TextInput
+                    style={styles.transcriptInput}
+                    value={editedTranscript}
+                    onChangeText={setEditedTranscript}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                  <View style={styles.editorActions}>
+                    <TouchableOpacity onPress={() => setIsTranscriptEditing(false)}>
+                      <Text style={styles.editTranscriptText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={saveTranscriptCorrection} disabled={saving}>
+                      <Text style={styles.editTranscriptText}>{saving ? 'Saving…' : 'Save correction'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               ) : meeting.rawTranscript ? (
                 (() => {
-                  const turns = parseSpeakerTurns(
-                    meeting.rawTranscript,
-                    meeting.durationSeconds || 0
-                  );
+                  const turns = meeting.transcriptSegments?.length
+                    ? meeting.transcriptSegments.map(segment => ({ speaker: segment.speaker, text: segment.text, estimatedStart: segment.startSeconds }))
+                    : parseSpeakerTurns(meeting.rawTranscript, meeting.durationSeconds || 0);
 
                   // If no speaker labels detected, render plain text
                   if (turns.length === 0 || !meeting.rawTranscript.match(/^Speaker\s+\d+:/im)) {
@@ -1012,12 +1117,13 @@ export default function MeetingDetailScreen() {
                       {turns.map((turn, idx) => {
                         const colors = getSpeakerColor(turn.speaker);
                         return (
-                          <View
+                          <TouchableOpacity
                             key={idx}
                             style={[
                               styles.speakerTurnCard,
                               { backgroundColor: colors.bg, borderColor: colors.border },
                             ]}
+                            onPress={() => seekToTranscriptTime(turn.estimatedStart)}
                           >
                             <View style={styles.speakerTurnHeader}>
                               <View style={[styles.speakerPill, { backgroundColor: colors.pill }]}>
@@ -1030,7 +1136,7 @@ export default function MeetingDetailScreen() {
                             <Text style={[styles.speakerTurnText, { color: colors.text }]}>
                               {turn.text}
                             </Text>
-                          </View>
+                          </TouchableOpacity>
                         );
                       })}
                     </View>
@@ -1384,6 +1490,34 @@ const styles = StyleSheet.create({
   },
   transcriptContainer: {
     paddingBottom: theme.spacing.xl,
+  },
+  transcriptHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  editTranscriptText: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 12,
+    color: theme.colors.secondary,
+  },
+  transcriptEditor: {
+    gap: theme.spacing.sm,
+  },
+  transcriptInput: {
+    minHeight: 240,
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    fontFamily: 'Inter-Regular',
+    fontSize: 15,
+    lineHeight: 23,
+    color: theme.colors.onSurface,
+  },
+  editorActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   lockedSectionContainer: {
     position: 'relative',

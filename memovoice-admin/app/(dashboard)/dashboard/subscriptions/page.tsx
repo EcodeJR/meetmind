@@ -38,8 +38,8 @@ interface PaymentTransaction {
   processedAt?: string | null;
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
-const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
+const RAILWAY_API = '/api';
+const ADMIN_KEY = '';
 
 const MOCK_REVENUE: RevenueData = {
   mrr: 42400,

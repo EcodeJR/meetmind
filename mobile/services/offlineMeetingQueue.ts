@@ -20,11 +20,13 @@ export type OfflineMeetingQueueItem = {
   createdAt: string;
   status: 'queued' | 'processing' | 'failed';
   error?: string;
+  consentAcknowledgedAt?: string;
 };
 
 export type OfflineRecordingOptions = {
   status?: OfflineMeetingQueueItem['status'];
   error?: string;
+  consentAcknowledgedAt?: string;
 };
 
 export type ProcessedMeetingResult = {
@@ -183,6 +185,7 @@ export const enqueueOfflineRecording = async (
     createdAt: new Date().toISOString(),
     status: options.status || 'queued',
     error: options.error,
+    consentAcknowledgedAt: options.consentAcknowledgedAt,
   };
 
   const queue = await readQueue();
@@ -267,6 +270,10 @@ export const uploadQueuedMeeting = async (item: OfflineMeetingQueueItem): Promis
   });
   formData.append('title', item.title);
   formData.append('durationSeconds', String(item.durationSeconds));
+  if (item.consentAcknowledgedAt) {
+    formData.append('consentAcknowledgedAt', item.consentAcknowledgedAt);
+    formData.append('consentPolicyVersion', '2026-10');
+  }
 
   console.log('[UPLOAD] Starting upload for meeting:', item.id);
   console.log('[UPLOAD] Title:', item.title);

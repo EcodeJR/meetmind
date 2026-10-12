@@ -7,6 +7,13 @@ export interface ITranscriptionQuality {
   hallucinationNote?: string;
 }
 
+export interface ITranscriptSegment {
+  speaker: string;
+  text: string;
+  startSeconds: number;
+  endSeconds: number;
+}
+
 export interface IMeeting extends Document {
   userId: Types.ObjectId;
   title?: string;
@@ -29,6 +36,11 @@ export interface IMeeting extends Document {
   language: string;
   tags: string[];
   transcriptionQuality?: ITranscriptionQuality;
+  transcriptSegments: ITranscriptSegment[];
+  recordingConsent?: {
+    acknowledgedAt: Date;
+    policyVersion: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -115,6 +127,21 @@ const meetingSchema = new Schema<IMeeting>(
         hallucinationNote: { type: String },
       },
       default: undefined,
+    },
+    transcriptSegments: {
+      type: [
+        {
+          speaker: { type: String, required: true },
+          text: { type: String, required: true },
+          startSeconds: { type: Number, required: true },
+          endSeconds: { type: Number, required: true },
+        },
+      ],
+      default: [],
+    },
+    recordingConsent: {
+      acknowledgedAt: { type: Date },
+      policyVersion: { type: String },
     },
   },
   {

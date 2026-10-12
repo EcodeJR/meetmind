@@ -24,8 +24,8 @@ interface ErrorLog {
   severity: 'low' | 'medium' | 'high' | 'critical';
 }
 
-const RENDER_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
-const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
+const RENDER_API = '/api';
+const ADMIN_KEY = '';
 
 const MOCK_HEALTH: SystemHealth = {
   mongodb: 'connected',

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAdminAuth } from '../middleware/adminAuth';
+import { recordAdminAction } from '../middleware/adminAudit';
 import {
   getAdminStats,
   getAdminMetrics,
@@ -30,6 +31,7 @@ const router = Router();
 
 // All admin routes require admin key authentication
 router.use(requireAdminAuth);
+router.use(recordAdminAction);
 
 // Stats & Overview
 router.get('/stats', getAdminStats);

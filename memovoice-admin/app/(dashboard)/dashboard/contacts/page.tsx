@@ -24,8 +24,8 @@ interface PaginatedContacts {
   };
 }
 
-const RAILWAY_API = process.env.NEXT_PUBLIC_RAILWAY_API || 'https://memovoice.onrender.com';
-const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
+const RAILWAY_API = '/api';
+const ADMIN_KEY = '';
 
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);

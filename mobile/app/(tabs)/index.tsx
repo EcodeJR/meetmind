@@ -104,6 +104,7 @@ export default function HomeScreen() {
   const [processingStage, setProcessingStage] = useState<'finalizing' | 'queued' | 'uploading' | 'transcribing' | 'summarizing' | 'complete' | 'failed' | null>(null);
   const [processingElapsed, setProcessingElapsed] = useState(0);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recordingConsentAt, setRecordingConsentAt] = useState<string | null>(null);
   const [debugStatus, setDebugStatus] = useState('');
   const userInitial = (user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress?.charAt(0) || '?').toUpperCase();
 
@@ -334,7 +335,7 @@ export default function HomeScreen() {
 
   const [volumes, setVolumes] = useState<number[]>(new Array(12).fill(0));
 
-  const handleStartRecording = async () => {
+  const beginRecording = async () => {
     try {
       if (!meetingTitle.trim()) {
         Alert.alert('Session Context', 'Please name this meeting to begin.');
@@ -514,6 +515,28 @@ export default function HomeScreen() {
     }
   };
 
+  const handleStartRecording = () => {
+    if (!meetingTitle.trim()) {
+      Alert.alert('Session Context', 'Please name this meeting to begin.');
+      return;
+    }
+
+    Alert.alert(
+      'Recording consent',
+      'Before recording, make sure everyone who may be recorded has been informed and you have the legal right to record this meeting. By continuing, you confirm this.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'I have consent',
+          onPress: () => {
+            setRecordingConsentAt(new Date().toISOString());
+            beginRecording();
+          },
+        },
+      ]
+    );
+  };
+
   const handleStopRecording = async () => {
     if (!recording) return;
 
@@ -565,6 +588,7 @@ export default function HomeScreen() {
         const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration, {
           status: 'queued',
           error: OFFLINE_RECORDING_MESSAGES.offline.message,
+          consentAcknowledgedAt: recordingConsentAt || undefined,
         });
         setProcessingStage('queued');
         setDebugStatus(OFFLINE_RECORDING_MESSAGES.offline.debug);
@@ -590,6 +614,7 @@ export default function HomeScreen() {
         localUri: uri,
         createdAt: new Date().toISOString(),
         status: 'queued' as const,
+        consentAcknowledgedAt: recordingConsentAt || undefined,
       };
 
       console.log('[STOP-RECORDING] Uploading recording directly:', directRecordingItem.id);
@@ -670,6 +695,7 @@ export default function HomeScreen() {
           const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration, {
             status: 'queued',
             error: OFFLINE_RECORDING_MESSAGES[fallbackReason].message,
+            consentAcknowledgedAt: recordingConsentAt || undefined,
           });
           console.log('[STOP-RECORDING] Fallback saved to offline queue:', offlineItem.id);
           
