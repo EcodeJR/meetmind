@@ -1,20 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdminCredentials, generateAdminToken } from '@/lib/auth';
+import { verifyAdminCredentials, generateAdminToken, isAdminAuthConfigured } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
+  let credentials: { email?: unknown; password?: unknown };
   try {
-    const { email, password } = await req.json();
+    credentials = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request payload' }, { status: 400 });
+  }
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
-    }
+  const { email, password } = credentials;
 
-    const isValid = verifyAdminCredentials(email, password);
+  if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
+    return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
+  }
 
-    if (!isValid) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-    }
+  if (!isAdminAuthConfigured()) {
+    return NextResponse.json({ error: 'Admin authentication is unavailable' }, { status: 503 });
+  }
 
+  if (!verifyAdminCredentials(email, password)) {
+    return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+  }
+
+  try {
     const token = generateAdminToken(email);
 
     const response = NextResponse.json({ success: true, message: 'Login successful' });
@@ -30,6 +39,6 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch {
-    return NextResponse.json({ error: 'Invalid request payload' }, { status: 400 });
+    return NextResponse.json({ error: 'Admin authentication is unavailable' }, { status: 503 });
   }
 }

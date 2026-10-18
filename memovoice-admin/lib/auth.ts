@@ -18,6 +18,18 @@ export interface AdminPayload {
   exp?: number;
 }
 
+export function isAdminAuthConfigured(): boolean {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  const jwtSecret = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET;
+
+  if (!adminEmail || !adminPassword || !jwtSecret || jwtSecret.length < 32) {
+    return false;
+  }
+
+  return process.env.NODE_ENV !== 'production' || /^\$2[aby]\$/.test(adminPassword);
+}
+
 export function generateAdminToken(email: string): string {
   return jwt.sign({ email, role: 'admin' }, getJwtSecret(), { expiresIn: '8h' });
 }
@@ -30,8 +42,7 @@ export function verifyAdminCredentials(email: string, password: string): boolean
   const adminEmail = process.env.ADMIN_EMAIL;
   const adminPassword = process.env.ADMIN_PASSWORD;
 
-  if (!adminEmail || !adminPassword) return false;
-  if (process.env.NODE_ENV === 'production' && !adminPassword.startsWith('$2')) return false;
+  if (!isAdminAuthConfigured() || !adminEmail || !adminPassword) return false;
   if (email !== adminEmail) return false;
 
   // Support both hashed and plain passwords for development
