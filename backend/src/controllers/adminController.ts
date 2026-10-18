@@ -14,7 +14,109 @@ import { EmailLog } from '../models/EmailLog';
 import { sendCustomEmail } from '../services/emailService';
 import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
 import { sendError } from '../utils/responses';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
+// Added auth code for the admin
+// ----------------------START-------------------------------------
 
+
+
+// POST /admin/auth/login
+export const loginAdmin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(400).json({ error: 'Email and password are required' });
+      return;
+    }
+
+    // Check email
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    const jwtSecret = process.env.ADMIN_JWT_SECRET;
+
+    if (!adminEmail || !adminPassword || !jwtSecret) {
+      logger.error('Admin auth environment variables not configured');
+      res.status(500).json({ error: 'Auth not configured' });
+      return;
+    }
+
+    if (email !== adminEmail) {
+      res.status(401).json({ error: 'Invalid credentials' });
+      return;
+    }
+
+    // ============================================
+    // PASSWORD COMPARISON
+    // In production ADMIN_PASSWORD is a bcrypt hash.
+    // bcrypt.compare handles both hashed and plain
+    // text passwords — plain text will just fail
+    // if the env var is already a hash.
+    // ============================================
+    const isValid = await bcrypt.compare(password, adminPassword);
+
+    if (!isValid) {
+      logger.warn({ email }, 'Admin: Failed login attempt');
+      res.status(401).json({ error: 'Invalid credentials' });
+      return;
+    }
+
+    // Generate JWT — expires in 8 hours
+    const token = jwt.sign(
+      { email, role: 'admin' },
+      jwtSecret,
+      { expiresIn: '8h' }
+    );
+
+    logger.info({ email }, 'Admin: Successful login');
+
+    res.json({
+      success: true,
+      token,
+      expiresIn: 8 * 60 * 60, // seconds
+    });
+
+  } catch (error) {
+    logger.error({ error }, 'Admin: loginAdmin failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// POST /admin/auth/logout
+export const logoutAdmin = async (_req: Request, res: Response): Promise<void> => {
+  // JWT is stateless — logout is handled client-side by deleting the token
+  // This endpoint exists for audit logging purposes
+  logger.info('Admin: Logout');
+  res.json({ success: true, message: 'Logged out successfully' });
+};
+
+// POST /admin/auth/verify
+export const verifyAdminToken = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+    if (!token) {
+      res.status(401).json({ error: 'No token provided' });
+      return;
+    }
+
+    const jwtSecret = process.env.ADMIN_JWT_SECRET;
+    if (!jwtSecret) {
+      res.status(500).json({ error: 'Auth not configured' });
+      return;
+    }
+
+    const decoded = jwt.verify(token, jwtSecret) as any;
+    res.json({ success: true, email: decoded.email, role: decoded.role });
+
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+};
+
+// ----------------------END----------------------
 // GET /admin/stats
 export const getAdminStats = async (_req: Request, res: Response): Promise<void> => {
   try {

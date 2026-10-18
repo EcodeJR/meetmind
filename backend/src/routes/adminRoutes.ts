@@ -27,7 +27,16 @@ import {
   reprocessAdminMeeting
 } from '../controllers/adminController';
 
+// New auth controller for admin
+import { loginAdmin, logoutAdmin, verifyAdminToken } from '../controllers/adminController';
+
 const router = Router();
+
+//-------START----------------
+router.post('/auth/login', loginAdmin);
+router.post('/auth/logout', logoutAdmin);
+router.get('/auth/verify', verifyAdminToken);
+//--------------------END--------
 
 // All admin routes require admin key authentication
 router.use(requireAdminAuth);
