@@ -1237,6 +1237,7 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
         meeting.summary = aiAnalysis.summary;
         meeting.actionItems = aiAnalysis.actionItems;
         meeting.keyDecisions = aiAnalysis.keyDecisions;
+        meeting.riskSignals = aiAnalysis.riskSignals;
         meeting.language = language;
 
         if (

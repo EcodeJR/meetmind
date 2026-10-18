@@ -23,6 +23,7 @@ export interface IMeeting extends Document {
   summary?: string;
   actionItems: string[];
   keyDecisions: string[];
+  riskSignals: string[];
   summaryTemplate: SummaryTemplate;
   speakers: Array<{
     label: string;
@@ -72,6 +73,10 @@ const meetingSchema = new Schema<IMeeting>(
       default: [],
     },
     keyDecisions: {
+      type: [String],
+      default: [],
+    },
+    riskSignals: {
       type: [String],
       default: [],
     },

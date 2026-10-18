@@ -12,6 +12,7 @@ export const updateMeetingSchema = z.object({
   summary: z.string().max(20000).optional(),
   actionItems: z.array(z.string().max(1000)).max(100).optional(),
   keyDecisions: z.array(z.string().max(1000)).max(100).optional(),
+  riskSignals: z.array(z.string().max(1000)).max(100).optional(),
 });
 
 export const searchSchema = z.object({

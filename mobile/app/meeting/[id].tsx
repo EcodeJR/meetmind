@@ -47,6 +47,7 @@ type Meeting = {
   summary?: string;
   actionItems?: string[];
   keyDecisions?: string[];
+  riskSignals?: string[];
   durationSeconds?: number;
   processingStartedAt?: string;
   processingCompletedAt?: string;
@@ -318,6 +319,7 @@ export default function MeetingDetailScreen() {
       formatMarkdownSection('Executive Summary', meeting?.summary || ''),
       formatMarkdownSection('Action Items', meeting?.actionItems || []),
       formatMarkdownSection('Key Decisions', meeting?.keyDecisions || []),
+      formatMarkdownSection('Risks & Blockers', meeting?.riskSignals || []),
       meeting?.rawTranscript ? formatMarkdownSection('Full Transcript', meeting.rawTranscript) : '',
       '---',
       'Generated from the Memovoice mobile app.',
@@ -367,6 +369,7 @@ export default function MeetingDetailScreen() {
     pushSection('Executive Summary', meeting?.summary || '');
     pushSection('Action Items', meeting?.actionItems || []);
     pushSection('Key Decisions', meeting?.keyDecisions || []);
+    pushSection('Risks & Blockers', meeting?.riskSignals || []);
     pushSection('Full Transcript', meeting?.rawTranscript || '');
     children.push(new Paragraph({ text: 'Generated from the Memovoice mobile app.' }));
 
@@ -531,6 +534,7 @@ export default function MeetingDetailScreen() {
           ${formatPdfSection('Executive Summary', meeting?.summary || '')}
           ${formatPdfSection('Action Items', meeting?.actionItems || [])}
           ${formatPdfSection('Key Decisions', meeting?.keyDecisions || [])}
+          ${formatPdfSection('Risks & Blockers', meeting?.riskSignals || [])}
           ${meeting?.rawTranscript ? formatPdfSection('Full Transcript', meeting.rawTranscript) : ''}
           <div class="footer">Generated from the Memovoice mobile app.</div>
         </body>
@@ -1053,6 +1057,20 @@ export default function MeetingDetailScreen() {
             </View>
           )}
 
+          {isPro && meeting.riskSignals && meeting.riskSignals.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>RISKS & BLOCKERS</Text>
+              <View style={styles.risksContainer}>
+                {meeting.riskSignals.map((risk, index) => (
+                  <View key={index} style={styles.riskItem}>
+                    <Ionicons name="warning-outline" size={18} color="#B45309" />
+                    <Text style={styles.riskText}>{risk}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
           {/* Full Transcript Section */}
           <View style={styles.section}>
             <View style={styles.transcriptHeader}>
@@ -1487,6 +1505,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: theme.colors.primary,
+  },
+  risksContainer: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FCD9A8',
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  riskItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+  },
+  riskText: {
+    flex: 1,
+    fontFamily: 'Inter-Regular',
+    fontSize: 15,
+    lineHeight: 21,
+    color: '#7C2D12',
   },
   transcriptContainer: {
     paddingBottom: theme.spacing.xl,

@@ -177,12 +177,13 @@ const sanitizeMeetingForPlan = (meeting: any, proUser: boolean) => {
     return plainMeeting;
   }
 
-  const { rawTranscript, actionItems, keyDecisions, ...rest } = plainMeeting;
+  const { rawTranscript, actionItems, keyDecisions, riskSignals, ...rest } = plainMeeting;
   return {
     ...rest,
     rawTranscript: '',
     actionItems: [],
     keyDecisions: [],
+    riskSignals: [],
   };
 };
 
@@ -231,6 +232,7 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
       summary: proUser ? req.body.summary || '' : '',
       actionItems: proUser ? req.body.actionItems || [] : [],
       keyDecisions: proUser ? req.body.keyDecisions || [] : [],
+      riskSignals: proUser ? req.body.riskSignals || [] : [],
       summaryTemplate,
       durationSeconds: duration || 0,
       audioUrl: req.body.audioUrl || '',
@@ -342,6 +344,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       summary: '',
       actionItems: [],
       keyDecisions: [],
+      riskSignals: [],
       summaryTemplate,
       durationSeconds: Number(durationSeconds) || 0,
       audioUrl: uploadResult.url,
@@ -431,6 +434,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         processingMeeting.actionItems = aiAnalysis.actionItems;
         await syncGeneratedActionItems(user._id, processingMeeting._id, aiAnalysis.actionItems);
         processingMeeting.keyDecisions = aiAnalysis.keyDecisions;
+        processingMeeting.riskSignals = aiAnalysis.riskSignals;
         processingMeeting.language = user.preferences?.language || 'en';
         processingMeeting.title = title || aiAnalysis.title || processingMeeting.title;
         processingMeeting.status = 'completed';
@@ -603,7 +607,7 @@ export const updateMeeting = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const { id } = req.params;
     const clerkId = req.clerkId;
-    const { title, tags, summary, rawTranscript, actionItems, keyDecisions } = req.body;
+    const { title, tags, summary, rawTranscript, actionItems, keyDecisions, riskSignals } = req.body;
 
     const user = await User.findOne({ clerkId });
     if (!user) {
@@ -615,7 +619,7 @@ export const updateMeeting = async (req: AuthRequest, res: Response): Promise<vo
 
     const meeting = await Meeting.findOneAndUpdate(
       { _id: id, userId: user._id, ...historyFilter },
-      { title, tags, summary, rawTranscript, actionItems, keyDecisions },
+      { title, tags, summary, rawTranscript, actionItems, keyDecisions, riskSignals },
       { returnDocument: 'after' }
     );
 
@@ -831,6 +835,7 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
     meeting.summary = '';
     meeting.actionItems = [];
     meeting.keyDecisions = [];
+    meeting.riskSignals = [];
     meeting.processingStartedAt = new Date();
     meeting.processingCompletedAt = undefined;
     await meeting.save();
@@ -901,6 +906,7 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         meeting.actionItems = aiAnalysis.actionItems;
         await syncGeneratedActionItems(user._id, meeting._id, aiAnalysis.actionItems);
         meeting.keyDecisions = aiAnalysis.keyDecisions;
+        meeting.riskSignals = aiAnalysis.riskSignals;
         meeting.language = user.preferences?.language || 'en';
         if (!meeting.title || meeting.title === 'New Recording' || meeting.title === 'Untitled Meeting') {
           meeting.title = aiAnalysis.title || meeting.title;
