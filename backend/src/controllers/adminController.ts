@@ -14,6 +14,7 @@ import { EmailLog } from '../models/EmailLog';
 import { sendCustomEmail } from '../services/emailService';
 import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
 import { sendError } from '../utils/responses';
+//---------New installs---------
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 // Added auth code for the admin
