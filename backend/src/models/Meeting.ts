@@ -14,6 +14,8 @@ export interface ITranscriptSegment {
   endSeconds: number;
 }
 
+export type SummaryTemplate = 'standard' | 'standup' | 'client' | 'interview' | 'brainstorm';
+
 export interface IMeeting extends Document {
   userId: Types.ObjectId;
   title?: string;
@@ -21,6 +23,7 @@ export interface IMeeting extends Document {
   summary?: string;
   actionItems: string[];
   keyDecisions: string[];
+  summaryTemplate: SummaryTemplate;
   speakers: Array<{
     label: string;
     totalSeconds: number;
@@ -71,6 +74,11 @@ const meetingSchema = new Schema<IMeeting>(
     keyDecisions: {
       type: [String],
       default: [],
+    },
+    summaryTemplate: {
+      type: String,
+      enum: ['standard', 'standup', 'client', 'interview', 'brainstorm'],
+      default: 'standard',
     },
     speakers: {
       type: [

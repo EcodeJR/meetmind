@@ -23,12 +23,21 @@ export interface SummaryResult {
 
 export interface SummaryPreferences {
   language?: string;
+  template?: 'standard' | 'standup' | 'client' | 'interview' | 'brainstorm';
   strategicAlerts?: {
     decisions?: boolean;
     actions?: boolean;
     risks?: boolean;
   };
 }
+
+const TEMPLATE_INSTRUCTIONS: Record<NonNullable<SummaryPreferences['template']>, string> = {
+  standard: 'Use a balanced, general-purpose meeting recap.',
+  standup: 'Emphasize what was completed, what is next, and blockers. Keep the summary brief and operational.',
+  client: 'Emphasize client goals, commitments, open questions, risks, and the agreed next steps in a polished professional tone.',
+  interview: 'Emphasize the candidate or interviewee\'s relevant experience, strengths, concerns, and clear follow-up decisions.',
+  brainstorm: 'Group ideas into themes, preserve promising options, and distinguish decisions from ideas that need validation.',
+};
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: 'English',
@@ -40,6 +49,7 @@ const LANGUAGE_LABELS: Record<string, string> = {
 
 const buildSystemPrompt = (preferences?: SummaryPreferences): string => {
   const languageCode = preferences?.language || 'en';
+  const template = preferences?.template || 'standard';
   const languageLabel = LANGUAGE_LABELS[languageCode] || `the user's preferred language (${languageCode})`;
   const strategicAlerts = preferences?.strategicAlerts || {};
   const focusAreas = [
@@ -56,6 +66,7 @@ const buildSystemPrompt = (preferences?: SummaryPreferences): string => {
 5. Risk signals as an array capturing blockers, concerns, or risks mentioned in the meeting
 
 Write all human-readable text in ${languageLabel}.
+${TEMPLATE_INSTRUCTIONS[template]}
 Prioritize the following alert categories in the summary output and keep them especially clear: ${focusAreas}.
 If a category is not mentioned, return an empty array for it.
 

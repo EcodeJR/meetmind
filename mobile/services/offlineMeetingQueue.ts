@@ -21,12 +21,14 @@ export type OfflineMeetingQueueItem = {
   status: 'queued' | 'processing' | 'failed';
   error?: string;
   consentAcknowledgedAt?: string;
+  summaryTemplate?: 'standard' | 'standup' | 'client' | 'interview' | 'brainstorm';
 };
 
 export type OfflineRecordingOptions = {
   status?: OfflineMeetingQueueItem['status'];
   error?: string;
   consentAcknowledgedAt?: string;
+  summaryTemplate?: OfflineMeetingQueueItem['summaryTemplate'];
 };
 
 export type ProcessedMeetingResult = {
@@ -186,6 +188,7 @@ export const enqueueOfflineRecording = async (
     status: options.status || 'queued',
     error: options.error,
     consentAcknowledgedAt: options.consentAcknowledgedAt,
+    summaryTemplate: options.summaryTemplate || 'standard',
   };
 
   const queue = await readQueue();
@@ -270,6 +273,7 @@ export const uploadQueuedMeeting = async (item: OfflineMeetingQueueItem): Promis
   });
   formData.append('title', item.title);
   formData.append('durationSeconds', String(item.durationSeconds));
+  formData.append('summaryTemplate', item.summaryTemplate || 'standard');
   if (item.consentAcknowledgedAt) {
     formData.append('consentAcknowledgedAt', item.consentAcknowledgedAt);
     formData.append('consentPolicyVersion', '2026-10');

@@ -18,6 +18,11 @@ import { sendCustomEmail } from '../services/emailService';
 import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
 import { sendError } from '../utils/responses';
 
+const getAdminJwtSecret = (): string | null => {
+  const secret = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET;
+  return secret && secret.length >= 32 ? secret : null;
+};
+
 // Added auth code for the admin
 // ----------------------START-------------------------------------
 
@@ -36,16 +41,11 @@ export const loginAdmin = async (req: Request, res: Response): Promise<void> => 
     // Check email
     const adminEmail = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_PASSWORD;
-    const jwtSecret = process.env.ADMIN_JWT_SECRET;
+    const jwtSecret = getAdminJwtSecret();
 
     if (!adminEmail || !adminPassword || !jwtSecret) {
-      logger.error('Admin auth environment variables not configured');
-      res.status(500).json({ error: 'Auth not configured' });
-      return;
-    }
-
-    if (email !== adminEmail) {
-      res.status(401).json({ error: 'Invalid credentials' });
+      logger.error('Admin authentication is not configured');
+      res.status(503).json({ error: 'Admin authentication is unavailable' });
       return;
     }
 
@@ -56,10 +56,19 @@ export const loginAdmin = async (req: Request, res: Response): Promise<void> => 
     // text passwords — plain text will just fail
     // if the env var is already a hash.
     // ============================================
-    const isValid = await bcrypt.compare(password, adminPassword);
+    const passwordIsHash = /^\$2[aby]\$/.test(adminPassword);
+    if (process.env.NODE_ENV === 'production' && !passwordIsHash) {
+      logger.error('ADMIN_PASSWORD must be a bcrypt hash in production');
+      res.status(503).json({ error: 'Admin authentication is unavailable' });
+      return;
+    }
+
+    const isValid = email === adminEmail && (passwordIsHash
+      ? await bcrypt.compare(password, adminPassword)
+      : password === adminPassword);
 
     if (!isValid) {
-      logger.warn({ email }, 'Admin: Failed login attempt');
+      logger.warn('Admin login rejected');
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
@@ -71,7 +80,7 @@ export const loginAdmin = async (req: Request, res: Response): Promise<void> => 
       { expiresIn: '8h' }
     );
 
-    logger.info({ email }, 'Admin: Successful login');
+    logger.info('Admin login succeeded');
 
     res.json({
       success: true,
@@ -104,13 +113,17 @@ export const verifyAdminToken = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    const jwtSecret = process.env.ADMIN_JWT_SECRET;
+    const jwtSecret = getAdminJwtSecret();
     if (!jwtSecret) {
       res.status(500).json({ error: 'Auth not configured' });
       return;
     }
 
-    const decoded = jwt.verify(token, jwtSecret) as any;
+    const decoded = jwt.verify(token, jwtSecret) as { email?: string; role?: string };
+    if (decoded.role !== 'admin' || !decoded.email) {
+      res.status(401).json({ error: 'Invalid or expired token' });
+      return;
+    }
     res.json({ success: true, email: decoded.email, role: decoded.role });
 
   } catch (error) {
@@ -1215,6 +1228,7 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
         const aiAnalysis = await summarizeTranscript(transcript, {
           language,
           strategicAlerts: user?.preferences?.strategicAlerts,
+          template: meeting.summaryTemplate,
         });
 
         // STEP 5: Save completed results to MongoDB

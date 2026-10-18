@@ -68,6 +68,14 @@ import Animated, {
 
 type OfflineRecordingReason = 'offline' | 'signin' | 'limit' | 'upload-failed';
 const MAX_RECORDING_SECONDS = 30 * 60;
+type SummaryTemplate = 'standard' | 'standup' | 'client' | 'interview' | 'brainstorm';
+const SUMMARY_TEMPLATES: { id: SummaryTemplate; label: string }[] = [
+  { id: 'standard', label: 'Standard' },
+  { id: 'standup', label: 'Stand-up' },
+  { id: 'client', label: 'Client' },
+  { id: 'interview', label: 'Interview' },
+  { id: 'brainstorm', label: 'Ideas' },
+];
 
 const OFFLINE_RECORDING_MESSAGES: Record<OfflineRecordingReason, { title: string; message: string; debug: string }> = {
   offline: {
@@ -98,6 +106,7 @@ export default function HomeScreen() {
   const { user } = useUser();
   const { isSignedIn } = useAuth();
   const [meetingTitle, setMeetingTitle] = useState('');
+  const [summaryTemplate, setSummaryTemplate] = useState<SummaryTemplate>('standard');
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -149,6 +158,7 @@ export default function HomeScreen() {
       const offlineItem = await enqueueOfflineRecording(uri, recoveredTitle, recoveredDuration, {
         status: 'queued',
         error: 'Recording was interrupted and recovered locally.',
+        summaryTemplate,
       });
 
       setIsRecording(false);
@@ -286,7 +296,7 @@ export default function HomeScreen() {
     return () => {
       appStateSubscription.remove();
     };
-  }, [isRecording, recording, duration, meetingTitle]);
+  }, [isRecording, recording, duration, meetingTitle, summaryTemplate]);
 
   useEffect(() => {
     if (!loading) {
@@ -589,6 +599,7 @@ export default function HomeScreen() {
           status: 'queued',
           error: OFFLINE_RECORDING_MESSAGES.offline.message,
           consentAcknowledgedAt: recordingConsentAt || undefined,
+          summaryTemplate,
         });
         setProcessingStage('queued');
         setDebugStatus(OFFLINE_RECORDING_MESSAGES.offline.debug);
@@ -615,6 +626,7 @@ export default function HomeScreen() {
         createdAt: new Date().toISOString(),
         status: 'queued' as const,
         consentAcknowledgedAt: recordingConsentAt || undefined,
+        summaryTemplate,
       };
 
       console.log('[STOP-RECORDING] Uploading recording directly:', directRecordingItem.id);
@@ -652,6 +664,7 @@ export default function HomeScreen() {
             const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration, {
               status: 'queued',
               error: OFFLINE_RECORDING_MESSAGES.limit.message,
+              summaryTemplate,
             });
             console.log('[STOP-RECORDING] Free limit reached; saved locally for upgrade flow:', offlineItem.id);
           }
@@ -696,6 +709,7 @@ export default function HomeScreen() {
             status: 'queued',
             error: OFFLINE_RECORDING_MESSAGES[fallbackReason].message,
             consentAcknowledgedAt: recordingConsentAt || undefined,
+            summaryTemplate,
           });
           console.log('[STOP-RECORDING] Fallback saved to offline queue:', offlineItem.id);
           
@@ -826,6 +840,21 @@ export default function HomeScreen() {
                 onChangeText={setMeetingTitle}
                 editable={!loading}
               />
+              <Text style={styles.templateLabel}>RECAP FORMAT</Text>
+              <View style={styles.templateRow}>
+                {SUMMARY_TEMPLATES.map((template) => (
+                  <TouchableOpacity
+                    key={template.id}
+                    style={[styles.templateChip, summaryTemplate === template.id && styles.templateChipSelected]}
+                    onPress={() => setSummaryTemplate(template.id)}
+                    disabled={loading}
+                  >
+                    <Text style={[styles.templateChipText, summaryTemplate === template.id && styles.templateChipTextSelected]}>
+                      {template.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           ) : (
             <View style={styles.timerContainer}>
@@ -1070,6 +1099,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.outlineVariant,
     color: theme.colors.onSurface,
+  },
+  templateLabel: {
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 10,
+    color: theme.colors.outline,
+    letterSpacing: 1.2,
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
+  },
+  templateRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  templateChip: {
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+    backgroundColor: theme.colors.surfaceContainerLowest,
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  templateChipSelected: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  templateChipText: {
+    color: theme.colors.onSurfaceVariant,
+    fontFamily: 'SpaceGrotesk-SemiBold',
+    fontSize: 10,
+  },
+  templateChipTextSelected: {
+    color: theme.colors.onPrimary,
   },
   timerContainer: {
     alignItems: 'center',

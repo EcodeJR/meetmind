@@ -22,6 +22,14 @@ export const uploadRateLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+export const adminLoginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many login attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export const webhookRateLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 120, // allow bursts from provider retries but mitigate abuse

@@ -1,5 +1,5 @@
 import { AuthRequest } from '../middleware/auth';
-import { ITranscriptionQuality } from '../models/Meeting';
+import { ITranscriptionQuality, SummaryTemplate } from '../models/Meeting';
 import { Response } from 'express';
 import { sendSuccess, sendError } from '../utils/responses';
 import { Meeting } from '../models/Meeting';
@@ -107,6 +107,13 @@ const buildTranscriptSegments = (transcript: string, durationSeconds: number) =>
   });
 };
 
+const normalizeSummaryTemplate = (value: unknown): SummaryTemplate => {
+  const templates: SummaryTemplate[] = ['standard', 'standup', 'client', 'interview', 'brainstorm'];
+  return typeof value === 'string' && templates.includes(value as SummaryTemplate)
+    ? value as SummaryTemplate
+    : 'standard';
+};
+
 const syncGeneratedActionItems = async (userId: any, meetingId: any, actionItems: string[]): Promise<void> => {
   await ActionItem.deleteMany({ userId, meetingId, generated: true });
   const uniqueItems = [...new Set(actionItems.map(item => item.trim()).filter(Boolean))];
@@ -188,6 +195,7 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
     const { title, rawTranscript, duration } = req.body;
+    const summaryTemplate = normalizeSummaryTemplate(req.body.summaryTemplate);
 
     if (!title) {
       sendError(res, 'MISSING_DATA', 'Title is required');
@@ -223,6 +231,7 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
       summary: proUser ? req.body.summary || '' : '',
       actionItems: proUser ? req.body.actionItems || [] : [],
       keyDecisions: proUser ? req.body.keyDecisions || [] : [],
+      summaryTemplate,
       durationSeconds: duration || 0,
       audioUrl: req.body.audioUrl || '',
       tags: req.body.tags || [],
@@ -262,6 +271,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
     }
 
     const { title, durationSeconds } = req.body;
+    const summaryTemplate = normalizeSummaryTemplate(req.body.summaryTemplate);
 
     console.log(`[DEBUGGER] Starting processMeeting for user: ${clerkId}`);
     console.log(`[DEBUGGER] File received: ${req.file?.originalname} (${req.file?.size} bytes)`);
@@ -332,6 +342,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       summary: '',
       actionItems: [],
       keyDecisions: [],
+      summaryTemplate,
       durationSeconds: Number(durationSeconds) || 0,
       audioUrl: uploadResult.url,
       audioPublicId: uploadResult.publicId,
@@ -409,6 +420,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         const aiAnalysis = await summarizeTranscript(transcript, {
           language: user.preferences?.language,
           strategicAlerts: user.preferences?.strategicAlerts,
+          template: processingMeeting.summaryTemplate,
         });
 
         console.log(`[DEBUGGER] BACKGROUND: AI summary complete (${processingMeeting._id})`);
@@ -878,6 +890,7 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         const aiAnalysis = await summarizeTranscript(transcript, {
           language: user.preferences?.language,
           strategicAlerts: user.preferences?.strategicAlerts,
+          template: meeting.summaryTemplate,
         });
 
         console.log(`[RETRY] AI summary complete (${meeting._id})`);
