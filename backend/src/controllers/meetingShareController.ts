@@ -57,8 +57,15 @@ export const revokeMeetingShare = async (req: AuthRequest, res: Response): Promi
 
 export const viewSharedMeeting = async (req: Request, res: Response): Promise<void> => {
   try {
+    const tokenParam = req.params.token;
+    const token = Array.isArray(tokenParam) ? tokenParam[0] : tokenParam;
+    if (!token) {
+      res.status(404).type('html').send('<h1>Link unavailable</h1><p>This meeting share link is invalid.</p>');
+      return;
+    }
+
     const meeting = await Meeting.findOne({
-      'share.tokenHash': hashToken(req.params.token),
+      'share.tokenHash': hashToken(token),
       'share.expiresAt': { $gt: new Date() },
       status: 'completed',
     }).select('title createdAt summary actionItems keyDecisions riskSignals share.expiresAt').lean();
