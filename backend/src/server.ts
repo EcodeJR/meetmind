@@ -22,6 +22,7 @@ import publicRoutes from './routes/publicRoutes';
 import actionRoutes from './routes/actionRoutes';
 import meetingShareRoutes, { publicMeetingShareRoutes } from './routes/meetingShareRoutes';
 import insightRoutes from './routes/insightRoutes';
+import workspaceRoutes from './routes/workspaceRoutes';
 import { startRetentionCleanupScheduler } from './services/retentionService';
 
 const REQUIRED_ENV = [
@@ -138,6 +139,7 @@ app.use('/api/meetings', meetingRoutes);
 app.use('/api/meetings', meetingShareRoutes);
 app.use('/api/actions', actionRoutes);
 app.use('/api/insights', insightRoutes);
+app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api', publicRoutes);
 

@@ -6,6 +6,8 @@ import { Meeting } from '../models/Meeting';
 import { TranscriptionFeedback } from '../models/TranscriptionFeedback';
 import { ActionItem } from '../models/ActionItem';
 import { User } from '../models/User';
+import { WorkspaceMember, WorkspaceProject, WorkspaceSharingPolicy } from '../models/Workspace';
+import { Types } from 'mongoose';
 import { logger } from '../utils/logger';
 import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
 import { transcribeInChunks, diarizeWithAI } from '../services/transcriptionService';
@@ -160,6 +162,58 @@ const isProUser = (user: any): boolean => {
   return Boolean(user && user.subscription?.plan === 'pro' && user.subscription?.status === 'active');
 };
 
+type WorkspaceMeetingContext = {
+  workspaceId: Types.ObjectId | null;
+  projectId: Types.ObjectId | null;
+  sharingPolicy: WorkspaceSharingPolicy;
+};
+
+const getWorkspaceMeetingContext = async (
+  userId: Types.ObjectId,
+  workspaceIdValue: unknown,
+  projectIdValue: unknown,
+  sharingPolicyValue: unknown
+): Promise<WorkspaceMeetingContext> => {
+  if (!workspaceIdValue) {
+    return { workspaceId: null, projectId: null, sharingPolicy: 'private' };
+  }
+
+  const workspaceId = String(workspaceIdValue);
+  if (!Types.ObjectId.isValid(workspaceId)) {
+    throw new Error('Invalid workspace.');
+  }
+
+  const membership = await WorkspaceMember.findOne({ workspaceId, userId, status: 'active' });
+  if (!membership || membership.role === 'viewer') {
+    throw new Error('You do not have permission to add meetings to this workspace.');
+  }
+
+  const sharingPolicy: WorkspaceSharingPolicy = ['private', 'workspace', 'shared'].includes(String(sharingPolicyValue))
+    ? String(sharingPolicyValue) as WorkspaceSharingPolicy
+    : 'private';
+  let projectId: Types.ObjectId | null = null;
+  if (projectIdValue) {
+    const projectIdString = String(projectIdValue);
+    if (!Types.ObjectId.isValid(projectIdString) || !await WorkspaceProject.exists({ _id: projectIdString, workspaceId })) {
+      throw new Error('The selected project does not belong to this workspace.');
+    }
+    projectId = new Types.ObjectId(projectIdString);
+  }
+
+  return { workspaceId: new Types.ObjectId(workspaceId), projectId, sharingPolicy };
+};
+
+const getVisibleMeetingFilter = async (userId: Types.ObjectId) => {
+  const memberships = await WorkspaceMember.find({ userId, status: 'active' }).select('workspaceId').lean();
+  const workspaceIds = memberships.map(member => member.workspaceId);
+  return {
+    $or: [
+      { userId },
+      ...(workspaceIds.length > 0 ? [{ workspaceId: { $in: workspaceIds }, sharingPolicy: 'workspace' }] : []),
+    ],
+  };
+};
+
 // Container metadata can be fractions of a second longer than the requested recorder
 // duration. This tolerance prevents rejecting an otherwise valid 30-minute recording.
 const RECORDING_DURATION_TOLERANCE_SECONDS = 2;
@@ -199,7 +253,7 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
       sendError(res, 'AUTH_ERROR', 'Authentication required', 401);
       return;
     }
-    const { title, rawTranscript, duration } = req.body;
+    const { title, rawTranscript, duration, workspaceId, projectId, sharingPolicy } = req.body;
     const summaryTemplate = normalizeSummaryTemplate(req.body.summaryTemplate);
 
     if (!title) {
@@ -227,10 +281,18 @@ export const createMeeting = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     const proUser = isProUser(user);
+    let workspaceContext: WorkspaceMeetingContext;
+    try {
+      workspaceContext = await getWorkspaceMeetingContext(user._id, workspaceId, projectId, sharingPolicy);
+    } catch (error: any) {
+      sendError(res, 'WORKSPACE_ACCESS_DENIED', error.message || 'Invalid workspace assignment.', 403);
+      return;
+    }
 
     const initialStatus = proUser && (rawTranscript || req.body.summary) ? 'completed' : 'processing';
     const meeting = new Meeting({
       userId: user._id,
+      ...workspaceContext,
       title,
       rawTranscript: proUser ? rawTranscript || '' : '',
       summary: proUser ? req.body.summary || '' : '',
@@ -276,7 +338,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const { title, durationSeconds } = req.body;
+    const { title, durationSeconds, workspaceId, projectId, sharingPolicy } = req.body;
     const summaryTemplate = normalizeSummaryTemplate(req.body.summaryTemplate);
 
     console.log(`[DEBUGGER] Starting processMeeting for user: ${clerkId}`);
@@ -367,8 +429,21 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       }
     }
 
+    let workspaceContext: WorkspaceMeetingContext;
+    try {
+      workspaceContext = await getWorkspaceMeetingContext(user._id, workspaceId, projectId, sharingPolicy);
+    } catch (error: any) {
+      await deleteAudioFromCloudinary(uploadResult.publicId).catch(() => { });
+      if (req.meetingUsageMonthKey) {
+        await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => { });
+      }
+      sendError(res, 'WORKSPACE_ACCESS_DENIED', error.message || 'Invalid workspace assignment.', 403);
+      return;
+    }
+
     const processingMeeting = new Meeting({
       userId: user._id,
+      ...workspaceContext,
       title: title || 'New Recording',
       rawTranscript: '',
       summary: '',
@@ -590,13 +665,14 @@ export const getMeetings = async (req: AuthRequest, res: Response): Promise<void
 
     const historyFilter = getAccessibleHistoryFilter(user);
     const proUser = isProUser(user);
+    const visibilityFilter = await getVisibleMeetingFilter(user._id);
 
-    const meetings = await Meeting.find({ userId: user._id, ...historyFilter })
+    const meetings = await Meeting.find({ ...visibilityFilter, ...historyFilter })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
 
-    const total = await Meeting.countDocuments({ userId: user._id, ...historyFilter });
+    const total = await Meeting.countDocuments({ ...visibilityFilter, ...historyFilter });
 
     sendSuccess(res, { meetings: meetings.map((meeting) => sanitizeMeetingForPlan(meeting, proUser)), total, page, limit });
   } catch (error) {
@@ -618,8 +694,9 @@ export const getMeetingById = async (req: AuthRequest, res: Response): Promise<v
 
     const historyFilter = getAccessibleHistoryFilter(user);
     const proUser = isProUser(user);
+    const visibilityFilter = await getVisibleMeetingFilter(user._id);
 
-    const meeting = await Meeting.findOne({ _id: id, userId: user._id, ...historyFilter });
+    const meeting = await Meeting.findOne({ _id: id, ...visibilityFilter, ...historyFilter });
 
     if (!meeting) {
       sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
@@ -771,9 +848,10 @@ export const searchMeetings = async (req: AuthRequest, res: Response): Promise<v
     }
 
     const historyFilter = getAccessibleHistoryFilter(user);
+    const visibilityFilter = await getVisibleMeetingFilter(user._id);
 
     const meetings = await Meeting.find(
-      { userId: user._id, ...historyFilter, $text: { $search: q } },
+      { ...visibilityFilter, ...historyFilter, $text: { $search: q } },
       { score: { $meta: 'textScore' } }
     ).sort({ score: { $meta: 'textScore' } });
 

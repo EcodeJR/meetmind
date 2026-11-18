@@ -18,6 +18,9 @@ export type SummaryTemplate = 'standard' | 'standup' | 'client' | 'interview' | 
 
 export interface IMeeting extends Document {
   userId: Types.ObjectId;
+  workspaceId?: Types.ObjectId;
+  projectId?: Types.ObjectId;
+  sharingPolicy: 'private' | 'workspace' | 'shared';
   title?: string;
   rawTranscript: string;
   summary?: string;
@@ -61,6 +64,23 @@ const meetingSchema = new Schema<IMeeting>(
       ref: 'User',
       required: true,
       index: true,
+    },
+    workspaceId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Workspace',
+      default: null,
+      index: true,
+    },
+    projectId: {
+      type: Schema.Types.ObjectId,
+      ref: 'WorkspaceProject',
+      default: null,
+      index: true,
+    },
+    sharingPolicy: {
+      type: String,
+      enum: ['private', 'workspace', 'shared'],
+      default: 'private',
     },
     title: {
       type: String,
@@ -174,6 +194,7 @@ const meetingSchema = new Schema<IMeeting>(
 
 // Index for pagination and searching
 meetingSchema.index({ userId: 1, createdAt: -1 });
+meetingSchema.index({ workspaceId: 1, createdAt: -1 });
 meetingSchema.index({ userId: 1, title: 'text', rawTranscript: 'text' });
 
 export const Meeting = model<IMeeting>('Meeting', meetingSchema);
