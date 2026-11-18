@@ -11,6 +11,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
@@ -444,6 +445,41 @@ export default function MeetingDetailScreen() {
     await exportDocx('google-docs', 'Google Docs');
   };
 
+  const shareSecureRecapLink = async () => {
+    if (!meeting?._id) return;
+    const response = await apiClient.post(`/meetings/${meeting._id}/share`);
+    const shareUrl = response.data?.data?.shareUrl || response.data?.shareUrl;
+    if (!shareUrl) throw new Error('The server did not return a share link.');
+    await Share.share({
+      title: meeting.title || 'Memovoice meeting recap',
+      message: `Here is the shared recap for ${meeting.title || 'our meeting'}: ${shareUrl}`,
+      url: shareUrl,
+    });
+  };
+
+  const revokeSecureRecapLink = async () => {
+    if (!meeting?._id) return;
+    Alert.alert(
+      'Revoke secure link?',
+      'Anyone using a previously created recap link will immediately lose access.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Revoke link',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiClient.delete(`/meetings/${meeting._id}/share`);
+              Alert.alert('Share link revoked', 'The previously created recap link no longer works.');
+            } catch {
+              Alert.alert('Could not revoke link', 'Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const runExportAction = async (action: () => Promise<void>) => {
     setExportMenuVisible(false);
     await action();
@@ -819,6 +855,18 @@ export default function MeetingDetailScreen() {
                   </View>
 
                   <View style={styles.exportGrid}>
+                    <TouchableOpacity style={styles.exportOption} onPress={() => runExportAction(shareSecureRecapLink)}>
+                      <Ionicons name="link-outline" size={18} color={theme.colors.secondary} />
+                      <Text style={styles.exportOptionTitle}>Secure link</Text>
+                      <Text style={styles.exportOptionSubtitle}>Revocable 30-day recap</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.exportOption} onPress={() => runExportAction(revokeSecureRecapLink)}>
+                      <Ionicons name="link-outline" size={18} color={theme.colors.error} />
+                      <Text style={styles.exportOptionTitle}>Revoke link</Text>
+                      <Text style={styles.exportOptionSubtitle}>Disable prior secure links</Text>
+                    </TouchableOpacity>
+
                     <TouchableOpacity style={styles.exportOption} onPress={() => runExportAction(shareToNotion)}>
                       <Ionicons name="document-text-outline" size={18} color={theme.colors.secondary} />
                       <Text style={styles.exportOptionTitle}>Notion</Text>

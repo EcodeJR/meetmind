@@ -20,6 +20,8 @@ import { paddleWebhookHandler } from './webhooks/paddleWebhook';
 import adminRoutes from './routes/adminRoutes';
 import publicRoutes from './routes/publicRoutes';
 import actionRoutes from './routes/actionRoutes';
+import meetingShareRoutes, { publicMeetingShareRoutes } from './routes/meetingShareRoutes';
+import insightRoutes from './routes/insightRoutes';
 import { startRetentionCleanupScheduler } from './services/retentionService';
 
 const REQUIRED_ENV = [
@@ -127,12 +129,15 @@ app.post(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(publicMeetingShareRoutes);
 
 // Routes
 app.use('/api', healthRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/meetings', meetingRoutes);
+app.use('/api/meetings', meetingShareRoutes);
 app.use('/api/actions', actionRoutes);
+app.use('/api/insights', insightRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api', publicRoutes);
 

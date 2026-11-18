@@ -45,6 +45,11 @@ export interface IMeeting extends Document {
     acknowledgedAt: Date;
     policyVersion: string;
   };
+  share?: {
+    tokenHash: string;
+    expiresAt: Date;
+    createdAt: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -155,6 +160,11 @@ const meetingSchema = new Schema<IMeeting>(
     recordingConsent: {
       acknowledgedAt: { type: Date },
       policyVersion: { type: String },
+    },
+    share: {
+      tokenHash: { type: String, select: false },
+      expiresAt: { type: Date },
+      createdAt: { type: Date },
     },
   },
   {
