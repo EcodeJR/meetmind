@@ -19,6 +19,7 @@ import fs from 'fs';
 import { FREE_PLAN_LIMITS } from '../utils/constants';
 import { releaseMonthlyMeetingSlot } from '../middleware/subscriptionMiddleware';
 import { incrementMetric, recordDuration } from '../utils/metrics';
+import { enqueueMeetingProcessing } from '../services/processingQueueService';
 
 // ============================================
 // NOTE: ffmpeg import removed — preprocessAudio
@@ -469,7 +470,10 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
     user.storageUsedMB = (user.storageUsedMB || 0) + fileSizeMB;
     await user.save();
 
+    await enqueueMeetingProcessing(processingMeeting._id, user._id, req.meetingUsageMonthKey);
     sendSuccess(res, { meeting: processingMeeting }, 202);
+    // Kept only as a temporary emergency fallback while deployments roll out the durable worker.
+    if (process.env.ENABLE_LEGACY_PROCESSOR !== 'true') return;
 
     // Background processing: transcribe, summarize, update meeting
     (async () => {
@@ -604,7 +608,8 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       }
     })();
 
-    return;
+    // Kept only as a temporary emergency fallback while deployments roll out the durable worker.
+    if (process.env.ENABLE_LEGACY_PROCESSOR !== 'true') return;
   } catch (error: any) {
     console.error(`[DEBUGGER] FATAL ERROR in processMeeting:`, error);
     logger.error({ error, clerkId }, 'Error processing meeting');
@@ -950,7 +955,9 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
 
     logger.info({ clerkId, meetingId: meeting._id }, 'Meeting retry requested — starting background transcription');
 
+    await enqueueMeetingProcessing(meeting._id, user._id);
     sendSuccess(res, { meeting }, 202);
+    if (process.env.ENABLE_LEGACY_PROCESSOR !== 'true') return;
 
     (async () => {
       const canSendEmails = user.preferences?.notificationsEnabled ?? true;

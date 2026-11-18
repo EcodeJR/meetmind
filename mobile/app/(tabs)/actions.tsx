@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   FlatList,
   Modal,
   RefreshControl,
@@ -10,6 +11,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -80,6 +82,32 @@ export default function ActionsScreen() {
     Alert.alert('Reminder set', 'We will remind you tomorrow at 9:00 AM.');
   };
 
+  const createCalendarEvent = async (item: ActionItem, provider: 'google' | 'outlook') => {
+    const startsAt = item.dueDate ? new Date(item.dueDate) : new Date();
+    if (!item.dueDate) startsAt.setDate(startsAt.getDate() + 1);
+    startsAt.setHours(9, 0, 0, 0);
+    const endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000);
+    try {
+      setUpdatingId(item._id);
+      await apiClient.post(`/integrations/calendars/${provider}/events`, {
+        title: item.title,
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        description: `Follow-up action from ${meetingTitle(item)}. Owner: ${item.owner || 'Me'}.`,
+      });
+      Alert.alert('Event created', `Added a one-hour follow-up to your ${provider === 'google' ? 'Google' : 'Outlook'} calendar.`);
+    } catch (error: any) {
+      const message = error.response?.data?.error?.message || 'Connect this calendar in Settings, then try again.';
+      Alert.alert('Could not create calendar event', message);
+    } finally { setUpdatingId(null); }
+  };
+
+  const openCalendarPicker = (item: ActionItem) => Alert.alert('Add follow-up to calendar', 'The event is scheduled for 9:00 AM on the due date, or tomorrow when no due date is set.', [
+    { text: 'Google Calendar', onPress: () => createCalendarEvent(item, 'google') },
+    { text: 'Outlook Calendar', onPress: () => createCalendarEvent(item, 'outlook') },
+    { text: 'Cancel', style: 'cancel' },
+  ]);
+
   const openEditor = (item: ActionItem) => {
     setEditingAction(item);
     setEditOwner(item.owner || 'Me');
@@ -142,6 +170,8 @@ export default function ActionsScreen() {
                 style={styles.cardContent}
                 onPress={() => typeof item.meetingId === 'object' && router.push(`/meeting/${item.meetingId._id}`)}
                 activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel={`Open meeting for action: ${item.title}`}
               >
                 <View style={styles.metaRow}>
                   <Text style={[styles.priority, styles[`priority${item.priority[0].toUpperCase()}${item.priority.slice(1)}` as 'priorityLow']]}>{item.priority} priority</Text>
@@ -154,10 +184,14 @@ export default function ActionsScreen() {
                 style={styles.reminderButton}
                 onPress={() => scheduleTomorrow(item)}
                 accessibilityLabel={`Remind me tomorrow about ${item.title}`}
+                accessibilityRole="button"
               >
                 <Ionicons name={item.reminderAt ? 'notifications' : 'notifications-outline'} size={20} color={theme.colors.secondary} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.editButton} onPress={() => openEditor(item)} accessibilityLabel={`Edit ${item.title}`}>
+              <TouchableOpacity style={styles.calendarButton} onPress={() => openCalendarPicker(item)} disabled={updatingId === item._id} accessibilityLabel={`Add ${item.title} to calendar`}>
+                <Ionicons name="calendar-outline" size={19} color={theme.colors.secondary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.editButton} onPress={() => openEditor(item)} accessibilityRole="button" accessibilityLabel={`Edit ${item.title}`}>
                 <Ionicons name="create-outline" size={19} color={theme.colors.onSurfaceVariant} />
               </TouchableOpacity>
             </View>
@@ -166,7 +200,7 @@ export default function ActionsScreen() {
       )}
 
       <Modal visible={Boolean(editingAction)} transparent animationType="fade" onRequestClose={() => setEditingAction(null)}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
           <View style={styles.editorCard}>
             <Text style={styles.editorTitle}>Edit action</Text>
             <Text style={styles.editorActionTitle} numberOfLines={2}>{editingAction?.title}</Text>
@@ -181,7 +215,7 @@ export default function ActionsScreen() {
               <TouchableOpacity style={styles.saveButton} onPress={saveActionEdits} disabled={updatingId === editingAction?._id}><Text style={styles.saveButtonText}>{updatingId === editingAction?._id ? 'Saving...' : 'Save'}</Text></TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -210,6 +244,7 @@ const styles = StyleSheet.create({
   actionTitle: { fontFamily: 'Manrope-Bold', fontSize: 16, color: theme.colors.primary, lineHeight: 22 },
   meetingName: { fontFamily: 'Inter-Regular', fontSize: 12, color: theme.colors.onSurfaceVariant, marginTop: 5 },
   reminderButton: { paddingLeft: theme.spacing.sm, paddingVertical: theme.spacing.sm },
+  calendarButton: { paddingLeft: theme.spacing.sm, paddingVertical: theme.spacing.sm },
   editButton: { paddingLeft: theme.spacing.sm, paddingVertical: theme.spacing.sm },
   modalBackdrop: { flex: 1, justifyContent: 'center', padding: theme.spacing.lg, backgroundColor: 'rgba(0,0,0,0.4)' },
   editorCard: { backgroundColor: theme.colors.surfaceContainerLowest, borderRadius: theme.borderRadius.lg, padding: theme.spacing.lg },

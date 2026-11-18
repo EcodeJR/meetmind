@@ -328,6 +328,7 @@ export default function HistoryScreen() {
       ) : (
         <FlatList
           data={meetings}
+          keyboardShouldPersistTaps="handled"
           keyExtractor={(item) => item._id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
           contentContainerStyle={meetings.length === 0 ? styles.emptyContainer : styles.list}

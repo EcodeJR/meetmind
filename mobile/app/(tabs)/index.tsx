@@ -45,6 +45,8 @@ import {
   AppState,
   Platform,
   Linking,
+  KeyboardAvoidingView,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -82,6 +84,9 @@ const RECORDING_OPTIONS = {
   isMeteringEnabled: true,
 };
 type SummaryTemplate = 'standard' | 'standup' | 'client' | 'interview' | 'brainstorm';
+type RecordingWorkspace = { _id: string; name: string; role: 'owner' | 'admin' | 'member' | 'viewer' };
+type RecordingProject = { _id: string; name: string };
+type SharingPolicy = 'private' | 'workspace' | 'shared';
 const SUMMARY_TEMPLATES: { id: SummaryTemplate; label: string }[] = [
   { id: 'standard', label: 'Standard' },
   { id: 'standup', label: 'Stand-up' },
@@ -120,6 +125,11 @@ export default function HomeScreen() {
   const { isSignedIn } = useAuth();
   const [meetingTitle, setMeetingTitle] = useState('');
   const [summaryTemplate, setSummaryTemplate] = useState<SummaryTemplate>('standard');
+  const [workspaces, setWorkspaces] = useState<RecordingWorkspace[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const [workspaceProjects, setWorkspaceProjects] = useState<RecordingProject[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [sharingPolicy, setSharingPolicy] = useState<SharingPolicy>('private');
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -193,6 +203,93 @@ export default function HomeScreen() {
     };
   }, [isSignedIn, user?.id]);
 
+  useEffect(() => {
+    if (!isSignedIn) {
+      setWorkspaces([]);
+      setSelectedWorkspaceId(null);
+      setWorkspaceProjects([]);
+      setSelectedProjectId(null);
+      return;
+    }
+
+    let cancelled = false;
+    const selectionKey = `@memovoice/recording-workspace/${user?.id || 'anonymous'}`;
+    const loadWorkspaces = async () => {
+      try {
+        const [response, savedWorkspaceId] = await Promise.all([
+          apiClient.get('/workspaces'),
+          AsyncStorage.getItem(selectionKey),
+        ]);
+        const available = response.data?.data?.workspaces || [];
+        if (!cancelled) {
+          setWorkspaces(available);
+          setSelectedWorkspaceId(available.some((workspace: RecordingWorkspace) => workspace._id === savedWorkspaceId) ? savedWorkspaceId : null);
+        }
+      } catch (error) {
+        console.warn('[RECORDING] Could not load workspaces.', error);
+      }
+    };
+    loadWorkspaces();
+    return () => { cancelled = true; };
+  }, [isSignedIn, user?.id]);
+
+  useEffect(() => {
+    if (!selectedWorkspaceId || !isSignedIn) {
+      setWorkspaceProjects([]);
+      setSelectedProjectId(null);
+      return;
+    }
+
+    let cancelled = false;
+    const projectSelectionKey = `@memovoice/recording-project/${user?.id || 'anonymous'}/${selectedWorkspaceId}`;
+    const loadProjects = async () => {
+      try {
+        const [response, savedProjectId] = await Promise.all([
+          apiClient.get(`/workspaces/${selectedWorkspaceId}`),
+          AsyncStorage.getItem(projectSelectionKey),
+        ]);
+        const projects = response.data?.data?.projects || [];
+        if (!cancelled) {
+          setWorkspaceProjects(projects);
+          setSelectedProjectId(projects.some((project: RecordingProject) => project._id === savedProjectId) ? savedProjectId : null);
+        }
+      } catch (error) {
+        console.warn('[RECORDING] Could not load workspace projects.', error);
+        if (!cancelled) {
+          setWorkspaceProjects([]);
+          setSelectedProjectId(null);
+        }
+      }
+    };
+    loadProjects();
+    return () => { cancelled = true; };
+  }, [isSignedIn, selectedWorkspaceId, user?.id]);
+
+  const chooseWorkspace = async (workspaceId: string | null) => {
+    setSelectedWorkspaceId(workspaceId);
+    setSelectedProjectId(null);
+    if (!workspaceId) setSharingPolicy('private');
+    try {
+      await AsyncStorage.setItem(`@memovoice/recording-workspace/${user?.id || 'anonymous'}`, workspaceId || '');
+    } catch (error) {
+      console.warn('[RECORDING] Could not save workspace selection.', error);
+    }
+  };
+  const chooseProject = async (projectId: string | null) => {
+    setSelectedProjectId(projectId);
+    if (!selectedWorkspaceId) return;
+    try {
+      await AsyncStorage.setItem(`@memovoice/recording-project/${user?.id || 'anonymous'}/${selectedWorkspaceId}`, projectId || '');
+    } catch (error) {
+      console.warn('[RECORDING] Could not save project selection.', error);
+    }
+  };
+  const currentWorkspaceOptions = {
+    workspaceId: selectedWorkspaceId || undefined,
+    projectId: selectedProjectId || undefined,
+    sharingPolicy: (selectedWorkspaceId ? sharingPolicy : 'private') as SharingPolicy,
+  };
+
   const recoverPartialRecording = async (
     reason: 'stop_race' | 'os_interruption',
     durationHintSeconds?: number
@@ -227,6 +324,7 @@ export default function HomeScreen() {
         status: 'queued',
         error: 'Recording was interrupted and recovered locally.',
         summaryTemplate,
+        ...currentWorkspaceOptions,
       });
 
       setIsRecording(false);
@@ -676,6 +774,7 @@ export default function HomeScreen() {
           error: OFFLINE_RECORDING_MESSAGES.offline.message,
           consentAcknowledgedAt: recordingConsentAt || undefined,
           summaryTemplate,
+          ...currentWorkspaceOptions,
         });
         setProcessingStage('queued');
         setDebugStatus(OFFLINE_RECORDING_MESSAGES.offline.debug);
@@ -703,6 +802,7 @@ export default function HomeScreen() {
         status: 'queued' as const,
         consentAcknowledgedAt: recordingConsentAt || undefined,
         summaryTemplate,
+        ...currentWorkspaceOptions,
       };
 
       console.log('[STOP-RECORDING] Uploading recording directly:', directRecordingItem.id);
@@ -741,6 +841,7 @@ export default function HomeScreen() {
               status: 'queued',
               error: OFFLINE_RECORDING_MESSAGES.limit.message,
               summaryTemplate,
+              ...currentWorkspaceOptions,
             });
             console.log('[STOP-RECORDING] Free limit reached; saved locally for upgrade flow:', offlineItem.id);
           }
@@ -786,6 +887,7 @@ export default function HomeScreen() {
             error: OFFLINE_RECORDING_MESSAGES[fallbackReason].message,
             consentAcknowledgedAt: recordingConsentAt || undefined,
             summaryTemplate,
+            ...currentWorkspaceOptions,
           });
           console.log('[STOP-RECORDING] Fallback saved to offline queue:', offlineItem.id);
           
@@ -874,7 +976,8 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardAvoidingView}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View style={styles.brandContainer}>
@@ -885,7 +988,7 @@ export default function HomeScreen() {
               />
             </View>
             {isSignedIn ? (
-              <TouchableOpacity onPress={() => router.push('/settings')} style={styles.profileButton}>
+              <TouchableOpacity onPress={() => router.push('/settings')} style={styles.profileButton} accessibilityRole="button" accessibilityLabel="Open settings">
                 {user?.imageUrl ? (
                   <Image source={{ uri: user.imageUrl }} style={styles.headerAvatar} />
                 ) : (
@@ -895,7 +998,7 @@ export default function HomeScreen() {
                 )}
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')} style={styles.authHeaderButton}>
+              <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')} style={styles.authHeaderButton} accessibilityRole="button" accessibilityLabel="Sign in">
                 <Text style={styles.authHeaderButtonText}>Sign in</Text>
               </TouchableOpacity>
             )}
@@ -915,6 +1018,7 @@ export default function HomeScreen() {
                 value={meetingTitle}
                 onChangeText={setMeetingTitle}
                 editable={!loading}
+                accessibilityLabel="Meeting title"
               />
               <Text style={styles.templateLabel}>RECAP FORMAT</Text>
               <View style={styles.templateRow}>
@@ -924,6 +1028,9 @@ export default function HomeScreen() {
                     style={[styles.templateChip, summaryTemplate === template.id && styles.templateChipSelected]}
                     onPress={() => setSummaryTemplate(template.id)}
                     disabled={loading}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: summaryTemplate === template.id, disabled: loading }}
+                    accessibilityLabel={`${template.label} recap format`}
                   >
                     <Text style={[styles.templateChipText, summaryTemplate === template.id && styles.templateChipTextSelected]}>
                       {template.label}
@@ -931,6 +1038,83 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+              <Text style={styles.templateLabel}>SAVE TO</Text>
+              <View style={styles.templateRow}>
+                <TouchableOpacity
+                  style={[styles.templateChip, !selectedWorkspaceId && styles.templateChipSelected]}
+                  onPress={() => chooseWorkspace(null)}
+                  disabled={loading}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: !selectedWorkspaceId, disabled: loading }}
+                  accessibilityLabel="Save meeting personally"
+                >
+                  <Text style={[styles.templateChipText, !selectedWorkspaceId && styles.templateChipTextSelected]}>Personal</Text>
+                </TouchableOpacity>
+                {workspaces.filter((workspace) => workspace.role !== 'viewer').map((workspace) => (
+                  <TouchableOpacity
+                    key={workspace._id}
+                    style={[styles.templateChip, selectedWorkspaceId === workspace._id && styles.templateChipSelected]}
+                    onPress={() => chooseWorkspace(workspace._id)}
+                    disabled={loading}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: selectedWorkspaceId === workspace._id, disabled: loading }}
+                    accessibilityLabel={`Save meeting to ${workspace.name}`}
+                  >
+                    <Text style={[styles.templateChipText, selectedWorkspaceId === workspace._id && styles.templateChipTextSelected]}>
+                      {workspace.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {selectedWorkspaceId && (
+                <>
+                  {workspaceProjects.length > 0 && <>
+                    <Text style={styles.templateLabel}>PROJECT</Text>
+                    <View style={styles.templateRow}>
+                      <TouchableOpacity
+                        style={[styles.templateChip, !selectedProjectId && styles.templateChipSelected]}
+                        onPress={() => chooseProject(null)}
+                        disabled={loading}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: !selectedProjectId, disabled: loading }}
+                      >
+                        <Text style={[styles.templateChipText, !selectedProjectId && styles.templateChipTextSelected]}>No project</Text>
+                      </TouchableOpacity>
+                      {workspaceProjects.map((project) => (
+                        <TouchableOpacity
+                          key={project._id}
+                          style={[styles.templateChip, selectedProjectId === project._id && styles.templateChipSelected]}
+                          onPress={() => chooseProject(project._id)}
+                          disabled={loading}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: selectedProjectId === project._id, disabled: loading }}
+                          accessibilityLabel={`Assign to project ${project.name}`}
+                        >
+                          <Text style={[styles.templateChipText, selectedProjectId === project._id && styles.templateChipTextSelected]}>{project.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>}
+                  <Text style={styles.templateLabel}>WHO CAN VIEW</Text>
+                  <View style={styles.templateRow}>
+                    {(['private', 'workspace'] as SharingPolicy[]).map((policy) => (
+                      <TouchableOpacity
+                        key={policy}
+                        style={[styles.templateChip, sharingPolicy === policy && styles.templateChipSelected]}
+                        onPress={() => setSharingPolicy(policy)}
+                        disabled={loading}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: sharingPolicy === policy, disabled: loading }}
+                        accessibilityLabel={policy === 'workspace' ? 'Allow workspace members to view' : 'Only allow me to view'}
+                      >
+                        <Text style={[styles.templateChipText, sharingPolicy === policy && styles.templateChipTextSelected]}>
+                          {policy === 'workspace' ? 'Workspace' : 'Only me'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
             </View>
           ) : (
             <View style={styles.timerContainer}>
@@ -959,6 +1143,9 @@ export default function HomeScreen() {
               ]}
               onPress={isRecording ? handleStopRecording : handleStartRecording}
               disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel={isRecording ? 'Stop recording' : 'Start recording'}
+              accessibilityHint={isRecording ? 'Stops recording and starts processing.' : 'Starts background audio recording.'}
             >
               {loading ? (
                 <ActivityIndicator color={theme.colors.onPrimary} />
@@ -1071,7 +1258,8 @@ export default function HomeScreen() {
             <Text style={styles.footerHint}>POWERED BY AI</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -1082,10 +1270,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xl,
     justifyContent: 'space-between',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   header: {
     marginTop: theme.spacing.md,

@@ -22,6 +22,9 @@ export type OfflineMeetingQueueItem = {
   error?: string;
   consentAcknowledgedAt?: string;
   summaryTemplate?: 'standard' | 'standup' | 'client' | 'interview' | 'brainstorm';
+  workspaceId?: string;
+  projectId?: string;
+  sharingPolicy?: 'private' | 'workspace' | 'shared';
 };
 
 export type OfflineRecordingOptions = {
@@ -29,6 +32,9 @@ export type OfflineRecordingOptions = {
   error?: string;
   consentAcknowledgedAt?: string;
   summaryTemplate?: OfflineMeetingQueueItem['summaryTemplate'];
+  workspaceId?: string;
+  projectId?: string;
+  sharingPolicy?: OfflineMeetingQueueItem['sharingPolicy'];
 };
 
 export type ProcessedMeetingResult = {
@@ -189,6 +195,9 @@ export const enqueueOfflineRecording = async (
     error: options.error,
     consentAcknowledgedAt: options.consentAcknowledgedAt,
     summaryTemplate: options.summaryTemplate || 'standard',
+    workspaceId: options.workspaceId,
+    projectId: options.projectId,
+    sharingPolicy: options.sharingPolicy || 'private',
   };
 
   const queue = await readQueue();
@@ -274,6 +283,9 @@ export const uploadQueuedMeeting = async (item: OfflineMeetingQueueItem): Promis
   formData.append('title', item.title);
   formData.append('durationSeconds', String(item.durationSeconds));
   formData.append('summaryTemplate', item.summaryTemplate || 'standard');
+  if (item.workspaceId) formData.append('workspaceId', item.workspaceId);
+  if (item.projectId) formData.append('projectId', item.projectId);
+  formData.append('sharingPolicy', item.sharingPolicy || 'private');
   if (item.consentAcknowledgedAt) {
     formData.append('consentAcknowledgedAt', item.consentAcknowledgedAt);
     formData.append('consentPolicyVersion', '2026-10');

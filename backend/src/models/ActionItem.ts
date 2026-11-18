@@ -5,6 +5,7 @@ export type ActionPriority = 'low' | 'medium' | 'high';
 
 export interface IActionItem extends Document {
   userId: Types.ObjectId;
+  workspaceId?: Types.ObjectId;
   meetingId: Types.ObjectId;
   title: string;
   owner: string;
@@ -21,6 +22,7 @@ export interface IActionItem extends Document {
 const actionItemSchema = new Schema<IActionItem>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    workspaceId: { type: Schema.Types.ObjectId, ref: 'Workspace', default: null, index: true },
     meetingId: { type: Schema.Types.ObjectId, ref: 'Meeting', required: true, index: true },
     title: { type: String, required: true, trim: true, maxlength: 1000 },
     owner: { type: String, default: 'Me', trim: true, maxlength: 200 },
@@ -35,5 +37,6 @@ const actionItemSchema = new Schema<IActionItem>(
 );
 
 actionItemSchema.index({ userId: 1, status: 1, dueDate: 1 });
+actionItemSchema.index({ workspaceId: 1, status: 1, dueDate: 1 });
 
 export const ActionItem = model<IActionItem>('ActionItem', actionItemSchema);

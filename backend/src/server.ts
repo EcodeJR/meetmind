@@ -23,7 +23,9 @@ import actionRoutes from './routes/actionRoutes';
 import meetingShareRoutes, { publicMeetingShareRoutes } from './routes/meetingShareRoutes';
 import insightRoutes from './routes/insightRoutes';
 import workspaceRoutes from './routes/workspaceRoutes';
+import calendarIntegrationRoutes, { calendarOAuthCallbackRoutes } from './routes/calendarIntegrationRoutes';
 import { startRetentionCleanupScheduler } from './services/retentionService';
+import { startProcessingQueueWorker } from './services/processingQueueService';
 
 const REQUIRED_ENV = [
   'MONGODB_URI',
@@ -94,11 +96,16 @@ const allowedOrigins = [
 app.use(cors({
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (!origin) return callback(null, true);
-    const isAllowed = allowedOrigins.some(o => origin === o || origin.startsWith(o));
+    const isAllowed = allowedOrigins.some(o => origin === o);
     if (isAllowed) {
       callback(null, true);
     } else {
-      callback(null, true); // Allow as fallback during development, but log warning
+      if (process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+      } else {
+        logger.warn({ origin }, 'Blocked request from disallowed CORS origin');
+        callback(new Error('Origin is not allowed by CORS'));
+      }
     }
   },
   credentials: true,
@@ -131,6 +138,7 @@ app.post(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(publicMeetingShareRoutes);
+app.use('/api/integrations', calendarOAuthCallbackRoutes);
 
 // Routes
 app.use('/api', healthRoutes);
@@ -140,6 +148,7 @@ app.use('/api/meetings', meetingShareRoutes);
 app.use('/api/actions', actionRoutes);
 app.use('/api/insights', insightRoutes);
 app.use('/api/workspaces', workspaceRoutes);
+app.use('/api/integrations/calendars', calendarIntegrationRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api', publicRoutes);
 
@@ -175,6 +184,7 @@ const start = async () => {
         await connectDB();
         logger.info('Institutional Database Connected');
         startRetentionCleanupScheduler();
+        startProcessingQueueWorker();
       } catch (dbErr) {
         logger.error({ error: dbErr }, 'Database Connection Deferred Failure');
       }

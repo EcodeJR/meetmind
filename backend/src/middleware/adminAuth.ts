@@ -12,7 +12,11 @@ const isMatchingSecret = (provided: string | undefined, expected: string | undef
 export const requireAdminAuth = (req: Request, res: Response, next: NextFunction): void => {
   const adminKeyHeader = req.headers['x-admin-key'];
   const adminKey = typeof adminKeyHeader === 'string' ? adminKeyHeader : undefined;
-  if (isMatchingSecret(adminKey, process.env.ADMIN_SECRET_KEY)) {
+  // Static admin keys are intentionally restricted to local development or an
+  // explicit break-glass configuration. Normal dashboard traffic uses its
+  // short-lived signed session token through the server-side proxy.
+  const allowStaticAdminKey = process.env.NODE_ENV !== 'production' || process.env.ADMIN_ALLOW_STATIC_KEY === 'true';
+  if (allowStaticAdminKey && isMatchingSecret(adminKey, process.env.ADMIN_SECRET_KEY)) {
     next();
     return;
   }

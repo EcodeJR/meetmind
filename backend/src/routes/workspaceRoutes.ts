@@ -9,7 +9,9 @@ import {
   createWorkspaceProject,
   getWorkspace,
   inviteWorkspaceMember,
+  listPendingWorkspaceInvitations,
   listWorkspaces,
+  updateWorkspaceSettings,
   updateWorkspaceMember,
 } from '../controllers/workspaceController';
 
@@ -19,12 +21,17 @@ router.use(authMiddleware);
 router.use(apiRateLimiter);
 
 router.get('/', listWorkspaces);
+router.get('/invitations/pending', listPendingWorkspaceInvitations);
 router.post('/', validateRequest(z.object({
   name: z.string().trim().min(1).max(120),
   retentionDays: z.number().int().min(0).max(3650).optional(),
   defaultSharingPolicy: z.enum(['private', 'workspace', 'shared']).optional(),
 })), createWorkspace);
 router.get('/:id', getWorkspace);
+router.patch('/:id', validateRequest(z.object({
+  retentionDays: z.number().int().min(0).max(3650).optional(),
+  defaultSharingPolicy: z.enum(['private', 'workspace', 'shared']).optional(),
+}).refine(value => Object.keys(value).length > 0)), updateWorkspaceSettings);
 router.post('/:id/invitations', validateRequest(z.object({
   email: z.string().email(),
   role: z.enum(['admin', 'member', 'viewer']),

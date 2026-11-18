@@ -306,6 +306,19 @@ export default function SettingsScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
+              onPress={() => router.push('/settings/integrations')}
+            >
+              <View style={styles.menuIconContainer}>
+                <Ionicons name="calendar-outline" size={20} color={theme.colors.onSurface} />
+              </View>
+              <Text style={styles.menuItemText}>Calendar Integrations</Text>
+              <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
+            </TouchableOpacity>
+
+            <View style={styles.menuSeparator} />
+
+            <TouchableOpacity
+              style={styles.menuItem}
               onPress={() => router.push('/settings/workspaces')}
             >
               <View style={styles.menuIconContainer}>

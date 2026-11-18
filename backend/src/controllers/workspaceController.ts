@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { AuthRequest } from '../middleware/auth';
 import { User } from '../models/User';
 import { Workspace, WorkspaceMember, WorkspaceProject, WorkspaceRole } from '../models/Workspace';
+import { WorkspaceActivity } from '../models/WorkspaceActivity';
 import { sendError, sendSuccess } from '../utils/responses';
 import { logger } from '../utils/logger';
 
@@ -49,6 +50,28 @@ export const listWorkspaces = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
+export const listPendingWorkspaceInvitations = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const user = await getCurrentUser(req, res);
+    if (!user) return;
+    const invitations = await WorkspaceMember.find({ email: user.email.toLowerCase(), status: 'invited' })
+      .populate('workspaceId', 'name')
+      .sort({ createdAt: -1 })
+      .lean();
+    sendSuccess(res, {
+      invitations: invitations.map(invitation => ({
+        _id: invitation._id,
+        role: invitation.role,
+        createdAt: invitation.createdAt,
+        workspace: invitation.workspaceId,
+      })),
+    });
+  } catch (error) {
+    logger.error({ error, clerkId: req.clerkId }, 'Failed to list workspace invitations');
+    sendError(res, 'INVITATION_FETCH_FAILED', 'Could not load workspace invitations', 500);
+  }
+};
+
 export const createWorkspace = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = await getCurrentUser(req, res);
@@ -72,6 +95,7 @@ export const createWorkspace = async (req: AuthRequest, res: Response): Promise<
       status: 'active',
       invitedBy: user._id,
     });
+    await WorkspaceActivity.create({ workspaceId: workspace._id, actorId: user._id, type: 'workspace_created', message: 'Workspace created' });
     sendSuccess(res, { workspace, role: 'owner' }, 201);
   } catch (error) {
     logger.error({ error, clerkId: req.clerkId }, 'Failed to create workspace');
@@ -84,16 +108,17 @@ export const getWorkspace = async (req: AuthRequest, res: Response): Promise<voi
     const id = routeParam(req.params.id);
     const access = await requireWorkspaceAccess(req, res, id);
     if (!access) return;
-    const [workspace, members, projects] = await Promise.all([
+    const [workspace, members, projects, activity] = await Promise.all([
       Workspace.findById(id).lean(),
       WorkspaceMember.find({ workspaceId: id }).select('-__v').sort({ createdAt: 1 }).lean(),
       WorkspaceProject.find({ workspaceId: id, archived: false }).sort({ name: 1 }).lean(),
+      WorkspaceActivity.find({ workspaceId: id }).sort({ createdAt: -1 }).limit(30).lean(),
     ]);
     if (!workspace) {
       sendError(res, 'WORKSPACE_NOT_FOUND', 'Workspace not found', 404);
       return;
     }
-    sendSuccess(res, { workspace, role: access.membership.role, members, projects });
+    sendSuccess(res, { workspace, role: access.membership.role, members, projects, activity });
   } catch (error) {
     logger.error({ error }, 'Failed to get workspace');
     sendError(res, 'WORKSPACE_FETCH_FAILED', 'Could not load workspace', 500);
@@ -123,6 +148,7 @@ export const inviteWorkspaceMember = async (req: AuthRequest, res: Response): Pr
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
+    await WorkspaceActivity.create({ workspaceId: id, actorId: access.user._id, type: 'member_invited', message: `Invited ${email} as ${role}` });
     // The recipient must explicitly accept before gaining workspace access.
     sendSuccess(res, { member, invitationStatus: member.status }, 201);
   } catch (error) {
@@ -172,6 +198,7 @@ export const updateWorkspaceMember = async (req: AuthRequest, res: Response): Pr
       sendError(res, 'MEMBER_NOT_FOUND', 'Member not found or owner roles cannot be changed.', 404);
       return;
     }
+    await WorkspaceActivity.create({ workspaceId: id, actorId: access.user._id, type: 'member_role_changed', message: `Changed ${member.email} to ${role}` });
     sendSuccess(res, { member });
   } catch (error) {
     logger.error({ error }, 'Failed to update workspace member');
@@ -190,6 +217,7 @@ export const createWorkspaceProject = async (req: AuthRequest, res: Response): P
       return;
     }
     const project = await WorkspaceProject.create({ workspaceId: id, name });
+    await WorkspaceActivity.create({ workspaceId: id, actorId: access.user._id, type: 'project_created', message: `Created project ${project.name}` });
     sendSuccess(res, { project }, 201);
   } catch (error: any) {
     if (error?.code === 11000) {
@@ -198,5 +226,25 @@ export const createWorkspaceProject = async (req: AuthRequest, res: Response): P
     }
     logger.error({ error }, 'Failed to create workspace project');
     sendError(res, 'PROJECT_CREATE_FAILED', 'Could not create project', 500);
+  }
+};
+
+export const updateWorkspaceSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = routeParam(req.params.id);
+    const access = await requireWorkspaceAccess(req, res, id, true);
+    if (!access) return;
+    const updates: Record<string, unknown> = {};
+    if (typeof req.body.retentionDays === 'number') updates.retentionDays = req.body.retentionDays;
+    if (typeof req.body.defaultSharingPolicy === 'string') updates.defaultSharingPolicy = req.body.defaultSharingPolicy;
+    const workspace = await Workspace.findByIdAndUpdate(id, { $set: updates }, { new: true });
+    if (!workspace) { sendError(res, 'WORKSPACE_NOT_FOUND', 'Workspace not found', 404); return; }
+    if (Object.prototype.hasOwnProperty.call(updates, 'retentionDays')) {
+      await WorkspaceActivity.create({ workspaceId: id, actorId: access.user._id, type: 'retention_changed', message: `Set workspace retention to ${workspace.retentionDays ? `${workspace.retentionDays} days` : 'indefinite'}` });
+    }
+    sendSuccess(res, { workspace });
+  } catch (error) {
+    logger.error({ error }, 'Failed to update workspace settings');
+    sendError(res, 'WORKSPACE_UPDATE_FAILED', 'Could not update workspace settings', 500);
   }
 };

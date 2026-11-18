@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAuth } from '@/lib/auth';
+import { getAdminTokenFromRequest, requireAdminAuth } from '@/lib/auth';
 
 const forwardAdminRequest = async (
   request: NextRequest,
@@ -9,8 +9,8 @@ const forwardAdminRequest = async (
     const admin = requireAdminAuth(request);
 
     const apiBaseUrl = process.env.RAILWAY_API_URL;
-    const adminSecret = process.env.ADMIN_SECRET_KEY;
-    if (!apiBaseUrl || !adminSecret) {
+    const token = getAdminTokenFromRequest(request);
+    if (!apiBaseUrl || !token) {
       return NextResponse.json({ error: 'Admin API is not configured' }, { status: 503 });
     }
 
@@ -19,7 +19,7 @@ const forwardAdminRequest = async (
     upstreamUrl.search = request.nextUrl.search;
 
     const headers = new Headers();
-    headers.set('x-admin-key', adminSecret);
+    headers.set('authorization', `Bearer ${token}`);
     headers.set('x-admin-actor', admin.email);
     const contentType = request.headers.get('content-type');
     if (contentType) headers.set('content-type', contentType);

@@ -13,7 +13,17 @@ const syncUserSchema = z.object({
 });
 
 const updatePreferencesSchema = z.object({
-  preferences: z.record(z.string(), z.any()).optional(),
+  preferences: z.object({
+    notificationsEnabled: z.boolean().optional(),
+    pushNotificationsEnabled: z.boolean().optional(),
+    language: z.string().trim().min(2).max(10).optional(),
+    autoDeleteDays: z.number().int().min(0).max(3650).optional(),
+    strategicAlerts: z.object({
+      decisions: z.boolean().optional(),
+      actions: z.boolean().optional(),
+      risks: z.boolean().optional(),
+    }).optional(),
+  }).strict(),
 });
 
 const updateProfileSchema = z.object({
