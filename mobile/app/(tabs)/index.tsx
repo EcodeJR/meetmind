@@ -49,12 +49,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useUser, useAuth } from '@clerk/clerk-expo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { theme } from '@/constants/theme';
-import { Audio } from 'expo-av';
+import apiClient from '@/services/api';
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+  type AudioRecorder,
+} from 'expo-audio';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import { enqueueOfflineRecording, isOnline, processOfflineMeetingQueue, uploadQueuedMeeting } from '@/services/offlineMeetingQueue';
-import { sendLocalNotification, setupNotifications, showRecordingNotification } from '@/services/pushNotificationService';
+import { sendLocalNotification } from '@/services/pushNotificationService';
 import Animated, {
   useAnimatedStyle,
   withRepeat,
@@ -67,7 +76,11 @@ import Animated, {
 } from 'react-native-reanimated';
 
 type OfflineRecordingReason = 'offline' | 'signin' | 'limit' | 'upload-failed';
-const MAX_RECORDING_SECONDS = 30 * 60;
+const FREE_MAX_RECORDING_SECONDS = 30 * 60;
+const RECORDING_OPTIONS = {
+  ...RecordingPresets.HIGH_QUALITY,
+  isMeteringEnabled: true,
+};
 type SummaryTemplate = 'standard' | 'standup' | 'client' | 'interview' | 'brainstorm';
 const SUMMARY_TEMPLATES: { id: SummaryTemplate; label: string }[] = [
   { id: 'standard', label: 'Standard' },
@@ -112,18 +125,73 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [processingStage, setProcessingStage] = useState<'finalizing' | 'queued' | 'uploading' | 'transcribing' | 'summarizing' | 'complete' | 'failed' | null>(null);
   const [processingElapsed, setProcessingElapsed] = useState(0);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recording, setRecording] = useState<AudioRecorder | null>(null);
   const [recordingConsentAt, setRecordingConsentAt] = useState<string | null>(null);
+  const [recordingLimitSeconds, setRecordingLimitSeconds] = useState<number | null>(FREE_MAX_RECORDING_SECONDS);
+  const [recordingLimitResolved, setRecordingLimitResolved] = useState(false);
   const [debugStatus, setDebugStatus] = useState('');
   const userInitial = (user?.firstName?.charAt(0) || user?.primaryEmailAddress?.emailAddress?.charAt(0) || '?').toUpperCase();
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const processingRef = useRef(false);
   const recoveryInProgressRef = useRef(false);
+  const recordingStartedAtRef = useRef<number | null>(null);
   const pulse = useSharedValue(1);
   const spin = useSharedValue(0);
   const floatY = useSharedValue(0);
   const ringPulse = useSharedValue(1);
+  const recorder = useAudioRecorder(RECORDING_OPTIONS);
+  const recorderState = useAudioRecorderState(recorder, 100);
+
+  useEffect(() => {
+    let cancelled = false;
+    const planCacheKey = `@memovoice/recording-plan/${user?.id || 'anonymous'}`;
+
+    if (!isSignedIn) {
+      setRecordingLimitSeconds(FREE_MAX_RECORDING_SECONDS);
+      setRecordingLimitResolved(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const loadRecordingLimit = async () => {
+      setRecordingLimitResolved(false);
+      let hasCachedPlan = false;
+
+      try {
+        const cachedPlan = await AsyncStorage.getItem(planCacheKey);
+        if (!cancelled && (cachedPlan === 'pro' || cachedPlan === 'free')) {
+          hasCachedPlan = true;
+          setRecordingLimitSeconds(cachedPlan === 'pro' ? null : FREE_MAX_RECORDING_SECONDS);
+          setRecordingLimitResolved(true);
+        }
+      } catch (error) {
+        console.warn('[RECORDING] Could not read the saved plan.', error);
+      }
+
+      try {
+        const response = await apiClient.get('/users/me');
+        const account = response.data?.data?.user || response.data?.user;
+        const isActivePro = account?.subscription?.plan === 'pro' && account?.subscription?.status === 'active';
+        if (!cancelled) {
+          setRecordingLimitSeconds(isActivePro ? null : FREE_MAX_RECORDING_SECONDS);
+          setRecordingLimitResolved(true);
+        }
+        await AsyncStorage.setItem(planCacheKey, isActivePro ? 'pro' : 'free');
+      } catch (error) {
+        console.warn('[RECORDING] Could not refresh plan; using the saved or free recording limit.', error);
+        if (!cancelled && !hasCachedPlan) {
+          setRecordingLimitSeconds(FREE_MAX_RECORDING_SECONDS);
+          setRecordingLimitResolved(true);
+        }
+      }
+    };
+
+    loadRecordingLimit();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, user?.id]);
 
   const recoverPartialRecording = async (
     reason: 'stop_race' | 'os_interruption',
@@ -136,15 +204,15 @@ export default function HomeScreen() {
     recoveryInProgressRef.current = true;
 
     try {
-      let uri = recording.getURI();
+      let uri = recording.uri;
 
       if (!uri) {
         try {
-          await recording.stopAndUnloadAsync();
+          await recording.stop();
         } catch {
           // Ignore: recorder may already be stopped by OS.
         }
-        uri = recording.getURI();
+        uri = recording.uri;
       }
 
       if (!uri) {
@@ -230,7 +298,7 @@ export default function HomeScreen() {
     return () => {
       if (recording && !processingRef.current) {
         // Only stop the microphone if the user is still actively recording.
-        recording.stopAndUnloadAsync().catch(() => {
+        recording.stop().catch(() => {
           // Ignore errors during cleanup unloads
         });
       }
@@ -239,10 +307,6 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (isRecording) {
-      intervalRef.current = setInterval(() => {
-        setDuration(d => d + 1);
-      }, 1000);
-
       pulse.value = withRepeat(
         withSequence(
           withTiming(1.2, { duration: 1000 }),
@@ -252,16 +316,23 @@ export default function HomeScreen() {
         true
       );
     } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
       pulse.value = withTiming(1);
     }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    return undefined;
   }, [isRecording]);
+
+  useEffect(() => {
+    if (!isRecording) {
+      return;
+    }
+
+    setDuration(Math.floor(recorderState.durationMillis / 1000));
+
+    if (recorderState.metering !== undefined) {
+      const normalized = Math.max(0, (recorderState.metering + 60) / 60);
+      setVolumes(prev => [...prev.slice(1), normalized]);
+    }
+  }, [isRecording, recorderState.durationMillis, recorderState.metering]);
 
   useEffect(() => {
     const appStateSubscription = AppState.addEventListener('change', async nextState => {
@@ -276,14 +347,35 @@ export default function HomeScreen() {
       }
 
       try {
-        const status = await recording.getStatusAsync();
+        const status = recording.getStatus();
         const durationFromStatus =
           typeof status.durationMillis === 'number'
             ? Math.max(Math.floor(status.durationMillis / 1000), duration)
             : duration;
+        const reachedNativeLimit =
+          !status.isRecording &&
+          recordingLimitSeconds !== null &&
+          recordingStartedAtRef.current !== null &&
+          Date.now() - recordingStartedAtRef.current >= (recordingLimitSeconds - 1) * 1000;
+
+        if (reachedNativeLimit) {
+          setDuration(recordingLimitSeconds);
+          Alert.alert(
+            'Free Recording Limit Reached',
+            'This recording reached the 30 minute free-plan limit and was saved. It will now be processed.'
+          );
+          await handleStopRecording();
+          return;
+        }
+
+        const stoppedByUser = !status.isRecording && !!recording.uri && !status.mediaServicesDidReset;
+        if (stoppedByUser) {
+          await handleStopRecording();
+          return;
+        }
 
         const interruptedByOs =
-          status.isDoneRecording || (!status.isRecording && status.canRecord === false);
+          status.mediaServicesDidReset || (!status.isRecording && status.canRecord === false);
 
         if (interruptedByOs) {
           await recoverPartialRecording('os_interruption', durationFromStatus);
@@ -296,7 +388,7 @@ export default function HomeScreen() {
     return () => {
       appStateSubscription.remove();
     };
-  }, [isRecording, recording, duration, meetingTitle, summaryTemplate]);
+  }, [isRecording, recording, duration, meetingTitle, summaryTemplate, recordingLimitSeconds]);
 
   useEffect(() => {
     if (!loading) {
@@ -312,19 +404,19 @@ export default function HomeScreen() {
   }, [loading]);
 
   useEffect(() => {
-    if (!isRecording || loading || duration < MAX_RECORDING_SECONDS) {
+    if (!isRecording || loading || recordingLimitSeconds === null || duration < recordingLimitSeconds) {
       return;
     }
 
     Alert.alert(
-      '30 Minute Limit Reached',
-      'This recording has reached the 30 minute limit. It will stop now so it can be saved and processed. If the meeting continues, start a new recording for the remaining time.'
+      'Free Recording Limit Reached',
+      'This recording has reached the 30 minute free-plan limit. It will stop now so it can be saved and processed. If the meeting continues, start a new recording for the remaining time.'
     );
 
     handleStopRecording().catch(error => {
       console.error('[STOP-RECORDING] Auto-stop at limit failed:', error);
     });
-  }, [duration, isRecording, loading]);
+  }, [duration, isRecording, loading, recordingLimitSeconds]);
 
   const recordButtonStyle = useAnimatedStyle(() => {
     return {
@@ -347,13 +439,18 @@ export default function HomeScreen() {
 
   const beginRecording = async () => {
     try {
+      if (isSignedIn && !recordingLimitResolved) {
+        Alert.alert('Checking your plan', 'Please wait a moment while we confirm your recording limit.');
+        return;
+      }
+
       if (!meetingTitle.trim()) {
         Alert.alert('Session Context', 'Please name this meeting to begin.');
         return;
       }
 
       setDebugStatus('Requesting permissions...');
-      const permission = await Audio.requestPermissionsAsync();
+      const permission = await requestRecordingPermissionsAsync();
       if (permission.status !== 'granted') {
         // ============================================
         // PLATFORM SPECIFIC PERMISSION MESSAGE
@@ -395,7 +492,7 @@ export default function HomeScreen() {
       // DO NOT change iOS values or background 
       // recording will break on iPhone
       // ============================================
-      await Audio.setAudioModeAsync({
+      await setAudioModeAsync({
         // ============================================
         // allowsRecordingIOS
         // Android: this value is IGNORED on Android
@@ -403,7 +500,7 @@ export default function HomeScreen() {
         //      MUST be set back to false when done recording
         // Current: true (set before recording)
         // ============================================
-        allowsRecordingIOS: true,
+        allowsRecording: true,
         
         // ============================================
         // playsInSilentModeIOS  
@@ -412,7 +509,7 @@ export default function HomeScreen() {
         //      iPhone is on silent/vibrate mode
         // Current: true (leave as is)
         // ============================================
-        playsInSilentModeIOS: true,
+        playsInSilentMode: true,
         
         // ============================================
         // staysActiveInBackground
@@ -421,7 +518,7 @@ export default function HomeScreen() {
         // Both platforms need this TRUE for background recording
         // Current: true (leave as is)
         // ============================================
-        staysActiveInBackground: true,
+        allowsBackgroundRecording: true,
         
         // ============================================
         // shouldDuckAndroid
@@ -429,7 +526,7 @@ export default function HomeScreen() {
         // iOS: IGNORED on iOS
         // Current: true
         // ============================================
-        shouldDuckAndroid: true,
+        interruptionMode: 'duckOthers',
         
         // ============================================
         // playThroughEarpieceAndroid
@@ -437,7 +534,7 @@ export default function HomeScreen() {
         // iOS: IGNORED on iOS
         // Current: false (leave as is)
         // ============================================
-        playThroughEarpieceAndroid: false,
+        shouldRouteThroughEarpiece: false,
       });
 
       setDebugStatus('Initializing high-fidelity recorder...');
@@ -447,7 +544,7 @@ export default function HomeScreen() {
       // The RecordingOptions object handles both automatically
       // DO NOT change unless you need different quality settings
       // ============================================
-      const RECORDING_OPTIONS: Audio.RecordingOptions = {
+      const legacyRecordingOptions = {
         // Android recording settings
         android: {
           // ============================================
@@ -457,8 +554,8 @@ export default function HomeScreen() {
           // audioEncoder: AAC (DO NOT change)
           // ============================================
           extension: '.m4a',
-          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          outputFormat: 'mpeg4',
+          audioEncoder: 'aac',
           sampleRate: 44100,
           numberOfChannels: 2,
           bitRate: 128000,
@@ -473,8 +570,8 @@ export default function HomeScreen() {
           // audioQuality: Audio.IOSAudioQuality.HIGH (change to MEDIUM to reduce file size)
           // ============================================
           extension: '.m4a',
-          outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-          audioQuality: Audio.IOSAudioQuality.HIGH,
+          outputFormat: 'aac ',
+          audioQuality: 96,
           sampleRate: 44100,
           numberOfChannels: 2,
           bitRate: 128000,
@@ -490,35 +587,13 @@ export default function HomeScreen() {
         }
       };
 
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        RECORDING_OPTIONS,
-        (status) => {
-          if (status.metering !== undefined) {
-            // Convert dB to 0-1 scale (roughly -60 to 0)
-            const normalized = Math.max(0, (status.metering + 60) / 60);
-            setVolumes(prev => {
-              const next = [...prev];
-              next.shift();
-              next.push(normalized);
-              return next;
-            });
-          }
-        },
-        100 // update every 100ms
-      );
-
-      setRecording(newRecording);
+      await recorder.prepareToRecordAsync(RECORDING_OPTIONS);
+      recorder.record(recordingLimitSeconds === null ? undefined : { forDuration: recordingLimitSeconds });
+      setRecording(recorder);
+      recordingStartedAtRef.current = Date.now();
       setDuration(0);
       setIsRecording(true);
       setDebugStatus('RECORDING ACTIVE');
-      // ============================================
-      // NOTIFICATION SETUP
-      // Android: requires notification channel setup
-      // iOS: requires permission request before showing
-      // Both are handled below
-      // ============================================
-      await setupNotifications();
-      await showRecordingNotification();
     } catch (err) {
       console.error('Failed to start recording', err);
       Alert.alert('Hardware Error', 'Could not initialize the microphone.');
@@ -552,6 +627,7 @@ export default function HomeScreen() {
 
     try {
       processingRef.current = true;
+      recordingStartedAtRef.current = null;
       setIsRecording(false);
       setLoading(true);
       setProcessingStage('finalizing');
@@ -559,7 +635,7 @@ export default function HomeScreen() {
 
       let stopError: unknown = null;
       try {
-        await recording.stopAndUnloadAsync();
+        await recording.stop();
       } catch (error) {
         stopError = error;
         console.warn('[RECOVERY] stopAndUnloadAsync failed; attempting partial recovery', error);
@@ -571,13 +647,13 @@ export default function HomeScreen() {
       // to false after recording or audio playback 
       // will be affected for the rest of the session
       // ============================================
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,   // iOS: reset after recording
-        staysActiveInBackground: false,
-        playsInSilentModeIOS: true,  // iOS: keep true for playback
-        shouldDuckAndroid: false,
+      await setAudioModeAsync({
+        allowsRecording: false,
+        allowsBackgroundRecording: false,
+        playsInSilentMode: true,
+        interruptionMode: 'doNotMix',
       });
-      const uri = recording.getURI();
+      const uri = recording.uri;
       console.log('[DEBUG] Recording stored at:', uri);
 
       if (!uri) {
@@ -659,7 +735,7 @@ export default function HomeScreen() {
       const limitReached = error?.response?.data?.code === 'MEETING_LIMIT_REACHED';
       if (limitReached) {
         try {
-          const uri = recording?.getURI();
+          const uri = recording?.uri;
           if (uri) {
             const offlineItem = await enqueueOfflineRecording(uri, meetingTitle, duration, {
               status: 'queued',
@@ -691,7 +767,7 @@ export default function HomeScreen() {
       
       // Fallback: if online upload failed (e.g., auth error after sign-out), save locally
       try {
-        const uri = recording?.getURI();
+        const uri = recording?.uri;
         if (uri) {
           console.log('[STOP-RECORDING] Upload failed; attempting fallback to offline queue');
           const responseCode = error?.response?.status;
@@ -861,11 +937,13 @@ export default function HomeScreen() {
               <Text style={styles.timerText}>{formatTime(duration)}</Text>
               <Text style={styles.recordingStatus}>LIVE AUDIO CAPTURE</Text>
               <Text style={styles.limitNotice}>
-                Max 30:00 per recording. {formatTime(Math.max(MAX_RECORDING_SECONDS - duration, 0))} remaining.
+                {recordingLimitSeconds === null
+                  ? 'Pro recording — no time limit.'
+                  : `Max ${formatTime(recordingLimitSeconds)} per recording. ${formatTime(Math.max(recordingLimitSeconds - duration, 0))} remaining.`}
               </Text>
               <View style={styles.keepAwakeNotice}>
                 <Text style={styles.keepAwakeNoticeText}>
-                  Screen stays on to prevent interruption
+                  Recording continues if you lock your phone or switch apps
                 </Text>
               </View>
             </View>
@@ -900,7 +978,7 @@ export default function HomeScreen() {
                 </Text>
                 {isRecording && (
                   <Text style={styles.statusSubtext}>
-                    Recordings stay awake so audio capture is less likely to be interrupted.
+                    You can leave the app. Tap Stop here or in the Android recording notification.
                   </Text>
                 )}
               </View>

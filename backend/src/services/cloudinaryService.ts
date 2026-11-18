@@ -10,20 +10,24 @@ cloudinary.config({
 export interface CloudinaryUploadResult {
   url: string;
   publicId: string;
+  durationSeconds: number | null;
 }
 
 export const uploadAudioToCloudinary = async (filePath: string): Promise<CloudinaryUploadResult> => {
   try {
     const result = await cloudinary.uploader.upload(filePath, {
-      resource_type: 'auto',
+      // Cloudinary treats audio as a video asset, which provides authoritative duration metadata.
+      resource_type: 'video',
       folder: 'memovoice/audio',
     });
+    const durationSeconds = Number(result.duration);
 
     logger.info({ publicId: result.public_id }, 'Audio uploaded to Cloudinary');
 
     return {
       url: result.secure_url,
       publicId: result.public_id,
+      durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
     };
   } catch (error) {
     logger.error({ error }, 'Failed to upload audio to Cloudinary');
@@ -33,7 +37,7 @@ export const uploadAudioToCloudinary = async (filePath: string): Promise<Cloudin
 
 export const deleteAudioFromCloudinary = async (publicId: string): Promise<void> => {
   try {
-    await cloudinary.uploader.destroy(publicId);
+    await cloudinary.uploader.destroy(publicId, { resource_type: 'video', invalidate: true });
     logger.info({ publicId }, 'Audio deleted from Cloudinary');
   } catch (error) {
     logger.error({ error, publicId }, 'Failed to delete audio from Cloudinary');

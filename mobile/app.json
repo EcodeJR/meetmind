@@ -62,7 +62,8 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Memovoice needs microphone access to record your meetings."
+          "microphonePermission": "Memovoice needs microphone access to record your meetings.",
+          "enableBackgroundRecording": true
         }
       ],
       [

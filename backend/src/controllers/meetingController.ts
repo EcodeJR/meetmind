@@ -160,6 +160,10 @@ const isProUser = (user: any): boolean => {
   return Boolean(user && user.subscription?.plan === 'pro' && user.subscription?.status === 'active');
 };
 
+// Container metadata can be fractions of a second longer than the requested recorder
+// duration. This tolerance prevents rejecting an otherwise valid 30-minute recording.
+const RECORDING_DURATION_TOLERANCE_SECONDS = 2;
+
 const getAccessibleHistoryFilter = (user: any) => {
   if (isProUser(user)) {
     return {};
@@ -337,6 +341,32 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
     const fileSizeMB = (req.file?.size || 0) / (1024 * 1024);
     console.log(`[DEBUGGER] File size: ${fileSizeMB} MB`);
 
+    const uploadedDurationSeconds = uploadResult.durationSeconds;
+    if (!isProUser(user)) {
+      const allowedDurationSeconds = FREE_PLAN_LIMITS.maxRecordingSeconds;
+      const exceedsDurationLimit =
+        uploadedDurationSeconds === null ||
+        uploadedDurationSeconds > allowedDurationSeconds + RECORDING_DURATION_TOLERANCE_SECONDS;
+
+      if (exceedsDurationLimit) {
+        logger.warn(
+          { clerkId, uploadedDurationSeconds, allowedDurationSeconds },
+          'Rejected free-plan recording that exceeded or lacked verifiable duration metadata'
+        );
+        await deleteAudioFromCloudinary(uploadResult.publicId).catch(() => { });
+        if (req.meetingUsageMonthKey) {
+          await releaseMonthlyMeetingSlot(clerkId, req.meetingUsageMonthKey).catch(() => { });
+        }
+        sendError(
+          res,
+          'RECORDING_DURATION_LIMIT_REACHED',
+          `Free recordings are limited to ${Math.floor(allowedDurationSeconds / 60)} minutes. Upgrade to Pro for unlimited recording length.`,
+          403
+        );
+        return;
+      }
+    }
+
     const processingMeeting = new Meeting({
       userId: user._id,
       title: title || 'New Recording',
@@ -346,7 +376,7 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
       keyDecisions: [],
       riskSignals: [],
       summaryTemplate,
-      durationSeconds: Number(durationSeconds) || 0,
+      durationSeconds: uploadedDurationSeconds ?? (Number(durationSeconds) || 0),
       audioUrl: uploadResult.url,
       audioPublicId: uploadResult.publicId,
       audioSizeMB: fileSizeMB,
