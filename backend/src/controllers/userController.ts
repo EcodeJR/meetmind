@@ -8,6 +8,11 @@ import { sendWelcomeEmail, sendSettingsUpdatedEmail, sendAccountDeletedEmail } f
 import { logger } from '../utils/logger';
 import axios from 'axios';
 import { FREE_PLAN_LIMITS } from '../utils/constants';
+import { CalendarIntegration } from '../models/CalendarIntegration';
+import { MeetingComment } from '../models/MeetingComment';
+import { ActionItem } from '../models/ActionItem';
+import { ProcessingJob } from '../models/ProcessingJob';
+import { WorkspaceMember } from '../models/Workspace';
 
 const detectCountryFromRequest = async (req: AuthRequest): Promise<string | null> => {
   const countryHeader = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'];
@@ -274,9 +279,19 @@ export const deleteAccount = async (req: AuthRequest, res: Response) => {
       console.log(`[DELETE] Cloudinary cleanup complete`);
     }
 
-    // 4. Purge Database Records
+    // 4. Purge Database Records. Remove credentials and authored collaboration
+    // data before dissolving the identity, including records introduced by
+    // workspace and calendar integrations.
     console.log(`[DELETE] Phase 2: Deleting all meetings for user ${user._id}`);
-    const deleteResult = await Meeting.deleteMany({ userId: user._id });
+    const meetingIds = meetings.map(meeting => meeting._id);
+    const [deleteResult] = await Promise.all([
+      Meeting.deleteMany({ userId: user._id }),
+      CalendarIntegration.deleteMany({ userId: user._id }),
+      MeetingComment.deleteMany({ $or: [{ userId: user._id }, { meetingId: { $in: meetingIds } }] }),
+      ActionItem.deleteMany({ $or: [{ userId: user._id }, { meetingId: { $in: meetingIds } }] }),
+      ProcessingJob.deleteMany({ $or: [{ userId: user._id }, { meetingId: { $in: meetingIds } }] }),
+      WorkspaceMember.deleteMany({ userId: user._id }),
+    ]);
     console.log(`[DELETE] Successfully deleted ${deleteResult.deletedCount} meetings`);
 
     // 5. Dissolve User Identity

@@ -2,7 +2,10 @@ import { z } from 'zod';
 
 export const meetingProcessSchema = z.object({
   audioUrl: z.string().url(),
-  durationSeconds: z.number().int().positive().max(30 * 60), // 30 minutes max
+  // The controller enforces the recording duration against the authenticated
+  // user's plan after verifying the uploaded media. A static 30-minute ceiling
+  // here would incorrectly reject Pro recordings.
+  durationSeconds: z.number().int().positive(),
 });
 
 export const updateMeetingSchema = z.object({

@@ -59,6 +59,7 @@ type Meeting = {
   audioUrl?: string;
   transcriptSegments?: Array<{ speaker: string; text: string; startSeconds: number; endSeconds: number }>;
 };
+type MeetingComment = { _id: string; authorName: string; body: string; createdAt: string };
 
 const formatDateTime = (value: Date) =>
   value.toLocaleString('en-US', {
@@ -170,6 +171,9 @@ export default function MeetingDetailScreen() {
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isTranscriptEditing, setIsTranscriptEditing] = useState(false);
   const [editedTranscript, setEditedTranscript] = useState('');
+  const [comments, setComments] = useState<MeetingComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [commentSaving, setCommentSaving] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
   const router = useRouter();
 
@@ -206,8 +210,31 @@ export default function MeetingDetailScreen() {
     }
   };
 
+  const loadComments = async () => {
+    try {
+      const response = await apiClient.get(`/meetings/${id}/comments`);
+      setComments(response.data?.data?.comments || []);
+    } catch {
+      setComments([]);
+    }
+  };
+
+  const addComment = async () => {
+    const body = newComment.trim();
+    if (!body) return;
+    try {
+      setCommentSaving(true);
+      await apiClient.post(`/meetings/${id}/comments`, { body });
+      setNewComment('');
+      await loadComments();
+    } catch (error: any) {
+      Alert.alert('Comment not sent', error.response?.data?.error?.message || 'Please try again.');
+    } finally { setCommentSaving(false); }
+  };
+
   useEffect(() => {
     fetchMeeting();
+    loadComments();
     return () => {
       soundRef.current?.unloadAsync().catch(() => undefined);
     };
@@ -1214,6 +1241,14 @@ export default function MeetingDetailScreen() {
             </View>
           </View>
           
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>DISCUSSION</Text>
+            <View style={styles.commentCard}>
+              {comments.length ? comments.map(comment => <View key={comment._id} style={styles.commentRow}><Text style={styles.commentAuthor}>{comment.authorName}</Text><Text style={styles.commentBody}>{comment.body}</Text><Text style={styles.commentDate}>{new Date(comment.createdAt).toLocaleDateString()}</Text></View>) : <Text style={styles.noTranscriptText}>No comments yet.</Text>}
+              <TextInput value={newComment} onChangeText={setNewComment} placeholder="Add context or a follow-up…" placeholderTextColor={theme.colors.outline} style={styles.commentInput} multiline maxLength={2000} accessibilityLabel="Add a meeting comment" />
+              <TouchableOpacity style={[styles.commentButton, (!newComment.trim() || commentSaving) && styles.disabled]} disabled={!newComment.trim() || commentSaving} onPress={addComment} accessibilityRole="button" accessibilityLabel="Post comment"><Text style={styles.commentButtonText}>{commentSaving ? 'Posting…' : 'Post comment'}</Text></TouchableOpacity>
+            </View>
+          </View>
           <View style={styles.bottomGap} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1781,4 +1816,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 24,
   },
+  commentCard: { backgroundColor: theme.colors.surfaceContainerLowest, borderWidth: 1, borderColor: theme.colors.outlineVariant, borderRadius: theme.borderRadius.md, padding: theme.spacing.md },
+  commentRow: { borderBottomWidth: 1, borderBottomColor: theme.colors.outlineVariant, paddingBottom: theme.spacing.sm, marginBottom: theme.spacing.sm },
+  commentAuthor: { color: theme.colors.onSurface, fontFamily: 'Manrope-SemiBold', fontSize: 13 },
+  commentBody: { color: theme.colors.onSurfaceVariant, fontFamily: 'Inter-Regular', fontSize: 13, lineHeight: 19, marginTop: 3 },
+  commentDate: { color: theme.colors.outline, fontFamily: 'Inter-Regular', fontSize: 10, marginTop: 4 },
+  commentInput: { borderWidth: 1, borderColor: theme.colors.outlineVariant, borderRadius: theme.borderRadius.base, color: theme.colors.onSurface, fontFamily: 'Inter-Regular', minHeight: 72, padding: theme.spacing.sm, textAlignVertical: 'top', marginTop: theme.spacing.sm },
+  commentButton: { alignSelf: 'flex-end', backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.base, paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, marginTop: theme.spacing.sm },
+  disabled: { opacity: 0.5 },
+  commentButtonText: { color: theme.colors.onPrimary, fontFamily: 'SpaceGrotesk-SemiBold', fontSize: 12 },
 });
