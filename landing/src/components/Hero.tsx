@@ -7,8 +7,8 @@ import { ArrowRight } from 'lucide-react';
 
 const imageMap: { [key: string]: string } = {
   'Capture': '/images/Phone-recording-screen-one.jpg',
-  'Read': '/images/Phone-meeting-summary.jpg',
-  'Act': '/images/Phone-meeting-key-notes.jpg',
+  'Review': '/images/Phone-meeting-summary.jpg',
+  'Follow up': '/images/Phone-meeting-key-notes.jpg',
 };
 
 const Hero = () => {
@@ -73,11 +73,11 @@ const Hero = () => {
             </div>
 
             <h1 className="max-w-3xl text-5xl sm:text-6xl lg:text-7xl font-black text-black leading-[0.95] mb-8 tracking-[-0.06em]">
-              Meetings, captured with editorial clarity.
+              Be present in the meeting. Keep what matters.
             </h1>
 
             <p className="text-lg sm:text-xl text-black/65 mb-10 leading-relaxed max-w-2xl font-light">
-              Memovoice records in the background, then turns every discussion into a clean transcript, a readable summary, and clear next steps. No bots. No Zoom required.
+              Record an in-person conversation, even while the app is in the background. Then review the transcript, summary, decisions, and tasks in one place. No meeting bot needed.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 mb-8">
@@ -109,13 +109,13 @@ const Hero = () => {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-black opacity-20"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-black"></span>
                 </span>
-                Get notified when iOS is released:
+                Get an email when iPhone support is ready:
               </p>
               <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 relative">
                 <div className="relative flex-1">
                   <input
                     type="email"
-                    placeholder="Enter email for iOS Waitlist..."
+                    placeholder="Your email address"
                     className="w-full px-5 py-4 rounded-full border border-black/10 bg-white focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black transition-all text-black placeholder-black/35 text-sm"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -167,9 +167,9 @@ const Hero = () => {
           >
             <div className="flex gap-5">
               {[
-                { label: 'Capture', title: 'Record the room', copy: 'One tap to start recording without bots or setup.', tone: 'bg-black text-white' },
-                { label: 'Read', title: 'See the transcript', copy: 'Clean transcript layouts with speaker-aware blocks.', tone: 'bg-white text-black border border-black/10' },
-                { label: 'Act', title: 'Turn notes into work', copy: 'Summaries and actions packaged in a calm, readable layout.', tone: 'bg-black text-white' },
+                { label: 'Capture', title: 'Record the room', copy: 'Start in one tap and keep recording while you use another app.', tone: 'bg-black text-white' },
+                { label: 'Review', title: 'See what was said', copy: 'Read the transcript, summary, and key points after the meeting.', tone: 'bg-white text-black border border-black/10' },
+                { label: 'Follow up', title: 'Keep work moving', copy: 'Share decisions and tasks with the people who need them.', tone: 'bg-black text-white' },
               ].map((panel, index) => (
                 <motion.div
                   key={panel.label}

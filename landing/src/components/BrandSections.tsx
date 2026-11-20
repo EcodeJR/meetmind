@@ -21,9 +21,9 @@ export const HowItWorks = () => (
   <section id="how-it-works" className="py-24 bg-white text-black overflow-hidden">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="text-center mb-20">
-        <p className="text-xs font-bold text-accent uppercase tracking-widest mb-4">THE PROCESS</p>
-        <h2 className="text-4xl lg:text-5xl font-black mb-6 tracking-[-0.05em]">Three steps to never forget a meeting again</h2>
-        <p className="text-black/60 max-w-2xl mx-auto text-lg leading-relaxed">Sophisticated intelligence, simplified for professionals.</p>
+        <p className="text-xs font-bold text-accent uppercase tracking-widest mb-4">HOW IT WORKS</p>
+        <h2 className="text-4xl lg:text-5xl font-black mb-6 tracking-[-0.05em]">From conversation to clear next steps</h2>
+        <p className="text-black/60 max-w-2xl mx-auto text-lg leading-relaxed">Record when your meeting begins. Memovoice takes care of the notes after it ends.</p>
       </div>
 
       <div className="relative">
@@ -34,20 +34,20 @@ export const HowItWorks = () => (
           {[
             {
               step: "01",
-              title: "Open Memovoice and tap Record",
-              desc: "Instant initialization. No configuration or external bots required.",
+              title: "Tap Record",
+              desc: "Start recording in one tap. No bot or meeting link is needed.",
               icon: <Mic className="w-8 h-8" />
             },
             {
               step: "02",
-              title: "Have your meeting naturally",
-              desc: "Memovoice captures ambient audio while you focus on the human interaction.",
+              title: "Have the meeting",
+              desc: "Keep the app recording in the background while you focus on people in the room.",
               icon: <Users className="w-8 h-8" />
             },
             {
               step: "03",
-              title: "Review your transcript and summary",
-              desc: "Receive structured intelligence, action items, and full transcripts instantly.",
+              title: "Review what matters",
+              desc: "When processing is done, see the transcript, summary, decisions, and tasks.",
               icon: <FileCheck className="w-8 h-8" />
             }
           ].map((item, i) => (
@@ -79,7 +79,7 @@ export const Pricing = () => (
       <div className="text-center mb-20">
         <p className="text-xs font-bold text-accent uppercase tracking-widest mb-4">PRICING</p>
         <h2 className="text-4xl lg:text-5xl font-black text-black mb-6 tracking-[-0.05em]">Simple, transparent pricing</h2>
-        <p className="text-black/60 text-lg leading-relaxed">Scalable intelligence for individuals and organizations.</p>
+        <p className="text-black/60 text-lg leading-relaxed">Start free. Upgrade when you need more room.</p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
@@ -189,11 +189,12 @@ export const FAQ = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const faqs = [
-    { q: "Does Memovoice work without internet?", a: "Yes. You can record your meetings completely offline. Your data will be processed once you reconnect to a secure network." },
+    { q: "Does Memovoice work without internet?", a: "Yes. You can record meetings without internet. The recording stays on your device and is processed when you are online again." },
     { q: "How accurate is the transcription?", a: "Memovoice uses multiple AI providers to improve reliability. Accuracy depends on audio quality, speakers, accents, background noise, and language, so always review important details." },
-    { q: "Is my meeting data private and secure?", a: "Absolutely. We employ institutional-grade encryption and a privacy-first architecture. We do not use bots and never listen to your recordings." },
+    { q: "What control do I have over my meeting data?", a: "You can choose a retention period, export meetings you need, and delete your account from the app settings. Read our Privacy Policy for the full details." },
     { q: "What languages are supported?", a: "Memovoice supports English, Spanish, French, German, and Portuguese. Results can vary with recording quality, accents, and technical vocabulary." },
-    { q: "Can I use Memovoice on iPhone?", a: "We are currently launched on Android, with an iOS version scheduled for release in late 2026." },
+    { q: "Can I use Memovoice on iPhone?", a: "Memovoice is available on Android. Join the iOS waitlist and we will let you know when it is ready." },
+    { q: "Can I use Memovoice with my team?", a: "Yes. Create a workspace, invite members by email, and share workspace meetings, comments, and tasks." },
     { q: "How do I cancel my subscription?", a: "You can cancel any time directly through the app settings. Your Pro features will remain active until the end of your billing cycle." }
   ];
 
@@ -275,8 +276,8 @@ export const FinalCTA = () => {
     <section id="waitlist" className="py-32 bg-white text-center border-t border-black/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <p className="text-xs font-bold text-accent uppercase tracking-widest mb-6">GET EARLY ACCESS</p>
-        <h2 className="text-5xl lg:text-6xl font-black text-black mb-6 tracking-[-0.06em] leading-tight">Start remembering every meeting</h2>
-        <p className="text-black/60 text-lg mb-12 max-w-2xl mx-auto leading-relaxed">Join thousands of professionals using Memovoice to scale their institutional intelligence.</p>
+        <h2 className="text-5xl lg:text-6xl font-black text-black mb-6 tracking-[-0.06em] leading-tight">Spend less time taking notes</h2>
+        <p className="text-black/60 text-lg mb-12 max-w-2xl mx-auto leading-relaxed">Get the Android app today, or join the waitlist to hear when Memovoice comes to iPhone.</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto mb-6">
           <input
@@ -315,7 +316,7 @@ export const Footer = () => (
             <span className="text-xl font-black text-black tracking-tight uppercase">Memovoice</span>
           </div>
           <p className="text-black/60 max-w-sm mb-8 leading-relaxed text-sm">
-            Institutional-grade audio recording and AI synthesis for modern professionals. Capture, transcribe, and summarize every physical interaction with precision.
+            Turn in-person conversations into meeting notes, summaries, and next steps you can use.
           </p>
           <div className="flex gap-4">
             {/* Twitter */}
@@ -365,7 +366,7 @@ export const Footer = () => (
 
       <div className="pt-8 border-t border-black/10 flex flex-col md:flex-row justify-between items-center gap-4">
         <p className="text-xs text-black/35">© 2026 Memovoice. All rights reserved.</p>
-        <p className="text-xs text-black/35">Standardizing institutional memory since 2026.</p>
+        <p className="text-xs text-black/35">Built for better follow-through.</p>
       </div>
     </div>
   </footer>

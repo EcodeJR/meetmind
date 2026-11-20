@@ -7,10 +7,10 @@ import ContactSection from '@/components/ContactSection';
 
 export const metadata = {
   title: 'Memovoice — AI Meeting Transcription App',
-  description: 'Record physical meetings and get instant AI transcripts, summaries and action items. No bots required. Works offline. Try free.',
+  description: 'Record in-person meetings and get transcripts, summaries, decisions, and tasks. Works offline and needs no meeting bot. Start free.',
   openGraph: {
     title: 'Memovoice — AI Meeting Transcription App',
-    description: 'Record physical meetings and get instant AI transcripts, summaries and action items. No bots required. Works offline. Try free.',
+    description: 'Record in-person meetings and get transcripts, summaries, decisions, and tasks. Works offline and needs no meeting bot. Start free.',
     type: 'website',
     locale: 'en_US',
     url: 'https://memovoice.app',

@@ -65,13 +65,13 @@ const ContactSection = () => {
             transition={{ duration: 0.5 }}
           >
             <span className="text-black text-xs font-bold tracking-[0.3em] uppercase border border-black/10 px-3 py-1.5 rounded-full bg-white">
-              Get In Touch
+              TALK TO US
             </span>
             <h2 className="text-4xl lg:text-5xl font-black text-black mt-4 tracking-[-0.05em]">
-              Have Questions? <span className="text-black/60">Contact Us</span>
+              Have a question? <span className="text-black/60">We&apos;re here.</span>
             </h2>
             <p className="text-lg text-black/60 mt-4 max-w-xl mx-auto font-light leading-relaxed">
-              We&apos;d love to hear from you. Fill out the form below and our team will get back to you within 24 hours.
+              Send us a message about Memovoice, your account, or a feature you need. We&apos;ll get back to you as soon as we can.
             </p>
           </motion.div>
         </div>
@@ -92,9 +92,9 @@ const ContactSection = () => {
               >
                 <Send className="w-8 h-8" />
               </motion.div>
-              <h3 className="text-2xl font-bold text-black mb-2">Message Sent!</h3>
+              <h3 className="text-2xl font-bold text-black mb-2">Message sent</h3>
               <p className="text-black/60">
-                Thank you for contacting Memovoice. We have received your request and will follow up shortly.
+                Thanks for reaching out. We have your message and will reply soon.
               </p>
             </div>
           ) : (
@@ -112,7 +112,7 @@ const ContactSection = () => {
                       type="text"
                       name="name"
                       required
-                      placeholder="Your Name"
+                      placeholder="Your name"
                       value={formData.name}
                       onChange={handleChange}
                       disabled={submitting}
@@ -169,7 +169,7 @@ const ContactSection = () => {
                   name="message"
                   required
                   rows={5}
-                  placeholder="Tell us details of your inquiry..."
+                  placeholder="Tell us how we can help"
                   value={formData.message}
                   onChange={handleChange}
                   disabled={submitting}

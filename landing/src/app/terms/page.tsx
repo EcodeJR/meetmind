@@ -4,7 +4,7 @@ import { Footer } from '@/components/BrandSections';
 
 export const metadata = {
   title: 'Terms of Service | Memovoice',
-  description: 'Review the legal framework for using the Memovoice intelligence platform.',
+  description: 'Read the terms for using Memovoice.',
 };
 
 export default function TermsPage() {
@@ -26,7 +26,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-black mb-4">2. Description of Service</h2>
             <p>
-              Memovoice provides an AI-powered transcription and summarization platform for physical meetings. The service includes audio recording, speaker-labeled transcription, and AI-generated executive summaries. We reserve the right to modify or discontinue features of the service at any time to maintain institutional quality.
+              Memovoice helps turn in-person meetings into recordings, transcripts, summaries, and tasks. We may change or discontinue features when needed to improve or maintain the service.
             </p>
           </section>
 
@@ -35,7 +35,7 @@ export default function TermsPage() {
             <p>You are responsible for:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Maintaining the confidentiality of your Clerk authentication credentials.</li>
-              <li>Ensuring you have the legal right or consent to record the parties involved in your meetings, in accordance with your local and institutional laws.</li>
+              <li>Making sure you have the legal right or consent to record everyone in your meeting, based on the laws that apply to you.</li>
               <li>All activities that occur under your account.</li>
             </ul>
           </section>

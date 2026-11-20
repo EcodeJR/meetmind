@@ -4,7 +4,7 @@ import { Footer } from '@/components/BrandSections';
 
 export const metadata = {
   title: 'Privacy Policy | Memovoice',
-  description: 'Learn how Memovoice protects your institutional meeting data.',
+  description: 'Learn how Memovoice handles your meeting data.',
 };
 
 export default function PrivacyPage() {
@@ -19,7 +19,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-bold text-black mb-4">1. Commitment to Privacy</h2>
             <p>
-              At Memovoice, we understand that professional meetings contain highly sensitive institutional knowledge. Our architecture is designed with a &quot;Privacy-First&quot; philosophy, ensuring that your audio data remains under your control at all times.
+              Meetings can contain sensitive information. This policy explains what we collect, how we use it, and the choices you have about your data.
             </p>
           </section>
 
@@ -45,7 +45,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-2xl font-bold text-black mb-4">4. Third-Party Intelligence Services</h2>
-            <p>To provide high-fidelity transcription and AI analysis, we utilize selected institutional partners:</p>
+            <p>We use selected service providers to create transcripts and meeting summaries:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>Groq:</strong> High-speed transcription processing.</li>
               <li><strong>Google Gemini / Anthropic Claude:</strong> Advanced AI summarization and action item extraction.</li>

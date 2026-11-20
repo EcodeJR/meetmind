@@ -15,7 +15,7 @@ export default function PricingPage() {
         {/* <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-16">
           <h1 className="text-4xl lg:text-6xl font-black text-black mb-6 tracking-[-0.06em]">Simple, transparent pricing</h1>
           <p className="text-black/60 text-xl max-w-2xl mx-auto">
-            Scale your institutional intelligence with plans designed for individuals and professional teams.
+            Choose the plan that fits how often you meet and how much meeting history you need.
           </p>
         </div> */}
         <Pricing />

@@ -4,7 +4,7 @@ import { Footer } from '@/components/BrandSections';
 
 export const metadata = {
   title: 'Refund Policy | Memovoice',
-  description: 'Review our institutional refund and subscription cancellation policies.',
+  description: 'Read our refund and subscription cancellation policy.',
 };
 
 export default function RefundPage() {
@@ -52,7 +52,7 @@ export default function RefundPage() {
           <section>
             <h2 className="text-2xl font-bold text-black mb-4">5. Modifications</h2>
             <p>
-              Memovoice reserves the right to modify this refund policy to align with institutional standards and the requirements of our payment partners.
+              Memovoice may update this refund policy when needed to meet payment-partner requirements or changes in the service.
             </p>
           </section>
         </div>

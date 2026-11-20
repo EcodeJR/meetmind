@@ -26,7 +26,7 @@ const Navbar = () => {
               href="#contact"
               className="bg-black text-white px-6 py-2.5 rounded-full text-sm font-bold hover:bg-black/90 transition-all active:scale-95 uppercase tracking-wide border border-black"
             >
-              Contact Us
+              Talk to us
             </Link>
           </div>
         </div>
