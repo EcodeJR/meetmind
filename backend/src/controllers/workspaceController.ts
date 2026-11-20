@@ -6,6 +6,8 @@ import { Workspace, WorkspaceMember, WorkspaceProject, WorkspaceRole } from '../
 import { WorkspaceActivity } from '../models/WorkspaceActivity';
 import { sendError, sendSuccess } from '../utils/responses';
 import { logger } from '../utils/logger';
+import { sendWorkspaceInvitationEmail } from '../services/emailService';
+import { sendWorkspaceInvitationNotification } from '../services/pushNotificationService';
 
 const MANAGER_ROLES: WorkspaceRole[] = ['owner', 'admin'];
 const routeParam = (value: string | string[] | undefined): string => Array.isArray(value) ? value[0] || '' : value || '';
@@ -137,6 +139,11 @@ export const inviteWorkspaceMember = async (req: AuthRequest, res: Response): Pr
       return;
     }
     const invitedUser = await User.findOne({ email });
+    const workspace = await Workspace.findById(id).select('name').lean();
+    if (!workspace) {
+      sendError(res, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+      return;
+    }
     const member = await WorkspaceMember.findOneAndUpdate(
       { workspaceId: id, email },
       {
@@ -146,9 +153,15 @@ export const inviteWorkspaceMember = async (req: AuthRequest, res: Response): Pr
         status: 'invited',
         invitedBy: access.user._id,
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
     );
     await WorkspaceActivity.create({ workspaceId: id, actorId: access.user._id, type: 'member_invited', message: `Invited ${email} as ${role}` });
+    const inviterName = access.user.name || access.user.email.split('@')[0];
+    // Do not hold the invitation response hostage to email/push delivery.
+    void sendWorkspaceInvitationEmail(email, inviterName, workspace.name, role);
+    if (invitedUser?.expoPushToken && invitedUser.preferences?.pushNotificationsEnabled !== false) {
+      void sendWorkspaceInvitationNotification(invitedUser.expoPushToken, workspace.name, role);
+    }
     // The recipient must explicitly accept before gaining workspace access.
     sendSuccess(res, { member, invitationStatus: member.status }, 201);
   } catch (error) {
@@ -165,7 +178,7 @@ export const acceptWorkspaceInvitation = async (req: AuthRequest, res: Response)
     const membership = await WorkspaceMember.findOneAndUpdate(
       { workspaceId: id, email: user.email.toLowerCase(), status: 'invited' },
       { userId: user._id, status: 'active' },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!membership) {
       sendError(res, 'INVITATION_NOT_FOUND', 'No pending invitation was found for this workspace.', 404);
@@ -192,7 +205,7 @@ export const updateWorkspaceMember = async (req: AuthRequest, res: Response): Pr
     const member = await WorkspaceMember.findOneAndUpdate(
       { _id: memberId, workspaceId: id, role: { $ne: 'owner' } },
       { role },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!member) {
       sendError(res, 'MEMBER_NOT_FOUND', 'Member not found or owner roles cannot be changed.', 404);
@@ -237,7 +250,7 @@ export const updateWorkspaceSettings = async (req: AuthRequest, res: Response): 
     const updates: Record<string, unknown> = {};
     if (typeof req.body.retentionDays === 'number') updates.retentionDays = req.body.retentionDays;
     if (typeof req.body.defaultSharingPolicy === 'string') updates.defaultSharingPolicy = req.body.defaultSharingPolicy;
-    const workspace = await Workspace.findByIdAndUpdate(id, { $set: updates }, { new: true });
+    const workspace = await Workspace.findByIdAndUpdate(id, { $set: updates }, { returnDocument: 'after' });
     if (!workspace) { sendError(res, 'WORKSPACE_NOT_FOUND', 'Workspace not found', 404); return; }
     if (Object.prototype.hasOwnProperty.call(updates, 'retentionDays')) {
       await WorkspaceActivity.create({ workspaceId: id, actorId: access.user._id, type: 'retention_changed', message: `Set workspace retention to ${workspace.retentionDays ? `${workspace.retentionDays} days` : 'indefinite'}` });

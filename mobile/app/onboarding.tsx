@@ -22,20 +22,20 @@ const { width } = Dimensions.get('window');
 
 const STEPS = [
   {
-    title: 'Precision Capture',
-    description: 'Institutional-grade audio recording, standardized for cross-platform AI intelligence.',
+    title: 'Record meetings',
+    description: 'Record your meeting securely, then get clear notes when it ends.',
     icon: 'mic-outline',
     color: theme.colors.primary,
   },
   {
-    title: 'Intelligence Loop',
-    description: 'Triple-fallback synthesis using OpenAI, Claude, and Gemini to ensure 99.9% uptime for summaries.',
+    title: 'Get useful notes',
+    description: 'Memovoice turns your recording into a summary, tasks, and key decisions.',
     icon: 'sparkles-outline',
     color: theme.colors.accent,
   },
   {
-    title: 'Secure Governance',
-    description: 'Total control over your data lifecycle with transparent storage tracking and automated purging.',
+    title: 'Stay in control',
+    description: 'Choose how long to keep your recordings and manage your data any time.',
     icon: 'shield-checkmark-outline',
     color: theme.colors.primary,
   },
@@ -101,7 +101,7 @@ export default function OnboardingScreen() {
             disabled={loading}
           >
             <Text style={styles.buttonText}>
-              {currentStep === STEPS.length - 1 ? 'Start Indexing' : 'Continue'}
+              {currentStep === STEPS.length - 1 ? 'Get started' : 'Continue'}
             </Text>
             <Ionicons name="arrow-forward" size={18} color={theme.colors.onPrimary} />
           </TouchableOpacity>

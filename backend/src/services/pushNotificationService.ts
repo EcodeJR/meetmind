@@ -15,6 +15,28 @@ interface PushNotificationPayload {
   badge?: number;
 }
 
+export const sendWorkspaceInvitationNotification = async (
+  expoPushToken: string,
+  workspaceName: string,
+  role: string
+): Promise<boolean> => {
+  try {
+    if (!expoPushToken) return false;
+    await sendPushNotification({
+      to: expoPushToken,
+      sound: 'default',
+      title: 'Workspace invitation',
+      body: `You've been invited to ${workspaceName} as a ${role}.`,
+      data: { type: 'workspace_invitation', timestamp: new Date().toISOString() },
+      badge: 1,
+    });
+    return true;
+  } catch (error) {
+    logger.error({ error }, 'Failed to send workspace invitation notification');
+    return false;
+  }
+};
+
 const EXPO_PUSH_API_URL = 'https://exp.host/--/api/v2/push/send';
 
 /**

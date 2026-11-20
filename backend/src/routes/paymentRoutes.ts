@@ -228,7 +228,8 @@ router.post('/initialize', validateRequest(initializePaymentSchema), async (req:
 
     sendSuccess(res, { provider, paymentUrl, plan: pricing });
   } catch (error) {
-    logger.error({ error }, 'Failed to initialize payment');
+    const errorMessage = error instanceof Error ? error.message : 'Payment initialization failed';
+    logger.error({ message: errorMessage }, 'Failed to initialize payment');
     const clerkId = req.clerkId;
     const user = await User.findOne({ clerkId });
     if (user) {
@@ -255,10 +256,14 @@ router.post('/initialize', validateRequest(initializePaymentSchema), async (req:
             country: user.country || null,
           },
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       ).catch(() => undefined);
     }
-    sendError(res, 'PAYMENT_INIT_FAILED', 'Could not initialize payment', 500);
+    if (errorMessage.includes('credentials were rejected')) {
+      sendError(res, 'PAYMENT_CONFIGURATION_ERROR', 'Payments are temporarily unavailable. Please contact support.', 503);
+      return;
+    }
+    sendError(res, 'PAYMENT_INIT_FAILED', 'Could not initialize payment', 502);
   }
 });
 

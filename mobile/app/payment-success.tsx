@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { theme } from '@/constants/theme';
 
@@ -15,11 +16,11 @@ export default function PaymentSuccessScreen() {
   }, [router]);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Payment complete</Text>
       <Text style={styles.subtitle}>Returning you to the app.</Text>
       <ActivityIndicator size="small" color={theme.colors.primary} />
-    </View>
+    </SafeAreaView>
   );
 }
 

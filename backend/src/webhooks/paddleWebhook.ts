@@ -92,7 +92,7 @@ export const paddleWebhookHandler = async (req: RawRequest, res: Response): Prom
             errorMessage: null,
             metadata: eventData,
           },
-          { new: true }
+          { returnDocument: 'after' }
         ).catch(err => logger.warn({ err, reference }, 'Failed to update Paddle transaction log'));
       }
     } else if (event.event_type === 'subscription.updated') {
@@ -147,7 +147,7 @@ export const paddleWebhookHandler = async (req: RawRequest, res: Response): Prom
             errorMessage: null,
             metadata: eventData,
           },
-          { new: true }
+          { returnDocument: 'after' }
         ).catch(err => logger.warn({ err, reference }, 'Failed to update Paddle transaction log'));
       }
     } else if (event.event_type === 'transaction.payment_failed' || event.event_type === 'subscription.payment_failed') {
@@ -164,7 +164,7 @@ export const paddleWebhookHandler = async (req: RawRequest, res: Response): Prom
             errorMessage: eventData.error?.message || eventData.status || eventData.reason || 'Payment failed',
             metadata: eventData,
           },
-          { new: true }
+          { returnDocument: 'after' }
         ).catch(err => logger.warn({ err, reference }, 'Failed to update Paddle failed transaction log'));
       }
     }

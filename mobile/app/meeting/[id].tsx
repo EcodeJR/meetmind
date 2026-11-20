@@ -105,7 +105,7 @@ const parseSpeakerTurns = (transcript: string, durationSeconds: number): Speaker
     .map(l => l.trim())
     .filter(Boolean);
 
-  const speakerLineRegex = /^(Speaker\s+\d+):\s*(.+)$/i;
+    const speakerLineRegex = /^(Speaker\s+[^:]+):\s*(.+)$/i;
   const turns: SpeakerTurn[] = [];
 
   lines.forEach(line => {
@@ -771,19 +771,19 @@ export default function MeetingDetailScreen() {
 
   const handleDelete = () => {
     Alert.alert(
-      'Permanent Deletion',
-      'This intelligence report and its audio will be purged from our servers. This cannot be undone.',
+      'Delete meeting?',
+      'This permanently deletes this meeting and its recording. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'Delete Report', 
+          text: 'Delete meeting',
           style: 'destructive', 
           onPress: async () => {
             try {
               await apiClient.delete(`/meetings/${id}`);
               router.back();
             } catch (error) {
-              Alert.alert('Purge Failed', 'Encountered an error while deleting files.');
+              Alert.alert('Could not delete meeting', 'Please try again.');
             }
           } 
         }
@@ -802,7 +802,7 @@ export default function MeetingDetailScreen() {
   if (!meeting) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>Intelligence report not found.</Text>
+        <Text style={styles.errorText}>Meeting not found.</Text>
       </View>
     );
   }
@@ -857,11 +857,11 @@ export default function MeetingDetailScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton} onPress={handleExport}>
                 <Ionicons name="share-outline" size={20} color={theme.colors.secondary} />
-                <Text style={styles.actionButtonText}>{isPro ? 'Export Suite' : 'Upgrade to Export Suite'}</Text>
+                <Text style={styles.actionButtonText}>{isPro ? 'Share' : 'Upgrade to share'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton} onPress={handleAccuracyFeedback}>
                 <Ionicons name="flag-outline" size={20} color={theme.colors.secondary} />
-                <Text style={styles.actionButtonText}>Report issue</Text>
+                <Text style={styles.actionButtonText}>Report a problem</Text>
               </TouchableOpacity>
             </View>
 
@@ -877,7 +877,7 @@ export default function MeetingDetailScreen() {
                     <Text style={styles.exportEyebrow}>Memovoice Pro Export</Text>
                     <Text style={styles.exportTitle}>Share your meeting anywhere</Text>
                     <Text style={styles.exportSubtitle}>
-                      Send polished meeting intelligence to Notion, Slack, Google Docs, Markdown, DOCX, or PDF.
+                      Share your meeting notes as a link, document, PDF, or message.
                     </Text>
                   </View>
 
@@ -1196,7 +1196,7 @@ export default function MeetingDetailScreen() {
                     : parseSpeakerTurns(meeting.rawTranscript, meeting.durationSeconds || 0);
 
                   // If no speaker labels detected, render plain text
-                  if (turns.length === 0 || !meeting.rawTranscript.match(/^Speaker\s+\d+:/im)) {
+                    if (turns.length === 0 || !meeting.rawTranscript.match(/^Speaker\s+[^:]+:/im)) {
                     return (
                       <View style={styles.transcriptBlock}>
                         <Text style={styles.speakerLabel}>PRIMARY SPEAKER</Text>
@@ -1308,6 +1308,8 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
     marginTop: theme.spacing.lg,
   },
   actionButton: {
@@ -1320,6 +1322,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.outlineVariant,
     gap: theme.spacing.sm,
+    flexGrow: 1,
   },
   actionButtonText: {
     fontFamily: 'Manrope-SemiBold',

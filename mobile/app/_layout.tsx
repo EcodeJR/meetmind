@@ -104,18 +104,25 @@ function RootLayoutNav() {
     }
 
     const inAuthGroup = segments[0] === '(auth)';
-    const inTabs = segments[0] === '(tabs)';
 
-    console.log('[RootLayout] Auth check:', { isSignedIn, inAuthGroup, inTabs, segments });
+    console.log('[RootLayout] Auth check:', { isSignedIn, inAuthGroup, segments });
 
-    if (isSignedIn && inAuthGroup) {
-      console.log('[RootLayout] Signed in but in auth group, redirecting to tabs');
+    if (!isSignedIn) {
+      // Every route except the auth flow requires a session. The previous
+      // condition accidentally left the tabs route reachable while signed out.
+      if (!inAuthGroup) {
+        console.log('[RootLayout] No active session, redirecting to sign in');
+        router.replace('/(auth)/sign-in');
+      }
+      return;
+    }
+
+    // setActive updates Clerk state asynchronously. Keep this redirect here,
+    // rather than also navigating from each sign-in form, to avoid a route race
+    // that can look like a full app reload on Android.
+    if (inAuthGroup) {
+      console.log('[RootLayout] Active session ready, redirecting to tabs');
       router.replace('/(tabs)');
-    } else if (!isSignedIn && !inAuthGroup && !inTabs) {
-      console.log('[RootLayout] Not signed in and in protected route, redirecting to login');
-      router.replace('/(auth)/sign-in');
-    } else {
-      console.log('[RootLayout] Auth state consistent with route');
     }
   }, [isSignedIn, isAuthLoaded, fontsLoaded, segments]);
 
@@ -145,6 +152,8 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!isSignedIn) {
       hasAttemptedQueuedSync.current = false;
+      hasSynced.current = false;
+      hasRedirectedToOnboarding.current = false;
     }
   }, [isSignedIn]);
 

@@ -3,7 +3,7 @@ import { ActionItem } from '../models/ActionItem';
 import { Meeting, ITranscriptionQuality } from '../models/Meeting';
 import { ProcessingJob } from '../models/ProcessingJob';
 import { User } from '../models/User';
-import { diarizeWithAI, transcribeInChunks } from './transcriptionService';
+import { diarizeRecording, transcribeInChunks } from './transcriptionService';
 import { summarizeTranscript } from './summarizationService';
 import { sendMeetingFailedEmail, sendMeetingProcessedEmail } from './emailService';
 import { sendMeetingFailedNotification, sendMeetingProcessedNotification, sendTranscriptionStartedNotification } from './pushNotificationService';
@@ -63,7 +63,7 @@ export const enqueueMeetingProcessing = async (meetingId: Types.ObjectId, userId
   await ProcessingJob.findOneAndUpdate(
     { meetingId },
     { $set: { userId, status: 'queued', attempts: 0, nextRunAt: new Date(), leaseExpiresAt: null, lastError: null, completedAt: null, usageMonthKey: usageMonthKey || null }, $setOnInsert: { maxAttempts: 3 } },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
   void runAvailableJobs();
 };
@@ -73,7 +73,7 @@ const claimNextJob = async () => {
   return ProcessingJob.findOneAndUpdate(
     { $or: [{ status: 'queued', nextRunAt: { $lte: now } }, { status: 'running', leaseExpiresAt: { $lte: now } }] },
     { $set: { status: 'running', leaseExpiresAt: new Date(Date.now() + LEASE_MS) }, $inc: { attempts: 1 } },
-    { new: true, sort: { nextRunAt: 1 } }
+    { returnDocument: 'after', sort: { nextRunAt: 1 } }
   );
 };
 
@@ -92,10 +92,13 @@ const processJob = async (job: any): Promise<void> => {
     if (!rawTranscript?.trim()) throw new Error('Transcription returned an empty result');
     const quality = scoreTranscription(rawTranscript);
     if (quality.label === 'poor' && quality.hallucinationDetected) throw new Error(quality.hallucinationNote || 'The recording could not be transcribed accurately.');
-    const transcript = await diarizeWithAI(rawTranscript);
+    const diarizedTranscript = await diarizeRecording(meeting.audioUrl, rawTranscript);
+    const transcript = diarizedTranscript.transcript;
     const analysis = await summarizeTranscript(transcript, { language: user.preferences?.language, strategicAlerts: user.preferences?.strategicAlerts, template: meeting.summaryTemplate });
     meeting.rawTranscript = transcript;
-    meeting.transcriptSegments = buildTranscriptSegments(transcript, meeting.durationSeconds || 0);
+    meeting.transcriptSegments = diarizedTranscript.segments.length
+      ? diarizedTranscript.segments
+      : buildTranscriptSegments(transcript, meeting.durationSeconds || 0);
     meeting.summary = analysis.summary;
     meeting.actionItems = analysis.actionItems;
     meeting.keyDecisions = analysis.keyDecisions;

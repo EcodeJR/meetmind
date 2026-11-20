@@ -14,6 +14,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import apiClient from '@/services/api';
@@ -38,7 +39,8 @@ export default function ActionsScreen() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [editingAction, setEditingAction] = useState<ActionItem | null>(null);
   const [editOwner, setEditOwner] = useState('');
-  const [editDueDate, setEditDueDate] = useState('');
+  const [editDueDate, setEditDueDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [editPriority, setEditPriority] = useState<ActionItem['priority']>('medium');
   const router = useRouter();
 
@@ -111,20 +113,15 @@ export default function ActionsScreen() {
   const openEditor = (item: ActionItem) => {
     setEditingAction(item);
     setEditOwner(item.owner || 'Me');
-    setEditDueDate(item.dueDate ? item.dueDate.slice(0, 10) : '');
+    setEditDueDate(item.dueDate ? new Date(item.dueDate) : null);
     setEditPriority(item.priority);
   };
 
   const saveActionEdits = async () => {
     if (!editingAction) return;
-    let dueDate: string | null = null;
-    if (editDueDate.trim()) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(editDueDate.trim())) {
-        Alert.alert('Use a valid date', 'Enter the due date as YYYY-MM-DD.');
-        return;
-      }
-      dueDate = new Date(`${editDueDate.trim()}T09:00:00`).toISOString();
-    }
+    const dueDate = editDueDate
+      ? new Date(editDueDate.getFullYear(), editDueDate.getMonth(), editDueDate.getDate(), 9).toISOString()
+      : null;
     await updateAction(editingAction._id, { owner: editOwner.trim() || 'Me', priority: editPriority, dueDate });
     setEditingAction(null);
   };
@@ -137,8 +134,8 @@ export default function ActionsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Actions</Text>
-        <Text style={styles.subtitle}>Keep the promises your meetings create.</Text>
+        <Text style={styles.title}>Tasks</Text>
+        <Text style={styles.subtitle}>Follow up on tasks from your meetings.</Text>
       </View>
 
       {loading ? (
@@ -152,8 +149,8 @@ export default function ActionsScreen() {
           ListEmptyComponent={
             <View style={styles.emptyContent}>
               <Ionicons name="checkmark-done-outline" size={48} color={theme.colors.outlineVariant} />
-              <Text style={styles.emptyTitle}>Nothing outstanding</Text>
-              <Text style={styles.emptyText}>Action items from your completed meeting summaries will appear here.</Text>
+              <Text style={styles.emptyTitle}>No open tasks</Text>
+              <Text style={styles.emptyText}>Tasks from completed meetings will appear here.</Text>
             </View>
           }
           renderItem={({ item }) => (
@@ -207,7 +204,12 @@ export default function ActionsScreen() {
             <Text style={styles.fieldLabel}>OWNER</Text>
             <TextInput style={styles.editorInput} value={editOwner} onChangeText={setEditOwner} placeholder="Me" placeholderTextColor={theme.colors.outline} />
             <Text style={styles.fieldLabel}>DUE DATE</Text>
-            <TextInput style={styles.editorInput} value={editDueDate} onChangeText={setEditDueDate} placeholder="YYYY-MM-DD" placeholderTextColor={theme.colors.outline} autoCapitalize="none" />
+            <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)} accessibilityRole="button" accessibilityLabel="Choose due date">
+              <Ionicons name="calendar-outline" size={18} color={theme.colors.secondary} />
+              <Text style={styles.datePickerText}>{editDueDate ? editDueDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Choose a date'}</Text>
+            </TouchableOpacity>
+            {editDueDate ? <TouchableOpacity onPress={() => setEditDueDate(null)}><Text style={styles.clearDateText}>Remove due date</Text></TouchableOpacity> : null}
+            {showDatePicker ? <DateTimePicker value={editDueDate || new Date()} mode="date" display={Platform.OS === 'ios' ? 'inline' : 'default'} minimumDate={new Date()} onChange={(_event, selectedDate) => { if (Platform.OS !== 'ios') setShowDatePicker(false); if (selectedDate) setEditDueDate(selectedDate); }} /> : null}
             <Text style={styles.fieldLabel}>PRIORITY</Text>
             <View style={styles.priorityPicker}>{(['low', 'medium', 'high'] as const).map(priority => <TouchableOpacity key={priority} style={[styles.priorityOption, editPriority === priority && styles.priorityOptionSelected]} onPress={() => setEditPriority(priority)}><Text style={[styles.priorityOptionText, editPriority === priority && styles.priorityOptionTextSelected]}>{priority}</Text></TouchableOpacity>)}</View>
             <View style={styles.editorActions}>
@@ -252,6 +254,9 @@ const styles = StyleSheet.create({
   editorActionTitle: { fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20, color: theme.colors.onSurfaceVariant, marginTop: 4, marginBottom: theme.spacing.lg },
   fieldLabel: { fontFamily: 'SpaceGrotesk-SemiBold', fontSize: 10, color: theme.colors.outline, letterSpacing: 1, marginTop: theme.spacing.sm, marginBottom: 5 },
   editorInput: { borderWidth: 1, borderColor: theme.colors.outlineVariant, borderRadius: theme.borderRadius.base, paddingHorizontal: theme.spacing.md, height: 46, fontFamily: 'Inter-Regular', color: theme.colors.onSurface },
+  datePickerButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, borderWidth: 1, borderColor: theme.colors.outlineVariant, borderRadius: theme.borderRadius.base, paddingHorizontal: theme.spacing.md },
+  datePickerText: { fontFamily: 'Inter-Regular', color: theme.colors.onSurface, fontSize: 14 },
+  clearDateText: { alignSelf: 'flex-start', marginTop: 6, fontFamily: 'Manrope-SemiBold', color: theme.colors.secondary, fontSize: 12 },
   priorityPicker: { flexDirection: 'row', gap: theme.spacing.sm },
   priorityOption: { flex: 1, alignItems: 'center', borderWidth: 1, borderColor: theme.colors.outlineVariant, borderRadius: theme.borderRadius.base, paddingVertical: 9 },
   priorityOptionSelected: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },

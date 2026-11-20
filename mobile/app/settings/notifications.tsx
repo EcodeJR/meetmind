@@ -117,7 +117,7 @@ export default function NotificationSettingsScreen() {
           <Ionicons name="chevron-back" size={24} color={theme.colors.primary} />
           <Text style={styles.backText}>Settings</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Notification Intelligence</Text>
+        <Text style={styles.title}>Notifications</Text>
       </View>
 
       <View style={styles.content}>
@@ -181,7 +181,7 @@ export default function NotificationSettingsScreen() {
         <View style={styles.hintContainer}>
           <Ionicons name="information-circle-outline" size={16} color={theme.colors.outline} />
           <Text style={styles.hintText}>
-            These settings use your accredited identity email to deliver encrypted intelligence reports.
+            Choose how you want to receive updates about your meetings.
           </Text>
         </View>
       </View>

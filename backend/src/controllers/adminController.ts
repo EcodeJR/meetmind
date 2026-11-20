@@ -301,7 +301,7 @@ export const updateUserPlan = async (req: Request, res: Response): Promise<void>
     const user = await User.findByIdAndUpdate(
       id,
       { 'subscription.plan': plan, 'subscription.status': status || 'active' },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!user) {
@@ -324,7 +324,7 @@ export const suspendUser = async (req: Request, res: Response): Promise<void> =>
     const user = await User.findByIdAndUpdate(
       id,
       { 'subscription.status': 'inactive' },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!user) {
@@ -374,7 +374,7 @@ export const resetUserMonthlyUsage = async (req: Request, res: Response): Promis
         monthlyMeetingUsage: 0,
         monthlyMeetingUsagePeriodKey: monthKey,
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!user) {
@@ -845,7 +845,7 @@ export const getAdminContacts = async (req: Request, res: Response): Promise<voi
 export const resolveContact = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const contact = await Contact.findByIdAndUpdate(id, { status: 'resolved' }, { new: true });
+    const contact = await Contact.findByIdAndUpdate(id, { status: 'resolved' }, { returnDocument: 'after' });
     if (!contact) {
       res.status(404).json({ error: 'Contact submission not found' });
       return;
@@ -1055,7 +1055,7 @@ export const sendSingleEmail = async (req: Request, res: Response): Promise<void
   }
 };
 
-import { transcribeInChunks, diarizeWithAI } from '../services/transcriptionService';
+import { transcribeInChunks, diarizeRecording } from '../services/transcriptionService';
 import { summarizeTranscript } from '../services/summarizationService';
 import fs from 'fs';
 import os from 'os';
@@ -1220,7 +1220,8 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
         // Falls back to raw transcript on any error.
         // ============================================
         console.log(`[ADMIN-REPROCESS] Step 3b: Running AI speaker diarization...`);
-        const transcript = await diarizeWithAI(rawTranscript);
+        const diarizedTranscript = await diarizeRecording(meeting.audioUrl, rawTranscript);
+        const transcript = diarizedTranscript.transcript;
         console.log(`[ADMIN-REPROCESS] Diarization complete. Output length: ${transcript.length} chars`);
 
         // STEP 4: Summarize
@@ -1234,6 +1235,7 @@ export const reprocessAdminMeeting = async (req: Request, res: Response): Promis
         // STEP 5: Save completed results to MongoDB
         console.log(`[ADMIN-REPROCESS] Step 5: Saving to MongoDB...`);
         meeting.rawTranscript = transcript;
+        meeting.transcriptSegments = diarizedTranscript.segments;
         meeting.summary = aiAnalysis.summary;
         meeting.actionItems = aiAnalysis.actionItems;
         meeting.keyDecisions = aiAnalysis.keyDecisions;

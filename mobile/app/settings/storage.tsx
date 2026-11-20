@@ -15,10 +15,10 @@ import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 const RETENTION_POLICIES = [
-  { days: 0, label: 'Indefinite (Recommended)', description: 'Retain all reports until manually purged.' },
-  { days: 7, label: '7 Days', description: 'Automatically wipe data after 1 week.' },
-  { days: 30, label: '30 Days', description: 'Standard monthly rotation policy.' },
-  { days: 90, label: '90 Days', description: 'Quarterly compliance rotation.' },
+  { days: 0, label: 'Keep until I delete it', description: 'Meetings stay saved until you remove them.' },
+  { days: 7, label: '7 days', description: 'Delete meetings automatically after one week.' },
+  { days: 30, label: '30 days', description: 'Delete meetings automatically after one month.' },
+  { days: 90, label: '90 days', description: 'Delete meetings automatically after three months.' },
 ];
 
 export default function StorageSettingsScreen() {
@@ -69,22 +69,22 @@ export default function StorageSettingsScreen() {
 
   const handleClearEverything = () => {
     Alert.alert(
-      'Total Purge',
-      'This will permanently delete ALL recorded sessions, intelligence reports, and audio files. This action is irreversible.',
+      'Delete all meetings?',
+      'This permanently deletes all your meetings and recordings. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'Wipe All Data', 
+          text: 'Delete all meetings',
           style: 'destructive', 
           onPress: async () => {
             setSaving(true);
             try {
               // We'll need a backend endpoint for this
               await apiClient.delete('/meetings'); 
-              Alert.alert('Purge Complete', 'Institutional memory has been cleared.');
+              Alert.alert('Meetings deleted', 'Your meetings and recordings have been deleted.');
               fetchUserData();
             } catch (error) {
-              Alert.alert('Purge Failed', 'An error occurred during data destruction.');
+              Alert.alert('Could not delete meetings', 'Please try again.');
             } finally {
               setSaving(false);
             }
@@ -109,24 +109,24 @@ export default function StorageSettingsScreen() {
           <Ionicons name="chevron-back" size={24} color={theme.colors.primary} />
           <Text style={styles.backText}>Settings</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Storage Governance</Text>
+        <Text style={styles.title}>Storage and privacy</Text>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.statsCard}>
           <View style={styles.stat}>
-            <Text style={styles.statLabel}>INDEXED REPORTS</Text>
+            <Text style={styles.statLabel}>MEETINGS</Text>
             <Text style={styles.statValue}>{userStats.meetingCount}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.stat}>
-            <Text style={styles.statLabel}>STORAGE DEPTH</Text>
+            <Text style={styles.statLabel}>STORAGE USED</Text>
             <Text style={styles.statValue}>{userStats.storageUsedMB.toFixed(2)} MB</Text>
           </View>
         </View>
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>RETENTION POLICY</Text>
+          <Text style={styles.sectionTitle}>KEEP MEETINGS FOR</Text>
         </View>
 
         <View style={styles.card}>
@@ -157,7 +157,7 @@ export default function StorageSettingsScreen() {
         </View>
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>DATA DESTRUCTION</Text>
+          <Text style={styles.sectionTitle}>DELETE ALL MEETINGS</Text>
         </View>
 
         <TouchableOpacity 
@@ -166,13 +166,13 @@ export default function StorageSettingsScreen() {
           disabled={saving}
         >
           <Ionicons name="trash-bin-outline" size={20} color={theme.colors.error} />
-          <Text style={styles.dangerText}>Immediate Total Purge</Text>
+          <Text style={styles.dangerText}>Delete all meetings</Text>
         </TouchableOpacity>
 
         <View style={styles.hintContainer}>
           <Ionicons name="shield-checkmark-outline" size={16} color={theme.colors.outline} />
           <Text style={styles.hintText}>
-            Wiping history also purges all associated voice signatures from Whisper and Gemini metadata buckets.
+            This removes meeting notes, transcripts, and recordings from your account.
           </Text>
         </View>
         

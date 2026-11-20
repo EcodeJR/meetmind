@@ -250,7 +250,7 @@ export default function HistoryScreen() {
         <View style={styles.headerTop}>
           <View>
             <Text style={styles.title}>History</Text>
-            <Text style={styles.subtitle}>Institutional memory.</Text>
+            <Text style={styles.subtitle}>Your saved meetings.</Text>
           </View>
           <View style={styles.brandContainer}>
             <Image
@@ -394,7 +394,7 @@ export default function HistoryScreen() {
               <View style={styles.cardFooter}>
                 <View style={styles.tagsContainer}>
                   <View style={styles.tag}>
-                    <Text style={styles.tagText}>INTELLIGENCE</Text>
+                    <Text style={styles.tagText}>MEETING NOTES</Text>
                   </View>
                 </View>
                 <View style={styles.cardActions}>

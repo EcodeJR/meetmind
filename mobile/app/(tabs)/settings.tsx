@@ -29,6 +29,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [queueCount, setQueueCount] = useState(0);
+  const [workspaceInvitationCount, setWorkspaceInvitationCount] = useState(0);
   const [queueSyncing, setQueueSyncing] = useState(false);
   const [subscriptionSyncing, setSubscriptionSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -41,11 +42,16 @@ export default function SettingsScreen() {
 
       if (!isSignedIn) {
         setUserData(null);
+        setWorkspaceInvitationCount(0);
         return;
       }
 
-      const response = await apiClient.get('/users/me');
+      const [response, invitationsResponse] = await Promise.all([
+        apiClient.get('/users/me'),
+        apiClient.get('/workspaces/invitations/pending'),
+      ]);
       setUserData(response.data.data?.user || response.data.user || null);
+      setWorkspaceInvitationCount((invitationsResponse.data?.data?.invitations || []).length);
     } catch (error) {
       console.error('Error fetching user data:', error);
     } finally {
@@ -115,12 +121,12 @@ export default function SettingsScreen() {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Account Destruction',
-      'This will permanently delete your identity, all intelligence reports, and voice signatures. This cannot be undone.',
+      'Delete account?',
+      'This permanently deletes your account, meetings, recordings, and saved data. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete Everything',
+          text: 'Delete account',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -138,7 +144,7 @@ export default function SettingsScreen() {
               console.error('[DELETE] Response status:', error?.response?.status);
               console.error('[DELETE] Response data:', error?.response?.data);
               const errorMsg = error?.response?.data?.error?.message || error?.message || 'Unknown error';
-              Alert.alert('Purge Failed', `Error while destroying account data: ${errorMsg}`);
+              Alert.alert('Could not delete account', errorMsg);
             } finally {
               setLoading(false);
             }
@@ -193,11 +199,11 @@ export default function SettingsScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.title}>Settings</Text>
-          <Text style={styles.subtitle}>Preferences and configurations.</Text>
+          <Text style={styles.subtitle}>Manage your account and app preferences.</Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>ACCREDITED IDENTITY</Text>
+          <Text style={styles.sectionLabel}>ACCOUNT</Text>
           <View style={styles.card}>
             <View style={styles.userRow}>
               {isSignedIn ? (
@@ -288,6 +294,21 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {isSignedIn && workspaceInvitationCount > 0 && (
+          <View style={styles.workspaceInviteBanner}>
+            <View style={styles.workspaceInviteCopy}>
+              <Ionicons name="people-outline" size={20} color={theme.colors.secondary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.workspaceInviteTitle}>Workspace invitation{workspaceInvitationCount === 1 ? '' : 's'} waiting</Text>
+                <Text style={styles.workspaceInviteText}>Review and accept your invitation in Workspaces.</Text>
+              </View>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/settings/workspaces')} accessibilityRole="button" accessibilityLabel="Review workspace invitations">
+              <Text style={styles.workspaceInviteButton}>Review</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>PREFERENCES</Text>
           <View style={styles.menuCard}>
@@ -298,7 +319,7 @@ export default function SettingsScreen() {
               <View style={styles.menuIconContainer}>
                 <Ionicons name="mail-outline" size={20} color={theme.colors.onSurface} />
               </View>
-              <Text style={styles.menuItemText}>Notification Intelligence</Text>
+              <Text style={styles.menuItemText}>Notifications</Text>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
             </TouchableOpacity>
 
@@ -311,7 +332,7 @@ export default function SettingsScreen() {
               <View style={styles.menuIconContainer}>
                 <Ionicons name="calendar-outline" size={20} color={theme.colors.onSurface} />
               </View>
-              <Text style={styles.menuItemText}>Calendar Integrations</Text>
+              <Text style={styles.menuItemText}>Calendar</Text>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
             </TouchableOpacity>
 
@@ -337,7 +358,7 @@ export default function SettingsScreen() {
               <View style={styles.menuIconContainer}>
                 <Ionicons name="flash-outline" size={20} color={theme.colors.onSurface} />
               </View>
-              <Text style={styles.menuItemText}>Strategic Alerts</Text>
+              <Text style={styles.menuItemText}>Meeting alerts</Text>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
             </TouchableOpacity>
 
@@ -350,7 +371,7 @@ export default function SettingsScreen() {
               <View style={styles.menuIconContainer}>
                 <Ionicons name="globe-outline" size={20} color={theme.colors.onSurface} />
               </View>
-              <Text style={styles.menuItemText}>Linguistic Processing</Text>
+              <Text style={styles.menuItemText}>Language</Text>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
             </TouchableOpacity>
 
@@ -363,7 +384,7 @@ export default function SettingsScreen() {
               <View style={styles.menuIconContainer}>
                 <Ionicons name="cloud-outline" size={20} color={theme.colors.onSurface} />
               </View>
-              <Text style={styles.menuItemText}>Storage Governance</Text>
+              <Text style={styles.menuItemText}>Storage and privacy</Text>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
             </TouchableOpacity>
           </View>
@@ -374,7 +395,7 @@ export default function SettingsScreen() {
             <Text style={styles.sectionLabel}>SUBSCRIPTION</Text>
             <View style={styles.subscriptionCard}>
               <View style={styles.subscriptionCopy}>
-                <Text style={styles.subscriptionTitle}>Manage Pro Plan</Text>
+                <Text style={styles.subscriptionTitle}>Pro plan</Text>
                 <Text style={styles.subscriptionText}>
                   Cancel any time. Pro access remains active until the end of the billing cycle.
                 </Text>
@@ -415,24 +436,25 @@ export default function SettingsScreen() {
               <Text style={styles.signOutText}>Export My Data</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.signOutButton}
-              onPress={() => {
-                Alert.alert('Dissolve Session', 'Are you sure you want to sign out?', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Sign out', style: 'destructive', onPress: handleSignOut },
-                ]);
-              }}
-            >
-              <Text style={styles.signOutText}>Sign out from Network</Text>
-            </TouchableOpacity>
+            <View style={styles.accountActions}>
+              <Text style={styles.sectionLabel}>ACCOUNT ACTIONS</Text>
+              <Text style={styles.accountActionHint}>Sign out on this device, or permanently delete your account.</Text>
+              <TouchableOpacity
+                style={styles.signOutButton}
+                onPress={() => {
+                  Alert.alert('Sign out?', 'You can sign in again at any time.', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Sign out', onPress: handleSignOut },
+                  ]);
+                }}
+              >
+                <Text style={styles.signOutText}>Sign out</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.deleteAccountButton}
-              onPress={handleDeleteAccount}
-            >
-              <Text style={styles.deleteAccountText}>Dissolve Account</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteAccountButton} onPress={handleDeleteAccount}>
+                <Text style={styles.deleteAccountText}>Delete account</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -695,6 +717,11 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceGrotesk-SemiBold',
     fontSize: 12,
   },
+  workspaceInviteBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.sm, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.xl, padding: theme.spacing.md, borderRadius: theme.borderRadius.md, backgroundColor: theme.colors.surfaceContainerLowest, borderWidth: 1, borderColor: theme.colors.secondary },
+  workspaceInviteCopy: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  workspaceInviteTitle: { fontFamily: 'Manrope-SemiBold', fontSize: 14, color: theme.colors.primary },
+  workspaceInviteText: { fontFamily: 'Inter-Regular', fontSize: 12, color: theme.colors.onSurfaceVariant, marginTop: 2 },
+  workspaceInviteButton: { fontFamily: 'Manrope-SemiBold', fontSize: 13, color: theme.colors.secondary },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -725,6 +752,20 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     marginTop: theme.spacing.md,
   },
+  accountActions: {
+    marginTop: theme.spacing.xl,
+    paddingTop: theme.spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.outlineVariant,
+  },
+  accountActionHint: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    lineHeight: 19,
+    color: theme.colors.onSurfaceVariant,
+    marginTop: -theme.spacing.xs,
+    marginBottom: theme.spacing.md,
+  },
   signOutButton: {
     backgroundColor: theme.colors.surfaceContainerLowest,
     borderRadius: theme.borderRadius.base,
@@ -739,6 +780,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   deleteAccountButton: {
+    marginTop: theme.spacing.sm,
     paddingVertical: theme.spacing.md,
     alignItems: 'center',
   },

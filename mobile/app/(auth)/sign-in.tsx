@@ -49,9 +49,9 @@ export default function SignInScreen() {
       if (signInAttempt.status === 'complete') {
         console.log('[SignIn] Setting active session:', signInAttempt.createdSessionId);
         await setActive({ session: signInAttempt.createdSessionId });
-        console.log('[SignIn] Session set, navigating to tabs');
-        // Add a small delay to ensure session is persisted
-        setTimeout(() => router.replace('/(tabs)'), 500);
+        // RootLayout observes the active Clerk session and performs the single
+        // navigation to the app. Navigating here as well races that redirect.
+        console.log('[SignIn] Session set; waiting for auth guard navigation');
       } else {
         setErrors({ general: 'Please check your activation status.' });
       }
@@ -80,11 +80,11 @@ export default function SignInScreen() {
 
       if (createdSessionId && setOAuthActive) {
         await setOAuthActive({ session: createdSessionId });
-        router.replace('/(tabs)');
+        // RootLayout performs the session-aware route transition.
       }
     } catch (err: any) {
       console.error('Google OAuth error:', err);
-      setErrors({ general: 'Network too weak to sign in. Retry when signal improves.' });
+      setErrors({ general: 'We could not sign you in. Check your connection and try again.' });
     } finally {
       setOAuthLoading(false);
     }
@@ -115,7 +115,7 @@ export default function SignInScreen() {
           </View>
           <View style={styles.headerContent}>
             <Text style={styles.title}>Memovoice</Text>
-            <Text style={styles.subtitle}>Institutional trust. Professional depth.</Text>
+            <Text style={styles.subtitle}>Clear meeting notes, wherever you work.</Text>
           </View>
 
           {errors.general && (

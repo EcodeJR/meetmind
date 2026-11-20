@@ -92,8 +92,18 @@ export const initializeFlutterwavePayment = async (
     }
     throw new Error(body?.message || 'Flutterwave initialization failed');
   } catch (error) {
-    logger.error({ error }, 'Flutterwave initialization failed');
-    throw error;
+    // Never pass an Axios error object to the logger: it includes request
+    // headers and can expose the provider secret in production logs.
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    const providerMessage = axios.isAxiosError(error)
+      ? String(error.response?.data?.message || error.message)
+      : error instanceof Error ? error.message : 'Unknown Flutterwave error';
+    logger.error({ provider: 'flutterwave', status, providerMessage }, 'Flutterwave initialization failed');
+
+    if (status === 401) {
+      throw new Error('Flutterwave credentials were rejected. Update FLUTTERWAVE_SECRET_KEY in the backend configuration.');
+    }
+    throw new Error('Flutterwave could not start the payment. Please try again later.');
   }
 };
 

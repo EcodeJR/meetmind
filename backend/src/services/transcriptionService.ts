@@ -18,6 +18,18 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 type ProviderName = 'openai' | 'groq' | 'gemini';
 
+export interface DiarizedTranscriptSegment {
+  speaker: string;
+  text: string;
+  startSeconds: number;
+  endSeconds: number;
+}
+
+export interface DiarizedTranscript {
+  transcript: string;
+  segments: DiarizedTranscriptSegment[];
+}
+
 const TRANSIENT_ERROR_CODES = new Set([
   'ECONNRESET',
   'ETIMEDOUT',
@@ -78,6 +90,65 @@ const downloadAudioBuffer = async (url: string): Promise<Buffer> => {
   if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
   const arrayBuffer = await (response as any).arrayBuffer();
   return Buffer.from(arrayBuffer);
+};
+
+const sleep = (milliseconds: number): Promise<void> => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+/**
+ * Perform actual acoustic speaker diarization when AssemblyAI is configured.
+ * Whisper/Groq text responses do not contain voice embeddings, so labels cannot
+ * be determined reliably after transcription from their plain text alone.
+ */
+const diarizeWithAssemblyAI = async (audioUrl: string): Promise<DiarizedTranscript | null> => {
+  const apiKey = process.env.ASSEMBLYAI_API_KEY?.trim();
+  if (!apiKey) return null;
+
+  const headers = { authorization: apiKey, 'content-type': 'application/json' };
+  const submitted = await fetch('https://api.assemblyai.com/v2/transcript', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ audio_url: audioUrl, speaker_labels: true, language_detection: true }),
+  });
+  if (!submitted.ok) throw new Error(`Speaker diarization could not be started (${submitted.status})`);
+
+  const created = await submitted.json() as { id?: string; error?: string };
+  if (!created.id) throw new Error(created.error || 'Speaker diarization did not return a job ID');
+
+  const timeoutAt = Date.now() + 12 * 60 * 1000;
+  while (Date.now() < timeoutAt) {
+    await sleep(3000);
+    const statusResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${created.id}`, { headers });
+    if (!statusResponse.ok) throw new Error(`Speaker diarization status could not be read (${statusResponse.status})`);
+    const result = await statusResponse.json() as {
+      status?: string;
+      error?: string;
+      utterances?: Array<{ speaker?: string; text?: string; start?: number; end?: number }>;
+    };
+    if (result.status === 'error') throw new Error(result.error || 'Speaker diarization failed');
+    if (result.status !== 'completed') continue;
+
+    const speakerNumbers = new Map<string, number>();
+    const segments = (result.utterances || [])
+      .map(utterance => {
+        const sourceLabel = utterance.speaker || 'Unknown';
+        if (!speakerNumbers.has(sourceLabel)) speakerNumbers.set(sourceLabel, speakerNumbers.size + 1);
+        return {
+          speaker: `Speaker ${speakerNumbers.get(sourceLabel)}`,
+          text: utterance.text?.trim() || '',
+          startSeconds: Math.max(0, Math.round((utterance.start || 0) / 1000)),
+          endSeconds: Math.max(0, Math.round((utterance.end || 0) / 1000)),
+        };
+      })
+      .filter(segment => Boolean(segment.text));
+    if (!segments.length) throw new Error('Speaker diarization returned no speaker turns');
+
+    return {
+      transcript: segments.map(segment => `${segment.speaker}: ${segment.text}`).join('\n'),
+      segments,
+    };
+  }
+
+  throw new Error('Speaker diarization timed out');
 };
 
 const writeAudioBufferToTempFile = async (source: string): Promise<string> => {
@@ -336,6 +407,26 @@ export const diarizeWithAI = async (transcript: string): Promise<string> => {
     console.error('[DIARIZE] AI diarization failed — falling back to raw transcript:', error.message);
     return transcript;
   }
+};
+
+/**
+ * Produces speaker-labelled turns from the audio when the optional diarization
+ * provider is configured. The text-only inference remains a best-effort
+ * fallback so processing is never blocked when that provider is unavailable.
+ */
+export const diarizeRecording = async (audioUrl: string, rawTranscript: string): Promise<DiarizedTranscript> => {
+  try {
+    const diarized = await diarizeWithAssemblyAI(audioUrl);
+    if (diarized) {
+      console.log(`[DIARIZE] Acoustic diarization complete (${diarized.segments.length} turns)`);
+      return diarized;
+    }
+  } catch (error: any) {
+    console.warn(`[DIARIZE] Acoustic diarization unavailable; using text fallback: ${error.message}`);
+  }
+
+  const transcript = await diarizeWithAI(rawTranscript);
+  return { transcript, segments: [] };
 };
 
 /**

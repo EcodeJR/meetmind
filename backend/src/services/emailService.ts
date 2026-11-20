@@ -317,6 +317,32 @@ export const sendWelcomeEmail = async (email: string, firstName: string): Promis
   }
 };
 
+/** Send a workspace invitation even when the recipient has not joined yet. */
+export const sendWorkspaceInvitationEmail = async (
+  email: string,
+  inviterName: string,
+  workspaceName: string,
+  role: string
+): Promise<boolean> => {
+  try {
+    const success = await sendTemplatedEmail(email, `You're invited to ${workspaceName} on Memovoice`, {
+      preheader: `${inviterName} invited you to a workspace`,
+      title: 'Workspace invitation',
+      greetingName: email.split('@')[0],
+      intro: `${inviterName} invited you to join the ${workspaceName} workspace as a ${role}.`,
+      sections: [
+        { title: 'Next step', body: 'Open Memovoice and go to Settings > Workspaces to accept the invitation.' },
+        { title: 'New to Memovoice?', body: 'Create an account with this email address, then open Settings > Workspaces to find the invitation.' },
+      ],
+    });
+    if (success) logger.info({ email, workspaceName }, 'Workspace invitation email sent');
+    return success;
+  } catch (error) {
+    logger.error({ error, email, workspaceName }, 'Failed to send workspace invitation email');
+    return false;
+  }
+};
+
 /**
  * Send meeting recording started notification email
  */

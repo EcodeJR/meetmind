@@ -10,7 +10,7 @@ import { WorkspaceMember, WorkspaceProject, WorkspaceSharingPolicy } from '../mo
 import { Types } from 'mongoose';
 import { logger } from '../utils/logger';
 import { getCurrentMonthKey } from '../middleware/subscriptionMiddleware';
-import { transcribeInChunks, diarizeWithAI } from '../services/transcriptionService';
+import { transcribeInChunks, diarizeRecording } from '../services/transcriptionService';
 import { summarizeTranscript } from '../services/summarizationService';
 import { uploadAudioToCloudinary, deleteAudioFromCloudinary } from '../services/cloudinaryService';
 import { sendMeetingProcessedEmail, sendMeetingFailedEmail, sendMeetingDeletedEmail, sendAccountStatusEmail } from '../services/emailService';
@@ -525,7 +525,8 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         // Falls back to raw transcript on any error.
         // ============================================
         console.log(`[DEBUGGER] BACKGROUND: Running AI speaker diarization (${processingMeeting._id})...`);
-        const transcript = await diarizeWithAI(rawTranscript);
+        const diarizedTranscript = await diarizeRecording(uploadResult.url, rawTranscript);
+        const transcript = diarizedTranscript.transcript;
         console.log(`[DEBUGGER] BACKGROUND: Diarization complete (${processingMeeting._id}), length: ${transcript.length} chars`);
 
         console.log(`[DEBUGGER] BACKGROUND: Summarizing meeting ${processingMeeting._id}`);
@@ -538,7 +539,9 @@ export const processMeeting = async (req: AuthRequest, res: Response): Promise<v
         console.log(`[DEBUGGER] BACKGROUND: AI summary complete (${processingMeeting._id})`);
 
         processingMeeting.rawTranscript = transcript;
-        processingMeeting.transcriptSegments = buildTranscriptSegments(transcript, processingMeeting.durationSeconds || 0);
+        processingMeeting.transcriptSegments = diarizedTranscript.segments.length
+          ? diarizedTranscript.segments
+          : buildTranscriptSegments(transcript, processingMeeting.durationSeconds || 0);
         processingMeeting.summary = aiAnalysis.summary;
         processingMeeting.actionItems = aiAnalysis.actionItems;
         await syncGeneratedActionItems(user._id, processingMeeting._id, aiAnalysis.actionItems);
@@ -1004,7 +1007,8 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         // Falls back to raw transcript on any error.
         // ============================================
         console.log(`[RETRY] Running AI speaker diarization (${meeting._id})...`);
-        const transcript = await diarizeWithAI(rawTranscript);
+        const diarizedTranscript = await diarizeRecording(meeting.audioUrl, rawTranscript);
+        const transcript = diarizedTranscript.transcript;
         console.log(`[RETRY] Diarization complete (${meeting._id}), length: ${transcript.length} chars`);
 
         const aiAnalysis = await summarizeTranscript(transcript, {
@@ -1016,7 +1020,9 @@ export const retryMeetingTranscription = async (req: AuthRequest, res: Response)
         console.log(`[RETRY] AI summary complete (${meeting._id})`);
 
         meeting.rawTranscript = transcript;
-        meeting.transcriptSegments = buildTranscriptSegments(transcript, meeting.durationSeconds || 0);
+        meeting.transcriptSegments = diarizedTranscript.segments.length
+          ? diarizedTranscript.segments
+          : buildTranscriptSegments(transcript, meeting.durationSeconds || 0);
         meeting.summary = aiAnalysis.summary;
         meeting.actionItems = aiAnalysis.actionItems;
         await syncGeneratedActionItems(user._id, meeting._id, aiAnalysis.actionItems);

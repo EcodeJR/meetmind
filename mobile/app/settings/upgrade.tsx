@@ -148,7 +148,7 @@ export default function SubscriptionScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>{isPro ? 'Pro Subscription' : 'Unlock Pro'}</Text>
         <Text style={styles.subtitle}>
-          {isPro ? 'You are currently on the Pro plan.' : 'Scale your institutional intelligence.'}
+          {isPro ? 'You are currently on the Pro plan.' : 'Get more from every meeting.'}
         </Text>
       </View>
 

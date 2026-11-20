@@ -77,7 +77,7 @@ export default function LinguisticsSettingsScreen() {
           <Ionicons name="chevron-back" size={24} color={theme.colors.primary} />
           <Text style={styles.backText}>Settings</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Linguistic Processing</Text>
+        <Text style={styles.title}>Language</Text>
         <Text style={styles.subtitle}>Define the primary lexicon for transcription and AI analysis.</Text>
       </View>
 

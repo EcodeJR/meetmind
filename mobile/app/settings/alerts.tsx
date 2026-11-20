@@ -28,7 +28,7 @@ export default function StrategicAlertsScreen() {
   const ALERT_TYPES = [
     { id: 'decisions', label: 'Key Decisions', description: 'Immediate alert when a strategic decision is finalized.' },
     { id: 'actions', label: 'Action Requirements', description: 'Notifications for items assigned to you during sessions.' },
-    { id: 'risks', label: 'Risk Intelligence', description: 'AI detection of potential project blockers or risks.' },
+    { id: 'risks', label: 'Risks', description: 'Get alerts about possible project blockers or risks.' },
   ];
 
   useEffect(() => {
@@ -81,7 +81,7 @@ export default function StrategicAlertsScreen() {
           <Text style={styles.backText}>Settings</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Strategic Alerts</Text>
-        <Text style={styles.subtitle}>Configure real-time intelligence monitoring.</Text>
+        <Text style={styles.subtitle}>Choose the meeting updates you want to receive.</Text>
       </View>
 
       <ScrollView style={styles.content}>

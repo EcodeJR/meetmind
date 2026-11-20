@@ -169,7 +169,7 @@ export default function SignUpScreen() {
           </View>
           <View style={styles.headerContent}>
             <Text style={styles.title}>Memovoice</Text>
-            <Text style={styles.subtitle}>Begin your institutional intelligence journey.</Text>
+            <Text style={styles.subtitle}>Turn your meetings into clear notes and next steps.</Text>
           </View>
 
           {errors.general && (

@@ -79,7 +79,7 @@ export const flutterwaveWebhookHandler = async (req: Request, res: Response): Pr
             errorMessage: null,
             metadata: event.data,
           },
-          { new: true }
+          { returnDocument: 'after' }
         ).catch(err => logger.warn({ err, reference }, 'Failed to update Flutterwave transaction log'));
       }
     } else if (event.event === 'subscription.cancelled') {
@@ -113,7 +113,7 @@ export const flutterwaveWebhookHandler = async (req: Request, res: Response): Pr
             errorMessage: event.data?.processor_response || event.data?.gateway_response || event.data?.status || 'Payment failed',
             metadata: event.data,
           },
-          { new: true }
+          { returnDocument: 'after' }
         ).catch(err => logger.warn({ err, reference }, 'Failed to update Flutterwave failed transaction log'));
       }
     }

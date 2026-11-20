@@ -98,7 +98,7 @@ export const calendarOAuthCallback = async (req: Request, res: Response): Promis
     await CalendarIntegration.findOneAndUpdate(
       { userId: user._id, provider },
       { userId: user._id, provider, providerEmail, encryptedAccessToken: encryptIntegrationToken(token.access_token), encryptedRefreshToken: token.refresh_token ? encryptIntegrationToken(token.refresh_token) : existing?.encryptedRefreshToken, accessTokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined, scope: (token.scope || config.scopes.join(' ')).split(' ').filter(Boolean) },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
     );
     res.redirect(302, appendMobileResult({ integration: provider, status: 'connected' }));
   } catch (error) {

@@ -57,7 +57,7 @@ export default function InsightsScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.title}>Insights</Text>
-            <Text style={styles.subtitle}>Your meeting intelligence from the last 30 days.</Text>
+            <Text style={styles.subtitle}>A quick view of your meetings from the last 30 days.</Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -70,8 +70,8 @@ export default function InsightsScreen() {
                 <Stat value={String(stats.overdue)} label="Overdue" danger={stats.overdue > 0} />
               </View>
               {stats.highPriority > 0 && <View style={styles.priorityBanner}><Ionicons name="alert-circle-outline" size={18} color={theme.colors.error} /><Text style={styles.priorityText}>{stats.highPriority} high-priority action{stats.highPriority === 1 ? '' : 's'} need attention.</Text></View>}
-              {overview?.isPro && <Text style={styles.sectionLabel}>ACTIVE RISKS & RECENT DECISIONS</Text>}
-              {!overview?.isPro && <View style={styles.lockedCard}><Ionicons name="lock-closed-outline" size={18} color={theme.colors.primary} /><Text style={styles.lockedText}>Upgrade to Pro to unlock cross-meeting decisions and risk intelligence.</Text></View>}
+              {overview?.isPro && <Text style={styles.sectionLabel}>RISKS AND RECENT DECISIONS</Text>}
+              {!overview?.isPro && <View style={styles.lockedCard}><Ionicons name="lock-closed-outline" size={18} color={theme.colors.primary} /><Text style={styles.lockedText}>Upgrade to Pro to see decisions and risks across all your meetings.</Text></View>}
             </>;
           }
           const isRisk = item.type === 'risk';

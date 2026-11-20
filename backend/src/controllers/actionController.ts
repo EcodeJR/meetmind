@@ -29,7 +29,7 @@ export const updateActionItem = async (req: AuthRequest, res: Response): Promise
   if (updates.status === 'open') updates.completedAt = null;
   const memberships = await WorkspaceMember.find({ userId: user._id, status: 'active', role: { $ne: 'viewer' } }).select('workspaceId').lean();
   const workspaceIds = memberships.map(membership => membership.workspaceId);
-  const action = await ActionItem.findOneAndUpdate({ _id: req.params.id, $or: [{ userId: user._id }, ...(workspaceIds.length ? [{ workspaceId: { $in: workspaceIds } }] : [])] }, updates, { new: true });
+  const action = await ActionItem.findOneAndUpdate({ _id: req.params.id, $or: [{ userId: user._id }, ...(workspaceIds.length ? [{ workspaceId: { $in: workspaceIds } }] : [])] }, updates, { returnDocument: 'after' });
   if (!action) return sendError(res, 'ACTION_NOT_FOUND', 'Action item not found', 404);
   sendSuccess(res, { action });
 };

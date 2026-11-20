@@ -45,7 +45,7 @@ export const revokeMeetingShare = async (req: AuthRequest, res: Response): Promi
   try {
     const user = await User.findOne({ clerkId: req.clerkId });
     if (!user) return sendError(res, 'USER_NOT_FOUND', 'User not found', 404);
-    const meeting = await Meeting.findOneAndUpdate({ _id: req.params.id, userId: user._id }, { $unset: { share: 1 } }, { new: true });
+    const meeting = await Meeting.findOneAndUpdate({ _id: req.params.id, userId: user._id }, { $unset: { share: 1 } }, { returnDocument: 'after' });
     if (!meeting) return sendError(res, 'MEETING_NOT_FOUND', 'Meeting not found', 404);
     logger.info({ meetingId: meeting._id, userId: user._id }, 'Meeting recap share revoked');
     sendSuccess(res, { message: 'Share link revoked' });
